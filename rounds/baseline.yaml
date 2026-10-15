@@ -1,0 +1,5 @@
+# Control: upstream main apps and the stock bennu.qc2. If this round fails,
+# the rig is broken, not a PR.
+description: upstream main, stock bennu
+apps:
+  prs: []

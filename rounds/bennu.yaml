@@ -1,0 +1,10 @@
+# The bennu stack alone on upstream main apps. #58's head contains #54-#57.
+# waterway runs bennu's C++ field device and simulink provider, so this
+# exercises #55; `./burger bennu-check bennu` covers pybennu (#56) and
+# gobennu (#57).
+description: upstream main apps + bennu #54-#58
+apps:
+  prs: []
+bennu:
+  pr: 58
+  includes: [54, 55, 56, 57]  # stacked under #58

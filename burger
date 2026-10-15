@@ -1,0 +1,782 @@
+#!/usr/bin/env python3
+"""everything-burger-with-extra-sauce: live waterway rounds for open
+sceptre-phenix-apps and sceptre-bennu pull requests.
+
+Run on the phēnix host. `./burger --help` lists the commands; README.md has the
+run book.
+"""
+
+import argparse
+import copy
+import datetime as dt
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    sys.exit("burger needs PyYAML: apt install python3-yaml (or pip install pyyaml)")
+
+HERE = Path(__file__).resolve().parent
+ROUNDS_DIR = HERE / "rounds"
+WORK = Path(os.environ.get("BURGER_WORK", HERE / "work")).resolve()
+CTR = os.environ.get("BURGER_PHENIX_CONTAINER", "phenix")  # "" = phenix installed natively
+API = os.environ.get("BURGER_API", "http://localhost:3000/api/v1")
+TOKEN = os.environ.get("BURGER_TOKEN", "")
+PHENIX_DIR = "/phenix"
+ASSETS = f"{PHENIX_DIR}/topologies/burger-waterway"  # never touch the user's own waterway copy
+STOCK_ASSETS = "/phenix/topologies/waterway"
+
+REPOS = {
+    "apps": "https://github.com/sandialabs/sceptre-phenix-apps.git",
+    "bennu": "https://github.com/sandialabs/sceptre-bennu.git",
+    "topologies": "https://github.com/sandialabs/sceptre-phenix-topologies.git",
+}
+BENNU_NODES = ("rtu-1", "rtu-2", "simulink-provider")
+RTUS = ("rtu-1", "rtu-2")
+MAX_EXP_NAME = 15  # phēnix bridge-name limit (api/experiment/experiment.go)
+GIT_ID = ["-c", "user.name=burger", "-c", "user.email=burger@localhost"]
+
+
+# ---------------------------------------------------------------- helpers
+
+
+def say(msg):
+    print(f"burger: {msg}", flush=True)
+
+
+def run(cmd, check=True, capture=False, **kw):
+    print("+ " + shlex.join(str(c) for c in cmd), flush=True)
+    res = subprocess.run(
+        [str(c) for c in cmd], check=False, text=True, capture_output=capture, **kw
+    )
+    if check and res.returncode != 0:
+        if capture:
+            sys.stderr.write(res.stdout + res.stderr)
+        sys.exit(f"burger: command failed ({res.returncode}): {shlex.join(map(str, cmd))}")
+    return res
+
+
+def git(repo, *args, **kw):
+    return run(["git", "-C", repo, *args], **kw)
+
+
+def ctr(*args, **kw):
+    """Run a command where phēnix runs: inside its container, or on the host."""
+    return run((["docker", "exec", CTR] if CTR else []) + list(args), **kw)
+
+
+def phenix(*args, **kw):
+    return ctr("phenix", *args, **kw)
+
+
+def put(src, dst):
+    """Copy a host file or directory's contents to dst where phēnix runs."""
+    src = Path(src)
+    parent = dst if src.is_dir() else str(Path(dst).parent)
+    ctr("mkdir", "-p", parent)
+    if CTR:
+        run(["docker", "cp", f"{src}/." if src.is_dir() else src, f"{CTR}:{dst}"])
+    elif src.is_dir():
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+    else:
+        shutil.copy2(src, dst)
+
+
+def fetch_from_phenix(src, dst):
+    shutil.rmtree(dst, ignore_errors=True)
+    Path(dst).parent.mkdir(parents=True, exist_ok=True)
+    if CTR:
+        return run(["docker", "cp", f"{CTR}:{src}", dst], check=False).returncode == 0
+    if not Path(src).exists():
+        return False
+    shutil.copytree(src, dst)
+    return True
+
+
+def api(path):
+    req = urllib.request.Request(API + path)
+    if TOKEN:
+        req.add_header("X-Phenix-Auth-Token", f"Bearer {TOKEN}")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as e:
+        if e.code in (400, 404, 500):  # how phēnix answers a missing name varies
+            return None
+        raise
+
+
+def load_yaml(path):
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def load_round(name):
+    path = ROUNDS_DIR / f"{name}.yaml"
+    if not path.is_file():
+        known = ", ".join(sorted(p.stem for p in ROUNDS_DIR.glob("*.yaml") if p.stem != "models"))
+        sys.exit(f"burger: no round '{name}' (known: {known})")
+    rnd = load_yaml(path) or {}
+    rnd["name"] = name
+    rnd["exp"] = f"ebwes-{name}"
+    if len(rnd["exp"]) > MAX_EXP_NAME:
+        sys.exit(f"burger: round name '{name}' makes experiment '{rnd['exp']}' longer than {MAX_EXP_NAME} chars")
+    return rnd
+
+
+def round_dir(name):
+    return WORK / "rounds" / name
+
+
+def manifest(name):
+    path = round_dir(name) / "manifest.json"
+    if not path.is_file():
+        sys.exit(f"burger: round '{name}' not synced; run ./burger sync {name}")
+    return json.loads(path.read_text())
+
+
+def ensure_repo(key):
+    path = Path(os.environ.get(f"BURGER_{key.upper()}_REPO", WORK / "repos" / key))
+    if not (path / ".git").exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        run(["git", "clone", "--quiet", "--no-checkout", REPOS[key], path])
+    return path
+
+
+def fetch(repo, url, refs):
+    """Fetch main and PR heads into refs/burger/* so no local branch moves."""
+    specs = ["+refs/heads/main:refs/burger/main"]
+    specs += [f"+refs/pull/{n}/head:refs/burger/pr/{n}" for n in refs]
+    git(repo, "fetch", "--quiet", url, *specs)
+
+
+def rev(repo, ref):
+    return git(repo, "rev-parse", ref, capture=True).stdout.strip()
+
+
+def fresh_worktree(repo, path, ref):
+    if path.exists():
+        git(repo, "worktree", "remove", "--force", path, check=False)
+        shutil.rmtree(path, ignore_errors=True)
+    git(repo, "worktree", "prune")
+    git(repo, "worktree", "add", "--quiet", "--detach", path, ref)
+
+
+# ---------------------------------------------------------------- sync
+
+
+def cmd_sync(args):
+    for name in args.rounds:
+        sync_round(load_round(name))
+
+
+def sync_round(rnd):
+    rd = round_dir(rnd["name"])
+    rd.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(rd / "out", ignore_errors=True)  # a new sync invalidates every build
+    attrs = WORK / "union-changelog.attributes"
+    attrs.write_text("CHANGELOG.md merge=union\n")
+    man = {"round": rnd["name"], "synced": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
+
+    prs = [int(n) for n in rnd.get("apps", {}).get("prs", [])]
+    repo = ensure_repo("apps")
+    fetch(repo, REPOS["apps"], prs)
+    wt = rd / "apps"
+    fresh_worktree(repo, wt, "refs/burger/main")
+    man["apps"] = {"base": rev(repo, "refs/burger/main"), "prs": {}}
+    for n in prs:
+        man["apps"]["prs"][str(n)] = rev(repo, f"refs/burger/pr/{n}")
+        res = git(wt, "-c", f"core.attributesFile={attrs}", *GIT_ID, "merge", "--no-ff",
+                  "--no-edit", "-m", f"burger: merge #{n}", f"refs/burger/pr/{n}",
+                  check=False, capture=True)
+        if res.returncode != 0:
+            bad = git(wt, "diff", "--name-only", "--diff-filter=U", capture=True).stdout.split()
+            git(wt, "merge", "--abort", check=False)
+            sys.exit(f"burger: round '{rnd['name']}': #{n} conflicts with the PRs before it "
+                     f"in {', '.join(bad) or '(see git output)'}; drop or reorder it in "
+                     f"rounds/{rnd['name']}.yaml")
+    man["apps"]["head"] = rev(wt, "HEAD")
+
+    bennu_pr = rnd.get("bennu", {}).get("pr")
+    man["bennu"] = None
+    if bennu_pr:
+        brepo = ensure_repo("bennu")
+        fetch(brepo, REPOS["bennu"], [bennu_pr])
+        fresh_worktree(brepo, rd / "bennu", f"refs/burger/pr/{bennu_pr}")
+        man["bennu"] = {"pr": bennu_pr, "sha": rev(brepo, f"refs/burger/pr/{bennu_pr}")}
+
+    trepo = ensure_repo("topologies")
+    fetch(trepo, REPOS["topologies"], [])
+    man["topologies"] = rev(trepo, "refs/burger/main")
+    shutil.rmtree(rd / "waterway", ignore_errors=True)
+    subprocess.run(f"git -C {shlex.quote(str(trepo))} archive refs/burger/main waterway "
+                   f"| tar -x -C {shlex.quote(str(rd))}", shell=True, check=True)
+
+    (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
+    say(f"round '{rnd['name']}' synced: apps {man['apps']['head'][:10]} "
+        f"(main + {len(prs)} PRs)" + (f", bennu #{bennu_pr} {man['bennu']['sha'][:10]}" if bennu_pr else ""))
+
+
+# ---------------------------------------------------------------- prs
+
+
+def all_rounds():
+    return [p.stem for p in sorted(ROUNDS_DIR.glob("*.yaml")) if p.stem != "models"]
+
+
+def cmd_prs(args):
+    """Open PRs by me vs the rounds that carry them, and whether a synced
+    round is behind the PR's current head."""
+    carried = {"apps": {}, "bennu": {}}
+    for name in all_rounds():
+        rnd = load_round(name)
+        for n in rnd.get("apps", {}).get("prs", []):
+            carried["apps"].setdefault(int(n), []).append(name)
+        bennu = rnd.get("bennu", {})
+        for n in ([bennu["pr"]] if bennu.get("pr") else []) + bennu.get("includes", []):
+            carried["bennu"].setdefault(int(n), []).append(name)
+    synced = {}
+    for name in all_rounds():
+        p = round_dir(name) / "manifest.json"
+        if p.is_file():
+            synced[name] = json.loads(p.read_text())
+
+    for key, slug in (("apps", "sandialabs/sceptre-phenix-apps"), ("bennu", "sandialabs/sceptre-bennu")):
+        print(f"\n{slug}")
+        open_prs = {}
+        if shutil.which("gh"):
+            res = run(["gh", "pr", "list", "-R", slug, "--author", args.author, "--state", "open",
+                       "--json", "number,title,headRefOid,isDraft", "--limit", "100"],
+                      check=False, capture=True)
+            if res.returncode == 0:
+                open_prs = {p["number"]: p for p in json.loads(res.stdout)}
+        numbers = sorted(set(open_prs) | set(carried[key]))
+        for n in numbers:
+            pr = open_prs.get(n)
+            head = pr["headRefOid"] if pr else ls_remote_pr(REPOS[key], n)
+            stale = [r for r in carried[key].get(n, [])
+                     if r in synced and pr_sha(synced[r], key, n) not in (None, head)]
+            rounds = ",".join(carried[key].get(n, [])) or "-- in no round --"
+            flag = f"  STALE in {','.join(stale)} (re-sync)" if stale else ""
+            title = (pr["title"][:60] + (" [draft]" if pr["isDraft"] else "")) if pr else "(not open)"
+            print(f"  #{n:<4} {(head or '?')[:10]}  {rounds:<32} {title}{flag}")
+
+
+def ls_remote_pr(url, n):
+    out = run(["git", "ls-remote", url, f"refs/pull/{n}/head"], check=False, capture=True).stdout
+    return out.split()[0] if out.strip() else None
+
+
+def pr_sha(man, key, n):
+    if key == "apps":
+        return man["apps"]["prs"].get(str(n))
+    # A stacked PR the round carries via `includes` has no SHA of its own here.
+    return man["bennu"]["sha"] if man.get("bennu") and man["bennu"]["pr"] == n else None
+
+
+# ---------------------------------------------------------------- build
+
+
+def cmd_build(args):
+    rnd = load_round(args.round)
+    rd, man = round_dir(rnd["name"]), manifest(rnd["name"])
+    out = rd / "out"
+    out.mkdir(exist_ok=True)
+    uid = f"{os.getuid()}:{os.getgid()}"
+
+    # Python apps: a clean tree of the merged commit, installed into phēnix later.
+    with (out / "apps-python.tar").open("wb") as f:
+        subprocess.run(["git", "-C", rd / "apps", "archive", "HEAD", "src/python"], stdout=f, check=True)
+
+    # Go mirror app: static binary.
+    run(["docker", "run", "--rm", "-u", uid, "-v", f"{rd / 'apps' / 'src' / 'go'}:/src",
+         "-v", f"{out}:/out", "-w", "/src", "-e", "CGO_ENABLED=0", "-e", "GOCACHE=/tmp/gocache",
+         "-e", "GOPATH=/tmp/gopath", "-e", "GOFLAGS=-buildvcs=false", "golang:1.24",
+         "go", "build", "-o", "/out/phenix-app-mirror", "./cmd/phenix-app-mirror"])
+
+    if man["bennu"]:
+        build_bennu(rd, out, man)
+    (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
+    (out / "built.json").write_text(json.dumps(built_key(man)))
+    say(f"round '{rnd['name']}' built into {out}")
+
+
+def build_bennu(rd, out, man):
+    wt = rd / "bennu"
+    repo = ensure_repo("bennu").resolve()
+    image = "burger-bennu-build:22.04"
+    run(["docker", "build", "-q", "-t", image, wt / "docker" / "test"])
+    # The worktree's .git file points into the main repo, and CMake stamps the
+    # deb version with `git rev-parse --short HEAD`: mount both at their host paths.
+    script = (
+        "git config --global --add safe.directory '*' && mkdir -p /tmp/b && cd /tmp/b && "
+        f"cmake -DBUILD_TESTS=OFF {shlex.quote(str(wt.resolve()))} >/dev/null && "
+        "make -j\"$(nproc)\" package >/dev/null && cp bennu-*.deb /out/bennu.deb && "
+        f"chown {os.getuid()}:{os.getgid()} /out/bennu.deb"
+    )
+    run(["docker", "run", "--rm", "-v", f"{repo}:{repo}:ro", "-v", f"{wt.resolve()}:{wt.resolve()}:ro",
+         "-v", f"{out}:/out", image, "bash", "-ec", script])
+    version = run(["docker", "run", "--rm", "-v", f"{out}:/out", image, "dpkg-deb", "-f",
+                   "/out/bennu.deb", "Version"], capture=True).stdout.strip()
+    man["bennu"]["deb_version"] = version
+    say(f"bennu.deb {version}")
+
+
+def built_key(man):
+    return {"apps": man["apps"]["head"], "bennu": (man.get("bennu") or {}).get("sha")}
+
+
+def require_built(rnd, man):
+    out = round_dir(rnd["name"]) / "out"
+    built = json.loads((out / "built.json").read_text()) if (out / "built.json").is_file() else None
+    if built != built_key(man):
+        sys.exit(f"burger: round '{rnd['name']}' build does not match its sync; run ./burger build {rnd['name']}")
+    return out
+
+
+def cmd_bennu_check(args):
+    """bennu's own docker harness (build, smoke, ctest, pytest, gotest) on the
+    round's bennu PR: the coverage for pybennu (#56) and gobennu (#57), which
+    waterway never runs."""
+    rd = round_dir(args.round)
+    if not manifest(args.round)["bennu"]:
+        sys.exit(f"burger: round '{args.round}' has no bennu PR")
+    run(["bash", rd / "bennu" / "docker" / "test" / "run.sh", "-s", rd / "bennu",
+         "build", "smoke", "ctest", "pytest", "gotest"])
+
+
+# ---------------------------------------------------------------- install
+
+
+def cmd_install(args):
+    rnd = load_round(args.round)
+    man = manifest(rnd["name"])
+    out = require_built(rnd, man)
+    stage = f"/tmp/burger/{rnd['name']}"
+    ctr("rm", "-rf", stage)
+    put(out / "apps-python.tar", f"{stage}/apps-python.tar")
+    ctr("tar", "-xf", f"{stage}/apps-python.tar", "-C", stage)
+    ctr("python3", "-m", "pip", "install", "--quiet", "--break-system-packages", "--no-cache-dir",
+        "--force-reinstall", "--no-deps", f"{stage}/src/python")
+    # --no-deps keeps the container's other packages alone; prove the deps are there.
+    ctr("python3", "-c", "import phenix_apps.apps.scorch.app, phenix_apps.apps.sceptre")
+    put(out / "phenix-app-mirror", "/usr/local/bin/phenix-app-mirror")
+    ctr("chmod", "0755", "/usr/local/bin/phenix-app-mirror")
+    marker = json.dumps({"round": rnd["name"], "apps": man["apps"]["head"]})
+    ctr("sh", "-c", f"echo {shlex.quote(marker)} > /tmp/burger/installed.json")
+    say(f"installed apps {man['apps']['head'][:10]} (round '{rnd['name']}') into "
+        f"{'container ' + CTR if CTR else 'this host'}")
+
+
+# ---------------------------------------------------------------- render
+
+
+def health_component(rnd, man, linux_only):
+    """A SCORCH cc component whose validators are the in-VM verification."""
+
+    def check(args, validator=None):
+        c = {"type": "exec", "args": args, "wait": True}
+        if validator:
+            c["validator"] = validator
+        return c
+
+    deb = (man.get("bennu") or {}).get("deb_version")
+    version_check = check(
+        "dpkg-query -W -f='${Version}\\n' bennu",
+        f"v=$(cat); [ \"$v\" = {shlex.quote(deb)} ] || {{ echo \"$1 runs bennu $v, want {deb}\" >&2; exit 1; }}"
+        if deb else "grep -q . || { echo \"$1: bennu not installed\" >&2; exit 1; }",
+    )
+    # The RTU's provider endpoint is the last tcp:// endpoint in its config
+    # (comms first, then <output>); query it to prove provider and path are up.
+    provider_query = check(
+        "ep=$(sed -n 's:.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*:\\1:p' /etc/sceptre/config.xml | tail -1); "
+        "[ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; "
+        "bennu-probe --endpoint \"$ep\" --command query",
+        "grep -q 'lock' || { echo \"$1: provider query returned no waterway tags\" >&2; exit 1; }",
+    )
+    install_checks = [check(
+        "cat /var/log/burger-bennu.log",
+        "log=$(cat); grep -q 'Setting up bennu' <<<\"$log\" || "
+        "{ echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+    )] if deb else []
+    vms = []
+    for host in RTUS:
+        cmds = install_checks + [check("pgrep -f bennu-field-deviced"), provider_query, version_check]
+        if not linux_only:  # SCADA/OPC only exist with the Windows nodes
+            cmds.append(check(
+                "ss -Htn state established '( sport = :502 )'",
+                "grep -q . || { echo \"$1: nothing is polling Modbus :502\" >&2; exit 1; }",
+            ))
+        vms.append({"hostname": host, "start": cmds})
+    vms.append({"hostname": "simulink-provider", "start": [
+        *install_checks, check("pgrep -f bennu-simulink-provider"), check("pgrep -f simulinksolver"),
+        version_check]})
+    if rnd.get("monitor") and not linux_only:
+        vms.append({"hostname": "monitor", "start": [
+            check("timeout 30 tcpdump -nn -i any -c 3 'tcp port 502'")]})
+    return {"name": "health", "type": "cc", "metadata": {"vms": vms}}
+
+
+MONITOR_NODE = {
+    "general": {"hostname": "monitor", "description": "burger mirror target"},
+    "hardware": {"drives": [{"image": "bennu.qc2"}], "memory": 2048, "os_type": "linux", "vcpus": 2},
+    "network": {"interfaces": [{"name": "mgmt", "vlan": "MGMT", "address": "172.16.1.200",
+                                "mask": 16, "proto": "static", "type": "ethernet"}]},
+    "type": "VirtualMachine",
+}
+
+BENNU_STARTUP = """#!/bin/bash
+# everything-burger: install the round's bennu build before sceptre-start.sh
+# runs (phenix-start.sh runs /etc/phenix/startup/* in glob order).
+dpkg -i /root/burger-bennu.deb >/var/log/burger-bennu.log 2>&1
+"""
+
+
+def render(rnd, man, waterway_dir, linux_only, stage_dir):
+    """Build the round's topology and scenario documents from waterway."""
+    name = rnd["exp"]
+    topo = load_yaml(Path(waterway_dir) / "waterway-topology.yaml")
+    scen = load_yaml(Path(waterway_dir) / "waterway-scenario.yaml")
+    topo["metadata"]["name"] = name
+    scen["metadata"]["name"] = name
+    scen["metadata"]["annotations"]["topology"] = name
+
+    nodes = topo["spec"]["nodes"]
+    if linux_only:
+        dropped = {n["general"]["hostname"] for n in nodes if n["hardware"]["os_type"] == "windows"}
+        nodes[:] = [n for n in nodes if n["general"]["hostname"] not in dropped]
+        for app in scen["spec"]["apps"]:
+            if "hosts" in app:
+                app["hosts"] = [h for h in app["hosts"] if h["hostname"] not in dropped]
+    if rnd.get("monitor"):
+        nodes.append(copy.deepcopy(MONITOR_NODE))
+    mgmt = rnd.get("mgmt_vlan")
+    if mgmt:  # exercise case-insensitive mgmt VLAN matching (#158)
+        for n in nodes:
+            for iface in n["network"]["interfaces"]:
+                if iface.get("vlan") == "MGMT":
+                    iface["vlan"] = mgmt
+    if man.get("bennu"):
+        for n in nodes:
+            if n["general"]["hostname"] in BENNU_NODES:
+                n.setdefault("injections", []).extend([
+                    {"src": f"{stage_dir}/bennu.deb", "dst": "/root/burger-bennu.deb",
+                     "description": "burger: bennu PR build"},
+                    {"src": f"{stage_dir}/00-burger-bennu.sh", "dst": "/etc/phenix/startup/00-burger-bennu.sh",
+                     "description": "burger: install bennu PR build", "permissions": "0755"},
+                ])
+
+    scorch = rnd.get("scorch") or {}
+    components = [health_component(rnd, man, linux_only)] + copy.deepcopy(scorch.get("components", []))
+    runs = [{"name": "health", "start": ["health"]}] + copy.deepcopy(scorch.get("runs", []))
+    known = {c["name"] for c in components}
+    for r in runs:
+        for stage in ("configure", "start", "stop", "cleanup"):
+            missing = [c for c in r.get(stage, []) if c not in known]
+            if missing:
+                sys.exit(f"burger: round '{rnd['name']}' run '{r.get('name')}' {stage} names "
+                         f"unknown components {missing}")
+    scen["spec"]["apps"] += copy.deepcopy(rnd.get("apps_extra", []))
+    scen["spec"]["apps"].append({"name": "scorch", "metadata": {"components": components, "runs": runs}})
+
+    text = json.dumps(scen).replace(STOCK_ASSETS, ASSETS)
+    return topo, json.loads(text)
+
+
+# ---------------------------------------------------------------- up / down
+
+
+def cmd_up(args):
+    rnd = load_round(args.round)
+    rd, man = round_dir(rnd["name"]), manifest(rnd["name"])
+    exp, stage_dir = rnd["exp"], f"{PHENIX_DIR}/burger/{rnd['name']}"
+    out = require_built(rnd, man)
+    if man.get("bennu"):
+        (out / "00-burger-bennu.sh").write_text(BENNU_STARTUP)
+    topo, scen = render(rnd, man, rd / "waterway", args.linux_only, stage_dir)
+    (out / "topology.json").write_text(json.dumps(topo, indent=2))
+    (out / "scenario.json").write_text(json.dumps(scen, indent=2))
+    (rd / "state.json").write_text(json.dumps({"linux_only": args.linux_only}))
+
+    down(rnd)
+    put(rd / "waterway", ASSETS)
+    put(out, stage_dir)
+    phenix("config", "create", f"{stage_dir}/topology.json", f"{stage_dir}/scenario.json")
+    phenix("experiment", "create", exp, "-t", exp, "-s", exp)
+    phenix("experiment", "start", exp)
+    wait_running(exp, args.timeout)
+    say(f"experiment {exp} is up; next: ./burger scorch {rnd['name']}")
+
+
+def wait_running(exp, timeout):
+    deadline = time.time() + timeout
+    while True:
+        bad = not_running(exp)
+        if not bad:
+            return
+        if time.time() > deadline:
+            sys.exit(f"burger: {exp} not running after {timeout}s: {bad}")
+        time.sleep(10)
+
+
+def not_running(exp):
+    info = api(f"/experiments/{exp}")
+    if not info:
+        return "experiment not found"
+    if not info.get("running"):
+        return "experiment not running"
+    vms = (api(f"/experiments/{exp}/vms") or {}).get("vms") or []
+    if not vms:
+        return "no VMs listed"
+    down_vms = [f"{v.get('name')}={v.get('state')}" for v in vms
+                if not v.get("dnb") and (v.get("state") or "").lower() != "running"]
+    return ", ".join(down_vms)
+
+
+def down(rnd):
+    exp = rnd["exp"]
+    if api(f"/experiments/{exp}"):
+        phenix("experiment", "delete", exp, "-f")
+    phenix("config", "delete", f"scenario/{exp}", f"topology/{exp}", check=False, capture=True)
+
+
+def cmd_down(args):
+    down(load_round(args.round))
+
+
+# ---------------------------------------------------------------- scorch / verify
+
+
+def state_of(rnd):
+    path = round_dir(rnd["name"]) / "state.json"
+    if not path.is_file():
+        sys.exit(f"burger: round '{rnd['name']}' is not up; run ./burger up {rnd['name']}")
+    return json.loads(path.read_text())
+
+
+def runs_of(rnd, man, linux_only):
+    _, scen = render(rnd, man, round_dir(rnd["name"]) / "waterway", linux_only, "")
+    return next(a for a in scen["spec"]["apps"] if a["name"] == "scorch")["metadata"]["runs"]
+
+
+def cmd_scorch(args):
+    rnd = load_round(args.round)
+    man, state = manifest(rnd["name"]), state_of(rnd)
+    runs = runs_of(rnd, man, state["linux_only"])
+    if args.run is not None and not 0 <= args.run < len(runs):
+        sys.exit(f"burger: round '{rnd['name']}' has runs 0-{len(runs) - 1}")
+    wanted = range(len(runs)) if args.run is None else [args.run]
+    for i in wanted:
+        # Health waits on sceptre startup (field devices sleep 60 s, Windows
+        # boots slowly), so retry it; every other run gets one shot.
+        deadline = time.time() + (args.settle if i == 0 else 0)
+        while True:
+            since = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            phenix("experiment", "scorch", rnd["exp"], "-r", str(i), check=False)
+            results = collect(rnd, i, since)
+            failed = [r for r in evaluate(runs[i], results) if r[3] == "FAIL"]
+            if not failed or time.time() > deadline:
+                break
+            say(f"run {i} ({runs[i].get('name')}) not healthy yet: {failed[0][4]}; retrying in 60 s")
+            time.sleep(60)
+    say(f"scorch done; next: ./burger verify {rnd['name']}")
+
+
+def collect(rnd, i, since=""):
+    """Status files of run i, keyed by (component, stage); `since` drops
+    files older than this attempt (status `start` is UTC, same format)."""
+    dst = round_dir(rnd["name"]) / "results" / f"run-{i}"
+    src = f"{PHENIX_DIR}/images/{rnd['exp']}/files/scorch/run-{i}"
+    if not fetch_from_phenix(src, dst):
+        return {}
+    results = {}
+    for f in dst.glob("*/loop-*/*.json"):
+        try:
+            doc = json.loads(f.read_text())
+        except ValueError:
+            continue
+        if str(doc.get("start", "")) < since:
+            continue
+        results.setdefault((doc.get("component"), doc.get("stage")), []).append(doc)
+    return results
+
+
+def evaluate(run_spec, results):
+    """(run, component, stage, verdict, detail) per stage a run lists.
+
+    The status file's `return` is the stage's return value, `Error occurred: …`
+    on an exception; a component that exits without one (sys.exit) leaves no
+    file, which is a failure too.
+    """
+    rows = []
+    for stage in ("configure", "start", "stop", "cleanup"):
+        for comp in run_spec.get(stage, []):
+            docs = results.get((comp, stage), [])
+            if not docs:
+                rows.append((run_spec.get("name"), comp, stage, "FAIL", "no status file (component crashed or never ran)"))
+                continue
+            errs = [str(d.get("return")) for d in docs if str(d.get("return", "")).startswith("Error occurred")]
+            logged = [ln for d in docs for ln in d.get("logs", []) if " ERROR " in ln or " CRITICAL " in ln]
+            if errs:
+                rows.append((run_spec.get("name"), comp, stage, "FAIL", errs[0][:200]))
+            elif logged:
+                rows.append((run_spec.get("name"), comp, stage, "WARN", logged[0][:200]))
+            else:
+                rows.append((run_spec.get("name"), comp, stage, "ok", ""))
+    return rows
+
+
+def cmd_verify(args):
+    rnd = load_round(args.round)
+    rd, man = round_dir(rnd["name"]), manifest(rnd["name"])
+    state = state_of(rnd)
+    rows = []
+
+    res = ctr("cat", "/tmp/burger/installed.json", check=False, capture=True)
+    installed = json.loads(res.stdout) if res.returncode == 0 else {}
+    ok = installed.get("apps") == man["apps"]["head"]
+    rows.append(("-", "phenix-apps install", "-", "ok" if ok else "FAIL",
+                 "" if ok else f"phēnix has {installed.get('apps', 'nothing')[:10]} from round "
+                 f"{installed.get('round')}, want {man['apps']['head'][:10]}; ./burger install {rnd['name']}"))
+
+    bad = not_running(rnd["exp"])
+    rows.append(("-", "experiment + VMs running", "-", "FAIL" if bad else "ok", bad))
+
+    has_validate = ctr("sh", "-c", "command -v phenix-scorch-validate", check=False, capture=True).returncode == 0
+    if not has_validate:
+        rows.append(("-", "phenix-scorch-validate", "-", "FAIL" if rnd.get("validate") else "skipped",
+                     "not installed" + (" but this round carries the #160 models" if rnd.get("validate") else "")))
+    else:
+        put(ROUNDS_DIR / "models.yaml", f"{PHENIX_DIR}/burger/models.yaml")
+        res = ctr("phenix-scorch-validate", f"{PHENIX_DIR}/burger/{rnd['name']}/scenario.json",
+                  f"{PHENIX_DIR}/burger/models.yaml", check=False, capture=True)
+        print(res.stdout, end="")
+        rows.append(("-", "phenix-scorch-validate", "-", "ok" if res.returncode == 0 else "FAIL",
+                     "" if res.returncode == 0 else "see output above"))
+
+    for i, run_spec in enumerate(runs_of(rnd, man, state["linux_only"])):
+        advisory = str(run_spec.get("name", "")).startswith("extras")
+        for row in evaluate(run_spec, collect(rnd, i)):
+            rows.append(row[:3] + (("advisory-" + row[3]) if advisory and row[3] == "FAIL" else row[3], row[4]))
+
+    report = render_report(rnd, man, state, rows)
+    (rd / "report.md").write_text(report)
+    print(report)
+    if any(r[3] == "FAIL" for r in rows):
+        sys.exit(1)
+
+
+def render_report(rnd, man, state, rows):
+    lines = [f"# everything-burger round `{rnd['name']}` ({rnd['exp']})", "",
+             f"- apps: `{man['apps']['head'][:10]}` = main `{man['apps']['base'][:10]}` + "
+             + (", ".join(f"#{n} `{s[:8]}`" for n, s in man["apps"]["prs"].items()) or "no PRs"),
+             f"- bennu: " + (f"#{man['bennu']['pr']} `{man['bennu']['sha'][:10]}` deb `{man['bennu'].get('deb_version')}`"
+                             if man.get("bennu") else "stock bennu.qc2"),
+             f"- topologies: `{man['topologies'][:10]}`" + (" (linux-only)" if state["linux_only"] else ""),
+             f"- synced {man['synced']}", "",
+             "| run | check | stage | verdict | detail |", "|---|---|---|---|---|"]
+    lines += [f"| {r[0]} | {r[1]} | {r[2]} | {r[3]} | {str(r[4]).replace('|', '/')} |" for r in rows]
+    fails = sum(r[3] == "FAIL" for r in rows)
+    lines += ["", f"**{'FAIL' if fails else 'PASS'}**: {fails} failing check(s)"]
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------- preflight / round
+
+
+def cmd_preflight(args):
+    checks = []
+
+    def chk(label, ok, hint=""):
+        checks.append((label, ok, hint))
+
+    for tool in ("git", "docker"):
+        chk(f"{tool} on PATH", bool(shutil.which(tool)))
+    if CTR:
+        res = run(["docker", "inspect", "-f", "{{.State.Running}}", CTR], check=False, capture=True)
+        chk(f"container '{CTR}' running", res.stdout.strip() == "true",
+            "set BURGER_PHENIX_CONTAINER (empty for a native install)")
+    chk("phenix CLI", phenix("version", check=False, capture=True).returncode == 0)
+    chk("minimega reachable", phenix("mm", "version", check=False, capture=True).returncode == 0)
+    try:
+        api("/experiments")
+        chk(f"REST API {API}", True)
+    except (OSError, urllib.error.URLError) as e:
+        chk(f"REST API {API}", False, f"{e}; set BURGER_API / BURGER_TOKEN")
+    images = ["bennu.qc2", "minirouter.qc2"]
+    if not args.linux_only:
+        images += ["opc.qc2", "historian.qc2", "hmi_win7.qc2", "scada.qc2", "engineer_workstation.qc2"]
+    for img in images:
+        chk(f"image {img}", ctr("test", "-f", f"{PHENIX_DIR}/images/{img}", check=False).returncode == 0,
+            "build it or use --linux-only" if img.endswith(("win7.qc2", "opc.qc2", "historian.qc2",
+                                                           "scada.qc2", "workstation.qc2")) else "")
+    chk("pip in phēnix", ctr("python3", "-m", "pip", "--version", check=False, capture=True).returncode == 0)
+    df = ctr("df", "-Pk", PHENIX_DIR, check=False, capture=True).stdout.split("\n")[1:2]
+    free_gb = int(df[0].split()[3]) // 2**20 if df and df[0] else 0
+    chk(f"{free_gb} GiB free on {PHENIX_DIR}", free_gb >= 20, "rounds need ~20 GiB of snapshots")
+
+    width = max(len(c[0]) for c in checks)
+    for label, ok, hint in checks:
+        print(f"  {'ok  ' if ok else 'FAIL'}  {label:<{width}}  {'' if ok else hint}")
+    if not all(c[1] for c in checks):
+        sys.exit(1)
+
+
+def cmd_round(args):
+    for step in (cmd_sync, cmd_build, cmd_install, cmd_up, cmd_scorch):
+        step(argparse.Namespace(**{**vars(args), "rounds": [args.round], "run": None}))
+    cmd_verify(args)  # exits nonzero on failure, leaving the experiment up to debug
+    if not args.keep:
+        down(load_round(args.round))
+
+
+def main():
+    p = argparse.ArgumentParser(prog="burger", description=__doc__.split("\n\n")[0])
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    def add(name, fn, help_, rounds=False, one=True):
+        sp = sub.add_parser(name, help=help_)
+        sp.set_defaults(fn=fn)
+        if rounds:
+            sp.add_argument("rounds", nargs="+", metavar="round")
+        elif one:
+            sp.add_argument("round")
+        return sp
+
+    sp = add("preflight", cmd_preflight, "check the phēnix host can run the rounds", one=False)
+    sp.add_argument("--linux-only", action="store_true")
+    sp = add("prs", cmd_prs, "list my open PRs, the rounds that carry them, stale syncs", one=False)
+    sp.add_argument("--author", default="@me")
+    add("sync", cmd_sync, "fetch PR heads and merge each round's integration tree", rounds=True)
+    add("build", cmd_build, "build the round's apps tarball, mirror binary, bennu.deb")
+    add("bennu-check", cmd_bennu_check, "run bennu's docker test harness on the round's bennu PR")
+    add("install", cmd_install, "install the round's apps into phēnix")
+    for name, fn, help_ in (("up", cmd_up, "render and start the round's experiment"),
+                            ("round", cmd_round, "sync, build, install, up, scorch, verify, down")):
+        sp = add(name, fn, help_)
+        sp.add_argument("--linux-only", action="store_true", help="drop the Windows nodes")
+        sp.add_argument("--timeout", type=int, default=900, help="seconds to wait for VMs")
+        sp.add_argument("--settle", type=int, default=900, help="seconds to retry the health run")
+        if name == "round":
+            sp.add_argument("--keep", action="store_true", help="leave the experiment running")
+    sp = add("scorch", cmd_scorch, "run the round's SCORCH runs (all by default)")
+    sp.add_argument("--run", type=int)
+    sp.add_argument("--settle", type=int, default=900, help="seconds to retry the health run")
+    add("verify", cmd_verify, "check install, experiment, models, and SCORCH results")
+    add("down", cmd_down, "delete the round's experiment and configs")
+
+    args = p.parse_args()
+    args.fn(args)
+
+
+if __name__ == "__main__":
+    main()

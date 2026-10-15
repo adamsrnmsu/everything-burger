@@ -1,0 +1,43 @@
+# #155 security hardening (+ #158) on the bennu stack: what the #155 review
+# asked for live. cc validators (the health run is all validators), tcpdump,
+# pcap and mm captures, mgmt_tap, and the mirror app feeding a monitor VM
+# (health checks the monitor sees mirrored Modbus). Kafka needs a broker
+# waterway lacks, so it is not run.
+description: "#155 + #158 + bennu #58, mirror + mgmt_tap"
+apps:
+  prs: [155, 158]
+bennu:
+  pr: 58
+  includes: [54, 55, 56, 57]  # stacked under #58
+monitor: true
+apps_extra:
+  - name: mirror
+    hosts:
+      - hostname: monitor
+        metadata:
+          interface: mirror
+          vlans: [SCADA, ICS]
+  - name: mgmt_tap
+    metadata: {subnet: 172.16.0.0/16, vlan: MGMT}
+scorch:
+  components:
+    - name: pcap
+      type: pcap
+      metadata:
+        vms: [{hostname: rtu-1, interface: 0}]
+    - name: tcpdump
+      type: tcpdump
+      metadata:
+        vms: [{hostname: monitor, iface: any, filter: "tcp port 502"}]
+    - name: mm-capture
+      type: mm
+      metadata:
+        start: [{type: start_capture, capture: {bridge: phenix, filename: burger-bridge.pcap}}]
+        stop: [{type: stop_capture, capture: {bridge: phenix}}]
+    - name: wait
+      type: disruption
+      metadata: {current_disruption: baseline, run_duration: 30}
+  runs:
+    - name: hardening
+      start: [pcap, tcpdump, mm-capture, wait]
+      stop: [pcap, tcpdump, mm-capture]

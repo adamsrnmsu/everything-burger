@@ -1,0 +1,59 @@
+# #160 metadata models (#164-#177) plus #158, on the bennu stack. The run
+# `metadata` drives the components waterway can host; the rest are checked
+# offline by `phenix-scorch-validate` against models.yaml during verify.
+description: "#158 + #164-#177 metadata models + bennu #58"
+apps:
+  prs: [158, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177]
+bennu:
+  pr: 58
+  includes: [54, 55, 56, 57]  # stacked under #58
+# verify fails if phenix-scorch-validate is missing from the install.
+validate: true
+# Lowercase mgmt VLAN alias: #158 makes the sceptre app match it anyway.
+mgmt_vlan: mgmt
+scorch:
+  components:
+    - name: disrupt
+      type: disruption
+      metadata: {current_disruption: baseline, run_duration: 30}
+    - name: pcap
+      type: pcap
+      metadata:
+        vms: [{hostname: rtu-1, interface: 0}]
+    - name: tcpdump
+      type: tcpdump
+      metadata:
+        vms: [{hostname: rtu-2, iface: any, filter: "tcp port 502"}]
+    - name: mm-capture
+      type: mm
+      metadata:
+        start: [{type: start_capture, capture: {bridge: phenix, filename: burger-bridge.pcap}}]
+        stop: [{type: stop_capture, capture: {bridge: phenix}}]
+    - name: pipe
+      type: pipe
+      metadata: {pipe: burger, data: hello-from-burger}
+    - name: hoststats
+      type: hoststats
+      metadata: {pollPeriod: 5}
+    - name: vmstats
+      type: vmstats
+      metadata: {vms: [rtu-1, rtu-2, simulink-provider], pollPeriod: 1}
+    - name: qos
+      type: qos
+      metadata:
+        vms: [{hostname: rtu-2, interface: 0, delay: 20ms}]
+    # Host-side OVS change on bridge `phenix`; placeholder TEST-NET addresses.
+    - name: erspan
+      type: erspan
+      metadata: {local_bridge: phenix, local_ip: 192.0.2.1, remote_ip: 192.0.2.2}
+  runs:
+    - name: metadata
+      configure: [disrupt]
+      # disrupt (baseline) holds start for run_duration: captures run during it.
+      start: [pcap, tcpdump, mm-capture, pipe, hoststats, vmstats, qos, disrupt]
+      stop: [pcap, tcpdump, mm-capture, vmstats, qos]
+      cleanup: [disrupt, pipe]
+    # Runs named extras* are advisory: their failures do not fail verify.
+    - name: extras-erspan
+      configure: [erspan]
+      cleanup: [erspan]
