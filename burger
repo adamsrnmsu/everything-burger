@@ -370,6 +370,7 @@ def cmd_install(args):
     # --no-deps keeps the container's other packages alone; prove the deps are there.
     ctr("python3", "-c", "import phenix_apps.apps.scorch.app, phenix_apps.apps.sceptre")
     put(out / "phenix-app-mirror", "/usr/local/bin/phenix-app-mirror")
+    ctr("chown", "0:0", "/usr/local/bin/phenix-app-mirror")  # docker cp keeps the host uid
     ctr("chmod", "0755", "/usr/local/bin/phenix-app-mirror")
     marker = json.dumps({"round": rnd["name"], "apps": man["apps"]["head"]})
     ctr("sh", "-c", f"echo {shlex.quote(marker)} > /tmp/burger/installed.json")
