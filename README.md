@@ -85,7 +85,7 @@ repo, from `work/rounds/<round>/manifest.json`.
 | #158 | `metadata` and `harden`; `metadata` renames the mgmt VLAN to `mgmt` | |
 | #164 disruption | `metadata` (baseline); dos model offline | dos and physical live (no Kali, no OPC script) |
 | #165 iperf | offline model only | live: `iperf3` is not in `bennu.qc2`; Windows client |
-| #166 rtds, #177 providerdata, #169 collector | offline model only | live: needs an RTDS or pybennu power-solver rig and Elasticsearch |
+| #166 rtds, #177 providerdata, #169 collector | offline model only (schema check, no rig needed) | live: out of scope; needs a separate RTDS / power-solver setup with Elasticsearch |
 | #167 pcap, #168 tcpdump, #172 mm, #173 pipe, #174 hoststats, #175 vmstats, #176 qos | `metadata` live | pcap `create_merged_pcap`/`convertToJSON` live |
 | #170 ssh | offline model only | live: no host route to the VMs without mgmt_tap |
 | #171 erspan | `metadata` advisory run (local-only, TEST-NET peer) | a real receiver |
