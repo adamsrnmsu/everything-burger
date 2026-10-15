@@ -16,13 +16,15 @@ a PR set.
 | `bennu` | upstream `main` | #58 (stack #54–#58) | health checks on the PR build of bennu |
 | `metadata` | #158, #164–#177 | #58 | disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos (+ advisory erspan); all 14 models validated offline; lowercase mgmt VLAN for #158 |
 | `harden` | #155, #158 | #58 | cc validators, pcap, tcpdump, mm, mgmt_tap, mirror app into a `monitor` VM |
+| `rtds` | #158, #164, #166, #169, #177 | #58 pybennu wheel | rtds, providerdata, collector and a baseline disruption on **your RTDS rig's** topology, not waterway |
 
 Every round also gets a `health` run: a SCORCH `cc` component whose validators
 check, inside the VMs, that `bennu-field-deviced`, the Simulink provider and
 solver are running, that each RTU can query the provider, that the installed
 bennu is the version the round built, and (with the Windows nodes) that
 something is polling Modbus on each RTU. In `harden` it also checks that
-the monitor VM sees mirrored Modbus traffic.
+the monitor VM sees mirrored Modbus traffic. In `rtds` it only checks that the
+PR build of pybennu installed on the provider.
 
 ## Run book
 
@@ -57,6 +59,28 @@ To debug, run the steps by hand:
 ./burger bennu-check bennu    # bennu's own docker harness: the #56 and #57 coverage
 ```
 
+### The rtds round
+
+It runs on your RTDS setup instead of waterway: the provider VM with pybennu
+and NTP, and optionally Elasticsearch and the RSCAD automation server. Point it
+at your topology and scenario through the environment; nothing site-specific
+goes into git:
+
+```bash
+export BURGER_RTDS_TOPOLOGY=/path/to/site-topology.yaml   # required
+export BURGER_RTDS_SCENARIO=/path/to/site-scenario.yaml   # required
+export BURGER_RTDS_PROVIDER=power-provider                 # provider VM hostname
+export BURGER_RTDS_ES_VERIFY=true BURGER_RTDS_ES_SERVER=http://es-host:9200 BURGER_RTDS_ES_INDEX=rtds-clean
+export BURGER_RTDS_RSCAD=true BURGER_RTDS_RSCAD_URL=http://rscad-host:8000
+./burger round rtds
+```
+
+Elasticsearch and RSCAD are off by default. The scenario keeps its own apps and
+`assetDir`; any `scorch` app in it is replaced by the round's pipeline. The
+provider gets the PR build of pybennu (pip, `--no-deps`) before
+`sceptre-start.sh` runs. `preflight` checks the waterway images, so ignore its
+image rows for this round.
+
 After you push to a PR, `./burger prs` marks the rounds that carry it STALE;
 re-run `sync` and the rest of the round.
 
@@ -85,12 +109,13 @@ repo, from `work/rounds/<round>/manifest.json`.
 | #158 | `metadata` and `harden`; `metadata` renames the mgmt VLAN to `mgmt` | |
 | #164 disruption | `metadata` (baseline); dos model offline | dos and physical live (no Kali, no OPC script) |
 | #165 iperf | offline model only | live: `iperf3` is not in `bennu.qc2`; Windows client |
-| #166 rtds, #177 providerdata, #169 collector | offline model only (schema check, no rig needed) | live: out of scope; needs a separate RTDS / power-solver setup with Elasticsearch |
+| #166 rtds, #177 providerdata, #169 collector | `rtds` round on your rig; models offline in `metadata` | |
 | #167 pcap, #168 tcpdump, #172 mm, #173 pipe, #174 hoststats, #175 vmstats, #176 qos | `metadata` live | pcap `create_merged_pcap`/`convertToJSON` live |
 | #170 ssh | offline model only | live: no host route to the VMs without mgmt_tap |
 | #171 erspan | `metadata` advisory run (local-only, TEST-NET peer) | a real receiver |
 | bennu #55 | every round but `baseline`: field devices and the Simulink provider run the PR build | |
-| bennu #56, #57 | `./burger bennu-check bennu` (waterway runs neither pybennu nor gobennu) | in an experiment |
+| bennu #56 | `rtds` round (the provider runs the PR pybennu); `./burger bennu-check bennu` | |
+| bennu #57 | `./burger bennu-check bennu` (no round runs gobennu) | in an experiment |
 | #159, #161, #163, #179 | CI and docs only; nothing to run | |
 
 ## Configuration
@@ -102,19 +127,33 @@ repo, from `work/rounds/<round>/manifest.json`.
 | `BURGER_TOKEN` | unset | JWT, when phēnix auth is on |
 | `BURGER_WORK` | `work/` next to `burger` | clones, worktrees, builds, results |
 | `BURGER_APPS_REPO`, `BURGER_BENNU_REPO`, `BURGER_TOPOLOGIES_REPO` | `work/repos/*` | use an existing clone; burger only adds `refs/burger/*` and worktrees |
+| `BURGER_PHENIX_DIR` | `/phenix` | phēnix's base directory (images, configs, SCORCH output) |
+| `BURGER_ASSETS` | `<phenix dir>/topologies/burger-waterway` | where the waterway copy goes |
+| `BURGER_RTDS_*` | see [the rtds round](#the-rtds-round) | site values for `rtds` |
 
-The experiment is `ebwes-<round>`. Its assets go to
-`/phenix/topologies/burger-waterway` and its rendered configs and bennu build
-to `/phenix/burger/<round>`, so your own `/phenix/topologies/waterway` is not
-touched. The PR build of bennu is injected as a deb plus
-`/etc/phenix/startup/00-burger-bennu.sh`, which installs it before phēnix's
-startup scripts and `sceptre-start.sh` run.
+Fixed: upstream repos are `sandialabs/*`, PRs merge onto `main`, and waterway
+comes from the topologies repo's `main`.
+
+### Where files go
+
+| What | Where |
+|---|---|
+| Clones | `work/repos/{apps,bennu,topologies}` (only `refs/burger/*` and worktrees are added) |
+| Merged trees, builds, results | `work/rounds/<round>/{apps,bennu,waterway,out,results}`, plus `manifest.json` and `report.md` |
+| waterway assets in phēnix | `$BURGER_ASSETS` (`/phenix/topologies/burger-waterway`); the scenario's `assetDir` and inject paths are rewritten to it, so your own `/phenix/topologies/waterway` is not touched. The `rtds` round copies nothing: its scenario's paths are used as they are |
+| Rendered configs, bennu build | `/phenix/burger/<round>/` |
+| Apps install | pip into the phēnix container; `phenix-app-mirror` into `/usr/local/bin`; marker `/tmp/burger/installed.json` |
+| bennu in the VMs | `/root/burger-bennu.deb` or the pybennu wheel, installed by `/etc/phenix/startup/00-burger-bennu.sh` before phēnix's startup scripts and `sceptre-start.sh`; log `/var/log/burger-bennu.log` |
+| SCORCH output | `/phenix/images/ebwes-<round>/files/scorch/run-N/`, copied to `work/rounds/<round>/results/` |
 
 ## Adding a round or a PR
 
 A round is `rounds/<name>.yaml` (the name must keep `ebwes-<name>` within 15
 characters): `apps.prs` merged in order, optional `bennu.pr`, and optional
-`scorch.components` and `scorch.runs` appended after the health run. `sync`
+`scorch.components` and `scorch.runs` appended after the health run. A
+`base: {topology, scenario}` replaces waterway, `bennu.install` picks `deb`
+and/or `pybennu`, and `bennu.nodes` the VMs that get it. `${VAR}` and
+`${VAR:-default}` read the environment. `sync`
 fails and names the files when a PR conflicts with the ones before it.
 
 ## Limitations

@@ -1,0 +1,69 @@
+# RTDS family on your own RTDS rig: #166 rtds, #177 providerdata, #169
+# collector (with the #164 disruption it reads), plus the PR build of pybennu
+# (#56 changed the RTDS publisher) on the provider VM.
+#
+# waterway has no RTDS, so this round starts from your site's topology and
+# scenario. Site values come from the environment, never from this file:
+#
+#   BURGER_RTDS_TOPOLOGY   path to the site topology YAML              (required)
+#   BURGER_RTDS_SCENARIO   path to the site scenario YAML              (required)
+#   BURGER_RTDS_PROVIDER   provider VM hostname     (default power-provider)
+#   BURGER_RTDS_ES_VERIFY  true to verify data in Elasticsearch   (default false)
+#   BURGER_RTDS_ES_SERVER  Elasticsearch URL, http://host:9200
+#   BURGER_RTDS_ES_INDEX   base index name                   (default rtds-clean)
+#   BURGER_RTDS_RSCAD      true to start and stop the RSCAD case  (default false)
+#   BURGER_RTDS_RSCAD_URL  RSCAD automation server URL
+#
+# The scenario keeps its own apps and assetDir; any scorch app in it is
+# replaced by the pipeline below.
+description: "#164 #166 #169 #177 + bennu #58 (pybennu) on a site RTDS rig"
+base:
+  topology: ${BURGER_RTDS_TOPOLOGY}
+  scenario: ${BURGER_RTDS_SCENARIO}
+apps:
+  prs: [158, 164, 166, 169, 177]
+bennu:
+  pr: 58
+  includes: [54, 55, 56, 57]  # stacked under #58
+  install: [pybennu]
+  nodes: ["${BURGER_RTDS_PROVIDER:-power-provider}"]
+validate: true
+scorch:
+  components:
+    - name: baseline
+      type: disruption
+      metadata: {current_disruption: baseline, permutation: 0, run_duration: 120}
+    - name: rtds
+      type: rtds
+      metadata:
+        hostname: ${BURGER_RTDS_PROVIDER:-power-provider}
+        export_logs: true
+        export_config: true
+        rscad_automation:
+          enabled: ${BURGER_RTDS_RSCAD:-false}
+          # placeholders are valid URLs, so the models accept them when unused
+          url: ${BURGER_RTDS_RSCAD_URL:-http://127.0.0.1:8000}
+        elasticsearch:
+          verify: ${BURGER_RTDS_ES_VERIFY:-false}
+          server: ${BURGER_RTDS_ES_SERVER:-http://127.0.0.1:9200}
+          index: ${BURGER_RTDS_ES_INDEX:-rtds-clean}
+    - name: providerdata
+      type: providerdata
+      metadata:
+        hostname: ${BURGER_RTDS_PROVIDER:-power-provider}
+        export_logs: true
+        elasticsearch:
+          verify: ${BURGER_RTDS_ES_VERIFY:-false}
+          server: ${BURGER_RTDS_ES_SERVER:-http://127.0.0.1:9200}
+          index: ${BURGER_RTDS_ES_INDEX:-rtds-clean}
+    - name: collector
+      type: collector
+      metadata: {}
+  runs:
+    - name: rtds
+      configure: [rtds, providerdata]
+      # baseline holds start for run_duration while the provider streams.
+      start: [rtds, providerdata, baseline]
+      # providerdata and rtds export before the collector reads their files.
+      stop: [providerdata, rtds, collector]
+      cleanup: [rtds]

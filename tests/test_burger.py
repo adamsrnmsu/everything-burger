@@ -31,6 +31,8 @@ def scorch_of(scen):
 @pytest.mark.parametrize("linux_only", [False, True])
 def test_render_every_round(name, linux_only):
     rnd = burger.load_round(name)
+    if rnd.get("base"):
+        pytest.skip("site topology; see test_rtds_round")
     man = MAN if rnd.get("bennu") else {**MAN, "bennu": None}
     topo, scen = burger.render(rnd, man, WATERWAY, linux_only, "/phenix/burger/x")
     assert topo["metadata"]["name"] == scen["metadata"]["name"] == rnd["exp"]
@@ -59,3 +61,34 @@ def test_evaluate():
     }
     verdicts = {row[1]: row[3] for row in burger.evaluate(spec_, results)}
     assert verdicts == {"good": "ok", "boom": "FAIL", "gone": "FAIL", "noisy": "WARN"}
+
+
+def test_rtds_round(tmp_path, monkeypatch):
+    for var in ("BURGER_RTDS_TOPOLOGY", "BURGER_RTDS_SCENARIO", "BURGER_RTDS_PROVIDER"):
+        monkeypatch.delenv(var, raising=False)
+    rnd = burger.load_round("rtds")
+    assert set(rnd["unset"]) == {"BURGER_RTDS_TOPOLOGY", "BURGER_RTDS_SCENARIO"}
+    with pytest.raises(SystemExit, match="BURGER_RTDS_SCENARIO"):
+        burger.render(rnd, MAN, None, False, "/s")
+
+    (tmp_path / "t.yaml").write_text(
+        "apiVersion: phenix.sandia.gov/v1\nkind: Topology\nmetadata: {name: site}\nspec:\n"
+        "  nodes:\n  - general: {hostname: pp1}\n    hardware: {os_type: linux, drives: [{image: p.qc2}]}\n"
+        "    network: {interfaces: []}\n")
+    (tmp_path / "s.yaml").write_text(
+        "apiVersion: phenix.sandia.gov/v2\nkind: Scenario\nmetadata: {name: site}\nspec:\n"
+        "  apps:\n  - {name: sceptre, assetDir: /phenix/topologies/site}\n  - {name: scorch, metadata: {}}\n")
+    monkeypatch.setenv("BURGER_RTDS_TOPOLOGY", str(tmp_path / "t.yaml"))
+    monkeypatch.setenv("BURGER_RTDS_SCENARIO", str(tmp_path / "s.yaml"))
+    monkeypatch.setenv("BURGER_RTDS_PROVIDER", "pp1")
+    rnd = burger.load_round("rtds")
+    man = {**MAN, "bennu": {"pr": 58, "sha": "c" * 40, "wheel": "pybennu-6.0.0-py3-none-any.whl"}}
+    topo, scen = burger.render(rnd, man, None, False, "/s")
+    assert [a["name"] for a in scen["spec"]["apps"]] == ["sceptre", "scorch"]
+    assert scen["spec"]["apps"][0]["assetDir"] == "/phenix/topologies/site"
+    dsts = [i["dst"] for i in topo["spec"]["nodes"][0]["injections"]]
+    assert dsts == ["/etc/phenix/startup/00-burger-bennu.sh", "/root/pybennu-6.0.0-py3-none-any.whl"]
+    sc = scorch_of(scen)
+    assert sc["components"][0]["name"] == "health" and sc["runs"][0]["name"] == "health"
+    assert next(c for c in sc["components"] if c["type"] == "rtds")["metadata"]["hostname"] == "pp1"
+    assert "pip3 install" in burger.bennu_startup(man) and "dpkg" not in burger.bennu_startup(man)

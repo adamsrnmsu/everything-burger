@@ -11,6 +11,7 @@ import copy
 import datetime as dt
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -31,8 +32,9 @@ WORK = Path(os.environ.get("BURGER_WORK", HERE / "work")).resolve()
 CTR = os.environ.get("BURGER_PHENIX_CONTAINER", "phenix")  # "" = phenix installed natively
 API = os.environ.get("BURGER_API", "http://localhost:3000/api/v1")
 TOKEN = os.environ.get("BURGER_TOKEN", "")
-PHENIX_DIR = "/phenix"
-ASSETS = f"{PHENIX_DIR}/topologies/burger-waterway"  # never touch the user's own waterway copy
+PHENIX_DIR = os.environ.get("BURGER_PHENIX_DIR", "/phenix")  # phēnix's PHENIX_DIR
+# Never the user's own waterway copy.
+ASSETS = os.environ.get("BURGER_ASSETS", f"{PHENIX_DIR}/topologies/burger-waterway")
 STOCK_ASSETS = "/phenix/topologies/waterway"
 
 REPOS = {
@@ -130,7 +132,17 @@ def load_round(name):
     if not path.is_file():
         known = ", ".join(sorted(p.stem for p in ROUNDS_DIR.glob("*.yaml") if p.stem != "models"))
         sys.exit(f"burger: no round '{name}' (known: {known})")
-    rnd = load_yaml(path) or {}
+    unset = []
+
+    def expand(m):  # ${VAR} or ${VAR:-default}: site values stay out of git
+        val = os.environ.get(m[1], m[2])
+        if val is None:
+            unset.append(m[1])
+            return m[0]
+        return val
+
+    rnd = yaml.safe_load(re.sub(r"\$\{(\w+)(?::-([^}]*))?\}", expand, path.read_text())) or {}
+    rnd["unset"] = unset  # only an error once the round is rendered, so `prs` still works
     rnd["name"] = name
     rnd["exp"] = f"ebwes-{name}"
     if len(rnd["exp"]) > MAX_EXP_NAME:
@@ -309,17 +321,29 @@ def cmd_build(args):
          "go", "build", "-o", "/out/phenix-app-mirror", "./cmd/phenix-app-mirror"])
 
     if man["bennu"]:
-        build_bennu(rd, out, man)
+        build_bennu(rd, out, man, rnd["bennu"].get("install", ["deb"]))
     (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
     (out / "built.json").write_text(json.dumps(built_key(man)))
     say(f"round '{rnd['name']}' built into {out}")
 
 
-def build_bennu(rd, out, man):
+def build_bennu(rd, out, man, install):
     wt = rd / "bennu"
     repo = ensure_repo("bennu").resolve()
     image = "burger-bennu-build:22.04"
     run(["docker", "build", "-q", "-t", image, wt / "docker" / "test"])
+    if "pybennu" in install:
+        # Copied first: the build backend may write next to the sources.
+        script = (f"cp -r {shlex.quote(str(wt.resolve()))}/src/pybennu /tmp/pyb && "
+                  # bennu's own `make dist`; jammy's pip cannot run the uv_build backend.
+                  "pip3 install -q uv && uv build -q --wheel -o /tmp/w /tmp/pyb && cp /tmp/w/pybennu-*.whl /out/ && "
+                  f"chown {os.getuid()}:{os.getgid()} /out/pybennu-*.whl")
+        run(["docker", "run", "--rm", "-v", f"{wt.resolve()}:{wt.resolve()}:ro", "-v", f"{out}:/out",
+             image, "bash", "-ec", script])
+        man["bennu"]["wheel"] = next(out.glob("pybennu-*.whl")).name
+        say(f"pybennu wheel {man['bennu']['wheel']}")
+    if "deb" not in install:
+        return
     # The worktree's .git file points into the main repo, and CMake stamps the
     # deb version with `git rev-parse --short HEAD`: mount both at their host paths.
     script = (
@@ -409,11 +433,19 @@ def health_component(rnd, man, linux_only):
         "bennu-probe --endpoint \"$ep\" --command query",
         "grep -q 'lock' || { echo \"$1: provider query returned no waterway tags\" >&2; exit 1; }",
     )
+    wheel = (man.get("bennu") or {}).get("wheel")
+    # pybennu keeps its version across PRs, so pip's log is the evidence.
+    wants = ([("Setting up bennu", "dpkg -i")] if deb else []) + \
+            ([("Successfully installed pybennu", "pip install")] if wheel else [])
     install_checks = [check(
         "cat /var/log/burger-bennu.log",
-        "log=$(cat); grep -q 'Setting up bennu' <<<\"$log\" || "
-        "{ echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
-    )] if deb else []
+        f"log=$(cat); grep -q {shlex.quote(want)} <<<\"$log\" || "
+        f"{{ echo \"$1: {what} of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }}",
+    ) for want, what in wants]
+    if rnd.get("base"):  # a site topology: only the install can be checked generically
+        vms = [{"hostname": h, "start": install_checks + ([version_check] if deb else [])}
+               for h in bennu_nodes(rnd)] if install_checks else []
+        return {"name": "health", "type": "cc", "metadata": {"vms": vms}} if vms else None
     vms = []
     for host in RTUS:
         cmds = install_checks + [
@@ -444,21 +476,48 @@ MONITOR_NODE = {
     "type": "VirtualMachine",
 }
 
-BENNU_STARTUP = """#!/bin/bash
-# everything-burger: install the round's bennu build before sceptre-start.sh
-# runs (phenix-start.sh runs /etc/phenix/startup/* in glob order).
-dpkg -i /root/burger-bennu.deb >/var/log/burger-bennu.log 2>&1
-"""
+def bennu_nodes(rnd):
+    return (rnd.get("bennu") or {}).get("nodes") or list(BENNU_NODES)
+
+
+def bennu_startup(man):
+    """Installs the round's bennu build before sceptre-start.sh runs
+    (phenix-start.sh runs /etc/phenix/startup/* in glob order)."""
+    lines = ["#!/bin/bash", "# everything-burger: install the round's bennu PR build", ": >/var/log/burger-bennu.log"]
+    if man["bennu"].get("deb_version"):
+        lines.append("dpkg -i /root/burger-bennu.deb >>/var/log/burger-bennu.log 2>&1")
+    if man["bennu"].get("wheel"):
+        w = f"/root/{man['bennu']['wheel']}"
+        # --break-system-packages is unknown to pip < 23: retry without it.
+        lines.append(f"pip3 install --no-deps --force-reinstall --break-system-packages {w} "
+                     f">>/var/log/burger-bennu.log 2>&1 || pip3 install --no-deps --force-reinstall {w} "
+                     ">>/var/log/burger-bennu.log 2>&1")
+    return "\n".join(lines) + "\n"
+
+
+def bennu_injections(man, stage_dir):
+    inj = [{"src": f"{stage_dir}/00-burger-bennu.sh", "dst": "/etc/phenix/startup/00-burger-bennu.sh",
+            "description": "burger: install bennu PR build", "permissions": "0755"}]
+    if man["bennu"].get("deb_version"):
+        inj.append({"src": f"{stage_dir}/bennu.deb", "dst": "/root/burger-bennu.deb",
+                    "description": "burger: bennu PR build"})
+    if man["bennu"].get("wheel"):
+        inj.append({"src": f"{stage_dir}/{man['bennu']['wheel']}", "dst": f"/root/{man['bennu']['wheel']}",
+                    "description": "burger: pybennu PR build"})
+    return inj
 
 
 def render(rnd, man, waterway_dir, linux_only, stage_dir):
-    """Build the round's topology and scenario documents from waterway."""
-    name = rnd["exp"]
-    topo = load_yaml(Path(waterway_dir) / "waterway-topology.yaml")
-    scen = load_yaml(Path(waterway_dir) / "waterway-scenario.yaml")
+    """Build the round's topology and scenario documents from waterway, or
+    from the round's `base` topology and scenario."""
+    if rnd.get("unset"):
+        sys.exit(f"burger: round '{rnd['name']}' needs " + ", ".join(sorted(set(rnd["unset"]))))
+    name, base = rnd["exp"], rnd.get("base")
+    topo = load_yaml(base["topology"] if base else Path(waterway_dir) / "waterway-topology.yaml")
+    scen = load_yaml(base["scenario"] if base else Path(waterway_dir) / "waterway-scenario.yaml")
     topo["metadata"]["name"] = name
     scen["metadata"]["name"] = name
-    scen["metadata"]["annotations"]["topology"] = name
+    scen["metadata"].setdefault("annotations", {})["topology"] = name
 
     nodes = topo["spec"]["nodes"]
     if linux_only:
@@ -476,18 +535,18 @@ def render(rnd, man, waterway_dir, linux_only, stage_dir):
                 if iface.get("vlan") == "MGMT":
                     iface["vlan"] = mgmt
     if man.get("bennu"):
+        hosts = {n["general"]["hostname"] for n in nodes}
+        missing = [h for h in bennu_nodes(rnd) if h not in hosts]
+        if missing:
+            sys.exit(f"burger: round '{rnd['name']}' bennu.nodes {missing} are not in the topology")
         for n in nodes:
-            if n["general"]["hostname"] in BENNU_NODES:
-                n.setdefault("injections", []).extend([
-                    {"src": f"{stage_dir}/bennu.deb", "dst": "/root/burger-bennu.deb",
-                     "description": "burger: bennu PR build"},
-                    {"src": f"{stage_dir}/00-burger-bennu.sh", "dst": "/etc/phenix/startup/00-burger-bennu.sh",
-                     "description": "burger: install bennu PR build", "permissions": "0755"},
-                ])
+            if n["general"]["hostname"] in bennu_nodes(rnd):
+                n.setdefault("injections", []).extend(bennu_injections(man, stage_dir))
 
     scorch = rnd.get("scorch") or {}
-    components = [health_component(rnd, man, linux_only)] + copy.deepcopy(scorch.get("components", []))
-    runs = [{"name": "health", "start": ["health"]}] + copy.deepcopy(scorch.get("runs", []))
+    health = health_component(rnd, man, linux_only)
+    components = ([health] if health else []) + copy.deepcopy(scorch.get("components", []))
+    runs = ([{"name": "health", "start": ["health"]}] if health else []) + copy.deepcopy(scorch.get("runs", []))
     known = {c["name"] for c in components}
     for r in runs:
         for stage in ("configure", "start", "stop", "cleanup"):
@@ -495,11 +554,14 @@ def render(rnd, man, waterway_dir, linux_only, stage_dir):
             if missing:
                 sys.exit(f"burger: round '{rnd['name']}' run '{r.get('name')}' {stage} names "
                          f"unknown components {missing}")
+    # The round's pipeline replaces any the base scenario already has.
+    scen["spec"]["apps"] = [a for a in scen["spec"]["apps"] if a["name"] != "scorch"]
     scen["spec"]["apps"] += copy.deepcopy(rnd.get("apps_extra", []))
     scen["spec"]["apps"].append({"name": "scorch", "metadata": {"components": components, "runs": runs}})
 
-    text = json.dumps(scen).replace(STOCK_ASSETS, ASSETS)
-    return topo, json.loads(text)
+    if base:  # its assets are already where its scenario says
+        return topo, scen
+    return topo, json.loads(json.dumps(scen).replace(STOCK_ASSETS, ASSETS))
 
 
 # ---------------------------------------------------------------- up / down
@@ -511,14 +573,15 @@ def cmd_up(args):
     exp, stage_dir = rnd["exp"], f"{PHENIX_DIR}/burger/{rnd['name']}"
     out = require_built(rnd, man)
     if man.get("bennu"):
-        (out / "00-burger-bennu.sh").write_text(BENNU_STARTUP)
+        (out / "00-burger-bennu.sh").write_text(bennu_startup(man))
     topo, scen = render(rnd, man, rd / "waterway", args.linux_only, stage_dir)
     (out / "topology.json").write_text(json.dumps(topo, indent=2))
     (out / "scenario.json").write_text(json.dumps(scen, indent=2))
     (rd / "state.json").write_text(json.dumps({"linux_only": args.linux_only}))
 
     down(rnd)
-    put(rd / "waterway", ASSETS)
+    if not rnd.get("base"):
+        put(rd / "waterway", ASSETS)
     put(out, stage_dir)
     phenix("config", "create", f"{stage_dir}/topology.json", f"{stage_dir}/scenario.json")
     phenix("experiment", "create", exp, "-t", exp, "-s", exp)
@@ -588,7 +651,7 @@ def cmd_scorch(args):
     for i in wanted:
         # Health waits on sceptre startup (field devices sleep 60 s, Windows
         # boots slowly), so retry it; every other run gets one shot.
-        deadline = time.time() + (args.settle if i == 0 else 0)
+        deadline = time.time() + (args.settle if runs[i].get("name") == "health" else 0)
         while True:
             since = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             phenix("experiment", "scorch", rnd["exp"], "-r", str(i), check=False)
@@ -689,7 +752,7 @@ def render_report(rnd, man, state, rows):
     lines = [f"# everything-burger round `{rnd['name']}` ({rnd['exp']})", "",
              f"- apps: `{man['apps']['head'][:10]}` = main `{man['apps']['base'][:10]}` + "
              + (", ".join(f"#{n} `{s[:8]}`" for n, s in man["apps"]["prs"].items()) or "no PRs"),
-             f"- bennu: " + (f"#{man['bennu']['pr']} `{man['bennu']['sha'][:10]}` deb `{man['bennu'].get('deb_version')}`"
+             f"- bennu: " + (f"#{man['bennu']['pr']} `{man['bennu']['sha'][:10]}` deb `{man['bennu'].get('deb_version')}` wheel `{man['bennu'].get('wheel')}`"
                              if man.get("bennu") else "stock bennu.qc2"),
              f"- topologies: `{man['topologies'][:10]}`" + (" (linux-only)" if state["linux_only"] else ""),
              f"- synced {man['synced']}", "",
