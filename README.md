@@ -15,13 +15,13 @@ a PR set.
 | `baseline` | upstream `main` | stock `bennu.qc2` | health checks only. If this fails, the rig is broken, not a PR |
 | `bennu` | upstream `main` | #58 (stack #54–#58) | health checks on the PR build of bennu |
 | `metadata` | #158, #164–#177 | #58 | disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos (+ advisory erspan); all 14 models validated offline; lowercase mgmt VLAN for #158 |
-| `hardening` | #155, #158 | #58 | cc validators, pcap, tcpdump, mm, mgmt_tap, mirror app into a `monitor` VM |
+| `harden` | #155, #158 | #58 | cc validators, pcap, tcpdump, mm, mgmt_tap, mirror app into a `monitor` VM |
 
 Every round also gets a `health` run: a SCORCH `cc` component whose validators
 check, inside the VMs, that `bennu-field-deviced`, the Simulink provider and
 solver are running, that each RTU can query the provider, that the installed
 bennu is the version the round built, and (with the Windows nodes) that
-something is polling Modbus on each RTU. In `hardening` it also checks that
+something is polling Modbus on each RTU. In `harden` it also checks that
 the monitor VM sees mirrored Modbus traffic.
 
 ## Run book
@@ -37,7 +37,7 @@ five licensed Windows images unless you pass `--linux-only`).
 ./burger round baseline       # sync, build, install, up, scorch, verify, down
 ./burger round bennu
 ./burger round metadata
-./burger round hardening
+./burger round harden
 ./burger install baseline     # put upstream main back into phēnix when done
 ```
 
@@ -81,8 +81,8 @@ repo, from `work/rounds/<round>/manifest.json`.
 
 | PR | Covered by | Not covered |
 |---|---|---|
-| #155 | `hardening`: cc validators, pcap, tcpdump, mm, mgmt_tap, mirror | kafka (no broker); art, ssh |
-| #158 | `metadata` and `hardening`; `metadata` renames the mgmt VLAN to `mgmt` | |
+| #155 | `harden`: cc validators, pcap, tcpdump, mm, mgmt_tap, mirror | kafka (no broker); art, ssh |
+| #158 | `metadata` and `harden`; `metadata` renames the mgmt VLAN to `mgmt` | |
 | #164 disruption | `metadata` (baseline); dos model offline | dos and physical live (no Kali, no OPC script) |
 | #165 iperf | offline model only | live: `iperf3` is not in `bennu.qc2`; Windows client |
 | #166 rtds, #177 providerdata, #169 collector | offline model only | live: needs an RTDS or pybennu power-solver rig and Elasticsearch |
@@ -122,7 +122,7 @@ fails and names the files when a PR conflicts with the ones before it.
 - Written against phēnix and minimega source; the first live run is its real test.
 - `--linux-only` drops SCADA, OPC, HMI and historian, so nothing polls the RTUs
   and the Modbus and mirror checks are skipped.
-- `--linux-only` in `hardening` still adds the monitor VM and mirror app, but
+- `--linux-only` in `harden` still adds the monitor VM and mirror app, but
   with no SCADA traffic its tcpdump captures nothing and nothing flags it.
 - The erspan advisory run adds an ERSPAN port to the host's `phenix` OVS bridge
   until its cleanup stage runs.

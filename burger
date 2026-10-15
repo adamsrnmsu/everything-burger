@@ -55,9 +55,14 @@ def say(msg):
 
 def run(cmd, check=True, capture=False, **kw):
     print("+ " + shlex.join(str(c) for c in cmd), flush=True)
-    res = subprocess.run(
-        [str(c) for c in cmd], check=False, text=True, capture_output=capture, **kw
-    )
+    try:
+        res = subprocess.run(
+            [str(c) for c in cmd], check=False, text=True, capture_output=capture, **kw
+        )
+    except FileNotFoundError:
+        if check:
+            sys.exit(f"burger: {cmd[0]} not found on PATH")
+        return subprocess.CompletedProcess(cmd, 127, "", f"{cmd[0]} not found")
     if check and res.returncode != 0:
         if capture:
             sys.stderr.write(res.stdout + res.stderr)
@@ -411,7 +416,11 @@ def health_component(rnd, man, linux_only):
     )] if deb else []
     vms = []
     for host in RTUS:
-        cmds = install_checks + [check("pgrep -f bennu-field-deviced"), provider_query, version_check]
+        cmds = install_checks + [
+            check("ss -Hltn '( sport = :502 )' | grep -q ."),  # the RTU serves Modbus
+            # Anchored: bennu-watcherd's argv contains bennu-field-deviced.firmware.
+            check("pgrep -f '(^|/)bennu-field-deviced?( |$)'"),
+            provider_query, version_check]
         if not linux_only:  # SCADA/OPC only exist with the Windows nodes
             cmds.append(check(
                 "ss -Htn state established '( sport = :502 )'",
@@ -419,8 +428,8 @@ def health_component(rnd, man, linux_only):
             ))
         vms.append({"hostname": host, "start": cmds})
     vms.append({"hostname": "simulink-provider", "start": [
-        *install_checks, check("pgrep -f bennu-simulink-provider"), check("pgrep -f simulinksolver"),
-        version_check]})
+        *install_checks, check("pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'"),
+        check("pgrep -f '(^|/)simulinksolver( |$)'"), version_check]})
     if rnd.get("monitor") and not linux_only:
         vms.append({"hostname": "monitor", "start": [
             check("timeout 30 tcpdump -nn -i any -c 3 'tcp port 502'")]})

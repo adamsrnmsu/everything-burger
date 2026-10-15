@@ -43,7 +43,8 @@ def test_render_every_round(name, linux_only):
         assert ("/etc/phenix/startup/00-burger-bennu.sh" in injected) is bool(man["bennu"])
     health = scorch_of(scen)["components"][0]
     rtu = next(v for v in health["metadata"]["vms"] if v["hostname"] == "rtu-1")
-    assert any(":502" in c["args"] for c in rtu["start"]) is not linux_only
+    assert any("state established" in c["args"] for c in rtu["start"]) is not linux_only
+    assert any("-Hltn" in c["args"] for c in rtu["start"])
     if rnd.get("mgmt_vlan"):
         vlans = {i["vlan"] for n in topo["spec"]["nodes"] for i in n["network"]["interfaces"]}
         assert "MGMT" not in vlans and rnd["mgmt_vlan"] in vlans
