@@ -80,3 +80,12 @@ def test_every_switchboard_resolves(settings, monkeypatch):
     assert len(names) == 9
     for name in names:
         resolve(load_switchboard(name, settings), settings)
+
+
+def test_override_for_unknown_item(settings):
+    for items in ({"disruption": False}, {}):
+        b = board(settings, "baseline", items=items, overrides={"disruption": {"config": {}}})
+        with pytest.raises(BurgerError) as e:
+            resolve(b, settings)
+        assert "baseline.yaml" in str(e.value)
+        assert "overrides.disruption" in str(e.value)

@@ -112,6 +112,12 @@ def resolve(board: Switchboard, settings: Settings, linux_only: bool = False) ->
             f"over the {MAX_EXP_NAME} limit"
         )
     refs = [ref for ref, on in board.items.items() if on]
+    for key in board.overrides:
+        if key not in refs:
+            problems.append(
+                f"{_dir(settings) / f'{board.name}.yaml'}: overrides.{key} names an item "
+                "that is not enabled in items"
+            )
     i = 0
     while i < len(refs):  # refs grows as required apps are inserted after their requirer
         ref = refs[i]
