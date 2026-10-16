@@ -1,0 +1,10 @@
+# #170 ssh into a waterway RTU over mgmt_tap. Needs BURGER_VM_PASSWORD, the
+# root password of the bennu.qc2 image; it lands in the rendered scenario.
+about: "#170 ssh to rtu-1 over mgmt_tap"
+route: waterway
+apps: {prs: [170]}
+items:
+  ssh: on
+runs:
+  - name: ssh
+    start: [ssh]

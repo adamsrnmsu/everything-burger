@@ -1,0 +1,9 @@
+# Control: upstream main apps and the stock bennu.qc2. If this fails, the rig
+# is broken, not a PR.
+about: upstream main, stock bennu
+route: waterway
+apps: {prs: []}
+items:
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on

@@ -1,0 +1,13 @@
+# pybennu under live load on soap's PyPower provider: bennu #59 as the deb and
+# the pybennu wheel, on upstream main apps, so a failure points at bennu.
+about: "bennu #59 deb + pybennu wheel on soap's PyPower provider"
+route: soap
+apps: {prs: []}
+bennu:
+  pr: 59
+  install: [deb, pybennu]
+  pip: ["loguru>=0.7,<1"]  # #59's new dependency; the VMs have no index
+items:
+  bennu/field-device: on
+  bennu/pybennu-provider: on
+  bennu/siren: on

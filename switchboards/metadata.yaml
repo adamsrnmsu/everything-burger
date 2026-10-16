@@ -1,0 +1,28 @@
+# #160 metadata models (#164-#177) plus #158, on the bennu stack. Models no
+# route can run are checked offline by phenix-scorch-validate.
+about: "#158 + #164-#177 metadata models + bennu #58"
+route: waterway
+apps: {prs: [158, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177]}
+bennu: {pr: 58}
+items:
+  disruption: on
+  pcap: on
+  tcpdump: on
+  mm: on
+  pipe: on
+  hoststats: on
+  vmstats: on
+  qos: on
+  erspan: on
+  apps/mgmt-vlan-alias: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+overrides:
+  pcap: {config: {vms: [{hostname: rtu-1, interface: 0}]}}
+  tcpdump: {config: {vms: [{hostname: rtu-2, iface: any, filter: "tcp port 502"}]}}
+  mm:
+    config:
+      start: [{type: start_capture, capture: {bridge: phenix, filename: burger-bridge.pcap}}]
+  vmstats: {config: {vms: [rtu-1, rtu-2, simulink-provider]}}
+  qos: {config: {vms: [{hostname: rtu-2, interface: 0, delay: 20ms}]}}

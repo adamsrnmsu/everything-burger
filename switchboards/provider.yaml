@@ -1,0 +1,21 @@
+# #177 providerdata, #166 rtds and #169 collector (with the #164 disruption it
+# reads), live on soap's PyPower provider. All of soap is kept.
+about: "#158 #164 #166 #169 #177 on soap's PyPower provider"
+route: soap
+apps: {prs: [158, 164, 166, 169, 177]}
+items:
+  rtds: on
+  providerdata: on
+  collector: on
+  disruption: on
+overrides:
+  disruption: {config: {permutation: 0, run_duration: 60}}
+runs:
+  - name: provider
+    configure: [rtds, providerdata]
+    # disruption holds start for run_duration while the provider runs.
+    start: [rtds, providerdata, disruption]
+    # rtds stop stops the provider, so providerdata exports first; the
+    # collector reads both folders last.
+    stop: [providerdata, rtds, collector]
+    cleanup: [rtds]

@@ -1,0 +1,15 @@
+# #165 iperf between two waterway RTUs on the ICS network.
+about: "#165 iperf, rtu-2 to rtu-1"
+route: waterway
+apps: {prs: [165]}
+items:
+  iperf: on
+  disruption: on
+runs:
+  - name: iperf
+    configure: [iperf]
+    # iperf start returns once the clients launch; disruption keeps the stage
+    # open past their 20 s run before stop collects the results.
+    start: [iperf, disruption]
+    stop: [iperf]
+    cleanup: [iperf]

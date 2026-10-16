@@ -1,0 +1,20 @@
+# #155 security hardening (+ #158) on the bennu stack: tcpdump, pcap and mm
+# captures, mgmt_tap, and the mirror app feeding a monitor VM.
+about: "#155 + #158 + bennu #58, mirror + mgmt_tap"
+route: waterway
+apps: {prs: [155, 158]}
+bennu: {pr: 58}
+items:
+  pcap: on
+  tcpdump: on
+  mm: on
+  disruption: on
+  apps/mirror: on
+  apps/mgmt_tap: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+overrides:
+  tcpdump:
+    config:
+      vms: [{hostname: monitor, iface: any, filter: "tcp port 502 or ip proto 47"}]
