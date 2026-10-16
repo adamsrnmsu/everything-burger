@@ -8,6 +8,7 @@ import copy
 import importlib.util
 import json
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -49,10 +50,17 @@ def test_render_every_round(name, linux_only, monkeypatch):
     for h, n in hosts.items():
         assert ("/etc/phenix/startup/02-burger-debs.sh" in str(n.get("injections"))) is (h in debs)
     if where != "waterway":
-        for h in rnd["cc_nodes"]:
+        for h in rnd.get("cc_nodes") or burger.bennu_nodes(rnd):
             assert "/etc/phenix/startup/01-burger-miniccc.sh" in str(hosts[h]["injections"])
         health = scorch_of(scen)["components"][0]
-        assert [v["hostname"] for v in health["metadata"]["vms"]] == [v["hostname"] for v in rnd["health"]]
+        vms = {v["hostname"]: v["start"] for v in health["metadata"]["vms"]}
+        own = {v["hostname"]: v["start"] for v in rnd["health"]}
+        assert set(own) <= set(vms)
+        for h, cmds in vms.items():  # install checks first, then the round's own
+            installed = man["bennu"] and h in burger.bennu_nodes(rnd)
+            assert [c["args"] for c in cmds[len(cmds) - len(own.get(h, [])):]] == own.get(h, [])
+            assert any("burger-bennu.log" in c["args"] for c in cmds) is bool(installed)
+        assert not set(rnd.get("drop_nodes") or []) & set(hosts)
         return
     assert ("opc" in hosts) is not linux_only
     for h in burger.BENNU_NODES:
@@ -225,3 +233,29 @@ def test_scorch_settle_is_a_hard_cap(monkeypatch):
     clock["now"] = 0.0
     burger.cmd_scorch(burger.argparse.Namespace(round="x", run=None, settle=0))
     assert attempts == [0]  # the first attempt always runs
+
+
+@needs_topologies
+def test_pybennu_round():
+    rnd = burger.load_round("pybennu")
+    man = {**MAN, "bennu": {**MAN["bennu"], "pr": 59, "wheel": "pybennu-6.0.0-py3-none-any.whl",
+                            "wheels": ["loguru-0.7.3-py3-none-any.whl"]}}
+    topo, scen = burger.render(rnd, man, TOPOLOGIES / "soap", False, "/s")
+    hosts = {n["general"]["hostname"]: n for n in topo["spec"]["nodes"]}
+    assert set(hosts) == {"power-provider", "rtu-1", "rtu-2", "rtu-3", "rtu-4", "siren"}
+    apps = {a["name"]: a for a in scen["spec"]["apps"]}
+    assert "mirror" not in apps  # its only host, netmonitor, is dropped
+    assert "ignition" not in [h["hostname"] for h in apps["sceptre"]["hosts"]]
+    dsts = [i["dst"] for i in hosts["power-provider"]["injections"]]
+    assert "/root/loguru-0.7.3-py3-none-any.whl" in dsts and "/root/burger-bennu.deb" in dsts
+    start = burger.bennu_startup(man)
+    assert "/root/loguru-0.7.3-py3-none-any.whl /root/pybennu-6.0.0-py3-none-any.whl" in start
+    health = scorch_of(scen)["components"][0]
+    pp = next(v for v in health["metadata"]["vms"] if v["hostname"] == "power-provider")
+    pip_check = next(c for c in pp["start"] if "Successfully" in c.get("validator", ""))
+    for line, ok in (("Successfully installed loguru-0.7.3 pybennu-6.0.0", True),
+                     ("Successfully installed pybennu-6.0.0", True), ("ERROR: no matching wheel", False)):
+        res = subprocess.run(["bash", "-c", pip_check["validator"], "-", "pp"], input=line, text=True,
+                             capture_output=True)
+        assert (res.returncode == 0) is ok, line
+    assert scorch_of(scen)["runs"][-1]["name"].startswith("extras")  # siren is advisory

@@ -352,13 +352,13 @@ def cmd_build(args):
              f"chown {uid} /out/*.deb"])
 
     if man["bennu"]:
-        build_bennu(rd, out, man, rnd["bennu"].get("install", ["deb"]))
+        build_bennu(rd, out, man, rnd["bennu"].get("install", ["deb"]), rnd["bennu"].get("pip", []))
     (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
     (out / "built.json").write_text(json.dumps(built_key(man)))
     say(f"round '{rnd['name']}' built into {out}")
 
 
-def build_bennu(rd, out, man, install):
+def build_bennu(rd, out, man, install, pip=()):
     wt = rd / "bennu"
     repo = ensure_repo("bennu").resolve()
     image = "burger-bennu-build:22.04"
@@ -373,6 +373,13 @@ def build_bennu(rd, out, man, install):
              image, "bash", "-ec", script])
         man["bennu"]["wheel"] = next(out.glob("pybennu-*.whl")).name
         say(f"pybennu wheel {man['bennu']['wheel']}")
+        if pip:  # new deps of the PR that the image lacks; the VMs have no index
+            shutil.rmtree(out / "wheels", ignore_errors=True)
+            run(["docker", "run", "--rm", "-v", f"{out}:/out", image, "bash", "-ec",
+                 f"pip3 wheel -q --no-deps -w /out/wheels {shlex.join(pip)} && "
+                 f"chown -R {os.getuid()}:{os.getgid()} /out/wheels"])
+            man["bennu"]["wheels"] = sorted(p.name for p in (out / "wheels").glob("*.whl"))
+            say(f"extra wheels {', '.join(man['bennu']['wheels'])}")
     if "deb" not in install:
         return
     # The worktree's .git file points into the main repo, and CMake stamps the
@@ -451,11 +458,6 @@ def health_component(rnd, man, linux_only):
             c["validator"] = validator
         return c
 
-    if rnd.get("health"):  # the round's own checks, for a topology burger has none for
-        vms = [{"hostname": v["hostname"], "start": [check(c) for c in v["start"]]}
-               for v in rnd["health"]]
-        return {"name": "health", "type": "cc", "metadata": {"vms": vms}}
-
     deb = (man.get("bennu") or {}).get("deb_version")
     # No ${...} in any cc string: SCORCH templating eats it. And a command with
     # a validator must print something: cc.py crashes on empty stdout.
@@ -475,15 +477,20 @@ def health_component(rnd, man, linux_only):
     wheel = (man.get("bennu") or {}).get("wheel")
     # pybennu keeps its version across PRs, so pip's log is the evidence.
     wants = ([("Setting up bennu", "dpkg -i")] if deb else []) + \
-            ([("Successfully installed pybennu", "pip install")] if wheel else [])
+            ([("Successfully installed.* pybennu-", "pip install")] if wheel else [])
     install_checks = [check(
         "cat /var/log/burger-bennu.log 2>&1",
-        f"log=$(cat); grep -q {shlex.quote(want)} <<<\"$log\" || "
+        f"log=$(cat); grep -Eq {shlex.quote(want)} <<<\"$log\" || "
         f"{{ echo \"$1: {what} of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }}",
     ) for want, what in wants]
-    if rnd.get("base") or topology(rnd) != "waterway":  # only the install checks generically
-        vms = [{"hostname": h, "start": install_checks + ([version_check] if deb else [])}
-               for h in bennu_nodes(rnd)] if install_checks else []
+    if rnd.get("health") or rnd.get("base") or topology(rnd) != "waterway":
+        # Off waterway: the install checks on the bennu nodes, then the round's own
+        # `health` checks, which replace the waterway ones.
+        generic = install_checks + ([version_check] if deb else [])
+        checks = {h: list(generic) for h in (bennu_nodes(rnd) if install_checks else [])}
+        for v in rnd.get("health") or []:
+            checks.setdefault(v["hostname"], []).extend(check(c) for c in v["start"])
+        vms = [{"hostname": h, "start": c} for h, c in checks.items()]
         return {"name": "health", "type": "cc", "metadata": {"vms": vms}} if vms else None
     vms = []
     for host in RTUS:
@@ -532,7 +539,7 @@ def bennu_startup(man):
     if man["bennu"].get("deb_version"):
         lines.append("dpkg -i /root/burger-bennu.deb >>/var/log/burger-bennu.log 2>&1")
     if man["bennu"].get("wheel"):
-        w = f"/root/{man['bennu']['wheel']}"
+        w = " ".join(f"/root/{n}" for n in [*man["bennu"].get("wheels", []), man["bennu"]["wheel"]])
         # --break-system-packages is unknown to pip < 23: retry without it.
         lines.append(f"pip3 install --no-deps --force-reinstall --break-system-packages {w} "
                      f">>/var/log/burger-bennu.log 2>&1 || pip3 install --no-deps --force-reinstall {w} "
@@ -586,6 +593,8 @@ def bennu_injections(man, stage_dir):
     if man["bennu"].get("wheel"):
         inj.append({"src": f"{stage_dir}/{man['bennu']['wheel']}", "dst": f"/root/{man['bennu']['wheel']}",
                     "description": "burger: pybennu PR build"})
+        inj += [{"src": f"{stage_dir}/wheels/{n}", "dst": f"/root/{n}", "description": "burger: pybennu dependency"}
+                for n in man["bennu"].get("wheels", [])]
     return inj
 
 
@@ -603,12 +612,18 @@ def render(rnd, man, topology_dir, linux_only, stage_dir):
     scen["metadata"].setdefault("annotations", {})["topology"] = name
 
     nodes = topo["spec"]["nodes"]
-    if linux_only:
-        dropped = {n["general"]["hostname"] for n in nodes if n["hardware"]["os_type"] == "windows"}
+    dropped = set(rnd.get("drop_nodes") or []) | \
+        ({n["general"]["hostname"] for n in nodes if n["hardware"]["os_type"] == "windows"} if linux_only else set())
+    if dropped:
         nodes[:] = [n for n in nodes if n["general"]["hostname"] not in dropped]
+        apps = []
         for app in scen["spec"]["apps"]:
-            if "hosts" in app:
+            if app.get("hosts"):
                 app["hosts"] = [h for h in app["hosts"] if h["hostname"] not in dropped]
+                if not app["hosts"]:  # every host dropped (soap's mirror to netmonitor)
+                    continue
+            apps.append(app)
+        scen["spec"]["apps"] = apps
     if rnd.get("monitor"):
         nodes.append(copy.deepcopy(MONITOR_NODE))
     mgmt = rnd.get("mgmt_vlan")
