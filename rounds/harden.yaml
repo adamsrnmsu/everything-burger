@@ -28,7 +28,7 @@ scorch:
     - name: tcpdump
       type: tcpdump
       metadata:
-        vms: [{hostname: monitor, iface: any, filter: "tcp port 502"}]
+        vms: [{hostname: monitor, iface: any, filter: "tcp port 502 or ip proto 47"}]
     - name: mm-capture
       type: mm
       metadata:

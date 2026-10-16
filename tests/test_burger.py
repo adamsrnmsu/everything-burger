@@ -48,6 +48,8 @@ def test_render_every_round(name, linux_only):
         assert "/etc/phenix/startup/01-burger-miniccc.sh" in injected  # every round, bennu or not
     if "monitor" in hosts:
         assert "/root/burger-miniccc" in [i["dst"] for i in hosts["monitor"]["injections"]]
+        mirror = next(i for i in hosts["monitor"]["network"]["interfaces"] if i["name"] == "mirror")
+        assert (mirror["vlan"], mirror["address"], mirror["mask"]) == ("mirror", "10.248.171.254", 24)
     assert not any("burger-miniccc" in str(n.get("injections")) for n in hosts.values()
                    if n["hardware"]["os_type"] == "windows")
     assert "${" not in json.dumps(scorch_of(scen))  # SCORCH templating eats it

@@ -23,7 +23,8 @@ check, inside the VMs, that `bennu-field-deviced`, the Simulink provider and
 solver are running, that each RTU can query the provider, that the installed
 bennu is the version the round built, and (with the Windows nodes) that
 something is polling Modbus on each RTU. In `harden` it also checks that
-the monitor VM sees mirrored Modbus traffic. In `rtds` it only checks that the
+the monitor VM sees mirrored Modbus traffic (the mirror app delivers it
+GRE-encapsulated, to the monitor's predefined `mirror` interface). In `rtds` it only checks that the
 PR build of pybennu installed on the provider.
 
 ## Run book

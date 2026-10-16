@@ -478,15 +478,21 @@ def health_component(rnd, man, linux_only):
         check("pgrep -f '(^|/)simulinksolver( |$)'"), version_check]})
     if rnd.get("monitor") and not linux_only:
         vms.append({"hostname": "monitor", "start": [
-            check("timeout 30 tcpdump -nn -i any -c 3 'tcp port 502'")]})
+            # The mirror app delivers GRE-encapsulated, even on a single host.
+            check("timeout 30 tcpdump -nn -i any -c 3 'tcp port 502 or ip proto 47'")]})
     return {"name": "health", "type": "cc", "metadata": {"vms": vms}}
 
 
 MONITOR_NODE = {
     "general": {"hostname": "monitor", "description": "burger mirror target"},
     "hardware": {"drives": [{"image": "bennu.qc2"}], "memory": 2048, "os_type": "linux", "vcpus": 2},
+    # `mirror` is the mirror app's own default (VLAN mirror, first target
+    # 10.248.171.254/24), predefined so the guest brings up the GRE endpoint
+    # whatever order the app and startup scripts run in.
     "network": {"interfaces": [{"name": "mgmt", "vlan": "MGMT", "address": "172.16.1.200",
-                                "mask": 16, "proto": "static", "type": "ethernet"}]},
+                                "mask": 16, "proto": "static", "type": "ethernet"},
+                               {"name": "mirror", "vlan": "mirror", "address": "10.248.171.254",
+                                "mask": 24, "proto": "static", "type": "ethernet"}]},
     "type": "VirtualMachine",
 }
 
