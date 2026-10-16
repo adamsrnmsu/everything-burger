@@ -1,7 +1,0 @@
-{
-  "database": "dolt",
-  "backend": "dolt",
-  "dolt_mode": "embedded",
-  "dolt_database": "burger",
-  "project_id": "08b6bba3-107f-44df-9b3b-86983df13324"
-}
