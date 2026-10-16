@@ -1,0 +1,7 @@
+topology_dir: soap
+files: [topology.yaml, scenario.yaml]
+rtus: [rtu-1, rtu-2, rtu-3, rtu-4]
+provider: power-provider
+ics_port: 20000
+bennu_nodes: [power-provider, rtu-1, rtu-2, rtu-3, rtu-4, siren]
+drop_nodes: [ignition, netmonitor, attacker]

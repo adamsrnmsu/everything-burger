@@ -1,0 +1,7 @@
+topology_dir: waterway
+files: [waterway-topology.yaml, waterway-scenario.yaml]
+rtus: [rtu-1, rtu-2]
+provider: simulink-provider
+ics_port: 502
+bennu_nodes: [rtu-1, rtu-2, simulink-provider]
+windows_images: [opc.qc2, historian.qc2, hmi_win7.qc2, scada.qc2, engineer_workstation.qc2]

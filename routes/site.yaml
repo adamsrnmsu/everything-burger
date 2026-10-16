@@ -1,0 +1,6 @@
+# Site topology and scenario come from the environment, never from git.
+base:
+  topology: ${BURGER_SITE_TOPOLOGY}
+  scenario: ${BURGER_SITE_SCENARIO}
+provider: ${BURGER_SITE_PROVIDER:-power-provider}
+bennu_nodes: [${BURGER_SITE_PROVIDER:-power-provider}]
