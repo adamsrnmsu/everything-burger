@@ -1,0 +1,129 @@
+{
+  "apiVersion": "phenix.sandia.gov/v2",
+  "kind": "Scenario",
+  "metadata": {
+    "annotations": {
+      "topology": "ebwes-rtds"
+    },
+    "name": "ebwes-rtds"
+  },
+  "spec": {
+    "apps": [
+      {
+        "assetDir": "/phenix/topologies/site",
+        "name": "sceptre"
+      },
+      {
+        "metadata": {
+          "components": [
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "pp1",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "health",
+              "type": "cc"
+            },
+            {
+              "metadata": {
+                "current_disruption": "baseline",
+                "permutation": 0,
+                "run_duration": 120
+              },
+              "name": "baseline",
+              "type": "disruption"
+            },
+            {
+              "metadata": {
+                "elasticsearch": {
+                  "index": "rtds-clean",
+                  "server": "http://127.0.0.1:9200",
+                  "verify": false
+                },
+                "export_config": true,
+                "export_logs": true,
+                "hostname": "pp1",
+                "rscad_automation": {
+                  "enabled": false,
+                  "url": "http://127.0.0.1:8000"
+                }
+              },
+              "name": "rtds",
+              "type": "rtds"
+            },
+            {
+              "metadata": {
+                "elasticsearch": {
+                  "index": "rtds-clean",
+                  "server": "http://127.0.0.1:9200",
+                  "verify": false
+                },
+                "export_logs": true,
+                "hostname": "pp1"
+              },
+              "name": "providerdata",
+              "type": "providerdata"
+            },
+            {
+              "metadata": {},
+              "name": "collector",
+              "type": "collector"
+            }
+          ],
+          "runs": [
+            {
+              "name": "health",
+              "start": [
+                "health"
+              ]
+            },
+            {
+              "cleanup": [
+                "rtds"
+              ],
+              "configure": [
+                "rtds",
+                "providerdata"
+              ],
+              "name": "rtds",
+              "start": [
+                "rtds",
+                "providerdata",
+                "baseline"
+              ],
+              "stop": [
+                "providerdata",
+                "rtds",
+                "collector"
+              ]
+            }
+          ]
+        },
+        "name": "scorch"
+      }
+    ]
+  }
+}

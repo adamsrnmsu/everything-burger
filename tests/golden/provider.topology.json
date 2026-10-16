@@ -1,0 +1,452 @@
+{
+  "apiVersion": "phenix.sandia.gov/v1",
+  "kind": "Topology",
+  "metadata": {
+    "name": "ebwes-provider"
+  },
+  "spec": {
+    "nodes": [
+      {
+        "general": {
+          "hostname": "power-provider"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "bennu.qc2"
+            }
+          ],
+          "memory": 512,
+          "os_type": "linux",
+          "vcpus": 2
+        },
+        "injections": [
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "172.16.1.2",
+              "gateway": "172.16.1.1",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "commands": [
+          "exec bash -c \"/usr/local/bin/ignition/gwcmd --restore /phenix/ignition.gwbk -y >> /var/log/gwcmd-restore.log 2>&1; /usr/local/bin/ignition/gwcmd -r >> /var/log/gwcmd-restore.log 2>&1\""
+        ],
+        "general": {
+          "hostname": "ignition"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "ignition.qc2"
+            }
+          ],
+          "memory": 8192,
+          "os_type": "linux",
+          "vcpus": 4
+        },
+        "injections": [
+          {
+            "dst": "/phenix/ignition.gwbk",
+            "src": "/phenix/topologies/burger-soap/injects/ignition/soap-hil_20240612.gwbk"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.117.4.70",
+              "gateway": "10.117.4.1",
+              "mask": 24,
+              "name": "exp",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "EXP"
+            },
+            {
+              "address": "172.16.1.3",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "general": {
+          "hostname": "rtu-1"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "bennu.qc2"
+            }
+          ],
+          "memory": 512,
+          "os_type": "linux",
+          "vcpus": 1
+        },
+        "injections": [
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.117.4.101",
+              "gateway": "10.117.4.1",
+              "mask": 24,
+              "name": "exp",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "EXP"
+            },
+            {
+              "address": "172.16.1.4",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "general": {
+          "hostname": "rtu-2"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "bennu.qc2"
+            }
+          ],
+          "memory": 512,
+          "os_type": "linux",
+          "vcpus": 1
+        },
+        "injections": [
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.117.4.102",
+              "gateway": "10.117.4.1",
+              "mask": 24,
+              "name": "exp",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "EXP"
+            },
+            {
+              "address": "172.16.1.5",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "general": {
+          "hostname": "rtu-3"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "bennu.qc2"
+            }
+          ],
+          "memory": 512,
+          "os_type": "linux",
+          "vcpus": 1
+        },
+        "injections": [
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.117.4.103",
+              "gateway": "10.117.4.1",
+              "mask": 24,
+              "name": "exp",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "EXP"
+            },
+            {
+              "address": "172.16.1.6",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "general": {
+          "hostname": "rtu-4"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "bennu.qc2"
+            }
+          ],
+          "memory": 512,
+          "os_type": "linux",
+          "vcpus": 1
+        },
+        "injections": [
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.117.4.104",
+              "gateway": "10.117.4.1",
+              "mask": 24,
+              "name": "exp",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "EXP"
+            },
+            {
+              "address": "172.16.1.7",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "advanced": {
+          "qemu-append": "-device qemu-xhci -device usb-host,vendorid=0x0cd5,productid=0x0004"
+        },
+        "general": {
+          "hostname": "siren"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "bennu.qc2"
+            }
+          ],
+          "memory": 512,
+          "os_type": "linux",
+          "vcpus": 1
+        },
+        "injections": [
+          {
+            "dst": "/siren/s7-labjack.json",
+            "src": "/phenix/topologies/burger-soap/injects/siren/s7-labjack.json"
+          },
+          {
+            "dst": "/siren/siren.json",
+            "src": "/phenix/topologies/burger-soap/injects/siren/siren.json"
+          },
+          {
+            "dst": "/etc/phenix/startup/99_siren-start.sh",
+            "src": "/phenix/topologies/burger-soap/injects/siren/siren-start.sh"
+          },
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "172.16.1.10",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "commands": [
+          "exec bash -c \"systemctl start filebeat\""
+        ],
+        "general": {
+          "hostname": "netmonitor"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "ubuntu-soaptools.qc2"
+            }
+          ],
+          "memory": 4096,
+          "os_type": "linux",
+          "vcpus": 2
+        },
+        "injections": [
+          {
+            "dst": "/etc/filebeat/modules.d/zeek.yml",
+            "src": "/phenix/topologies/burger-soap/injects/netmonitor/filebeat_zeek_module.yml"
+          },
+          {
+            "dst": "/etc/filebeat/filebeat.yml",
+            "src": "/phenix/topologies/burger-soap/injects/netmonitor/filebeat.yml"
+          },
+          {
+            "dst": "/opt/zeek/etc/node.cfg",
+            "src": "/phenix/topologies/burger-soap/injects/netmonitor/zeek_node.cfg"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "172.16.1.8",
+              "gateway": "172.16.0.1",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            },
+            {
+              "address": "0.0.0.0",
+              "mask": 0,
+              "name": "mirror",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MIRROR"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "general": {
+          "hostname": "attacker"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "ubuntu-soaptools.qc2"
+            }
+          ],
+          "memory": 4096,
+          "os_type": "linux",
+          "vcpus": 2
+        },
+        "injections": [
+          {
+            "dst": "/phenix/attack/",
+            "src": "/phenix/topologies/burger-soap/injects/attack/"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.117.4.169",
+              "mask": 24,
+              "name": "exp",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "EXP"
+            },
+            {
+              "address": "172.16.1.9",
+              "gateway": "172.16.0.1",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      }
+    ]
+  }
+}

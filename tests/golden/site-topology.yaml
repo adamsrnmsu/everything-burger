@@ -1,0 +1,8 @@
+apiVersion: phenix.sandia.gov/v1
+kind: Topology
+metadata: {name: site}
+spec:
+  nodes:
+  - general: {hostname: pp1}
+    hardware: {os_type: linux, drives: [{image: p.qc2}]}
+    network: {interfaces: []}

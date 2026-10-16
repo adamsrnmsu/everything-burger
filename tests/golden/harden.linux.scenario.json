@@ -1,0 +1,321 @@
+{
+  "apiVersion": "phenix.sandia.gov/v2",
+  "kind": "Scenario",
+  "metadata": {
+    "annotations": {
+      "topology": "ebwes-harden"
+    },
+    "created": "",
+    "name": "ebwes-harden",
+    "updated": ""
+  },
+  "spec": {
+    "apps": [
+      {
+        "assetDir": "/phenix/topologies/burger-waterway",
+        "hosts": [
+          {
+            "hostname": "simulink-provider",
+            "metadata": {
+              "gt": "/phenix/topologies/burger-waterway/injects/simulinkgt",
+              "gt_template": "/phenix/topologies/burger-waterway/injects/main.tmpl",
+              "labels": [
+                "elk"
+              ],
+              "publish_endpoint": "udp://*;239.0.0.1:40000",
+              "publish_points": "/phenix/topologies/burger-waterway/injects/publishPoints.txt",
+              "simulator": "Simulink",
+              "solver": "/phenix/topologies/burger-waterway/injects/simulinksolver",
+              "type": "provider"
+            }
+          },
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "infrastructure": "waterway",
+              "labels": [
+                "elk"
+              ],
+              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
+              "modbus": [
+                {
+                  "name": "lowerwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "lowergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "lowervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "lowersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "simulink-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "infrastructure": "waterway",
+              "labels": [
+                "elk"
+              ],
+              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
+              "modbus": [
+                {
+                  "name": "upperwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "uppergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "uppervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "uppersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "simulink-provider",
+              "type": "fd-server"
+            }
+          }
+        ],
+        "name": "sceptre"
+      },
+      {
+        "hosts": [
+          {
+            "hostname": "monitor",
+            "metadata": {
+              "interface": "mirror",
+              "vlans": [
+                "SCADA",
+                "ICS"
+              ]
+            }
+          }
+        ],
+        "name": "mirror"
+      },
+      {
+        "metadata": {
+          "subnet": "172.16.0.0/16",
+          "vlan": "MGMT"
+        },
+        "name": "mgmt_tap"
+      },
+      {
+        "metadata": {
+          "components": [
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query",
+                        "type": "exec",
+                        "validator": "grep -q 'lock' || { echo \"$1: provider query returned no waterway tags\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-2",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query",
+                        "type": "exec",
+                        "validator": "grep -q 'lock' || { echo \"$1: provider query returned no waterway tags\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "simulink-provider",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)simulinksolver( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "health",
+              "type": "cc"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "interface": 0
+                  }
+                ]
+              },
+              "name": "pcap",
+              "type": "pcap"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "filter": "tcp port 502 or ip proto 47",
+                    "hostname": "monitor",
+                    "iface": "any"
+                  }
+                ]
+              },
+              "name": "tcpdump",
+              "type": "tcpdump"
+            },
+            {
+              "metadata": {
+                "start": [
+                  {
+                    "capture": {
+                      "bridge": "phenix",
+                      "filename": "burger-bridge.pcap"
+                    },
+                    "type": "start_capture"
+                  }
+                ],
+                "stop": [
+                  {
+                    "capture": {
+                      "bridge": "phenix"
+                    },
+                    "type": "stop_capture"
+                  }
+                ]
+              },
+              "name": "mm-capture",
+              "type": "mm"
+            },
+            {
+              "metadata": {
+                "current_disruption": "baseline",
+                "run_duration": 30
+              },
+              "name": "wait",
+              "type": "disruption"
+            }
+          ],
+          "runs": [
+            {
+              "name": "health",
+              "start": [
+                "health"
+              ]
+            },
+            {
+              "name": "hardening",
+              "start": [
+                "pcap",
+                "tcpdump",
+                "mm-capture",
+                "wait"
+              ],
+              "stop": [
+                "pcap",
+                "tcpdump",
+                "mm-capture"
+              ]
+            }
+          ]
+        },
+        "name": "scorch"
+      }
+    ]
+  }
+}
