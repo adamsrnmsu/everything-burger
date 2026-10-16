@@ -5,6 +5,7 @@ import pyfiglet
 from loguru import logger
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
 from burger.checks import Row
 
@@ -44,8 +45,12 @@ def banner(console: Console) -> None:
 def results_table(rows: list[Row]) -> Table:
     table = Table("item", "check", "result", "reason")
     for r in rows:
-        style = _STYLE.get(r.verdict, "")
-        table.add_row(r.item, r.check, f"[{style}]{r.verdict}[/]" if style else r.verdict, r.reason)
+        table.add_row(
+            Text(r.item),
+            Text(r.check),
+            Text(r.verdict, style=_STYLE.get(r.verdict, "")),
+            Text(r.reason),
+        )
     return table
 
 

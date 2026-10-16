@@ -117,3 +117,14 @@ def test_preflight_api_failure_is_a_row_not_a_crash(monkeypatch, capsys):
     monkeypatch.setattr(cli, "Host", lambda _s: host)
     assert main(["preflight", "--linux-only"]) == 1
     assert "REST API" in capsys.readouterr().out
+
+
+def test_results_table_keeps_bracket_text():
+    from rich.console import Console
+
+    from burger.checks import Row
+    from burger.ui import results_table
+
+    c = Console(width=120, record=True)
+    c.print(results_table([Row("i", "c", "FAIL", "[docs] x [/path]")]))
+    assert "[docs] x [/path]" in c.export_text()

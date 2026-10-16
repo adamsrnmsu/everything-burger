@@ -9,6 +9,7 @@ from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
 from burger import __version__, experiment, vcs, verify
 from burger.bennu import bennu_check
@@ -166,8 +167,8 @@ def _prs(args, s, host) -> int:
     for r in vcs.prs(s, host, args.author):
         stale = ", ".join(r["stale"])
         table.add_row(
-            r["repo"], str(r["number"]), (r["head"] or "?")[:10], r["title"],
-            ", ".join(r["boards"]), f"[yellow]{stale}[/]" if stale else "",
+            r["repo"], str(r["number"]), (r["head"] or "?")[:10], Text(r["title"]),
+            ", ".join(r["boards"]), Text(stale, style="yellow"),
         )  # fmt: skip
     out.print(table)
     return 0
@@ -182,10 +183,10 @@ def _list(args, s, host) -> int:
     for name in all_switchboards(s):
         b = load_switchboard(name, s)
         prs = [str(n) for n in b.apps_prs] + ([f"bennu {b.bennu['pr']}"] if b.bennu else [])
-        boards.add_row(name, b.route, ", ".join(prs), b.about, end_section=False)
+        boards.add_row(name, b.route, ", ".join(prs), Text(b.about), end_section=False)
     items = Table("item", "kind", "routes", "about")
     for i in all_items(s):
-        items.add_row(_ref(i.path), i.kind, ", ".join(i.routes) or "validate-only", i.about)
+        items.add_row(_ref(i.path), i.kind, ", ".join(i.routes) or "validate-only", Text(i.about))
     for t in (boards, items):
         t.columns[0].no_wrap = True
         out.print(t)
@@ -244,9 +245,9 @@ def _check(args, s, host) -> int:
     _, runs = compose(res, man)
     table = Table("item", "kind", "advisory", "about")
     for i in res.items:
-        table.add_row(i.name, i.kind, "yes" if i.advisory else "", i.about)
+        table.add_row(i.name, i.kind, "yes" if i.advisory else "", Text(i.about))
     for i in res.validate_only:
-        table.add_row(i.name, i.kind, "validate-only", i.about)
+        table.add_row(i.name, i.kind, "validate-only", Text(i.about))
     out.print(table)
     for n, run in enumerate(runs):
         stages = "; ".join(
