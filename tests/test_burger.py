@@ -5,6 +5,7 @@
 
 import importlib.machinery
 import importlib.util
+import json
 import os
 from pathlib import Path
 
@@ -43,6 +44,12 @@ def test_render_every_round(name, linux_only):
     for h in burger.BENNU_NODES:
         injected = [i["dst"] for i in hosts[h].get("injections", [])]
         assert ("/etc/phenix/startup/00-burger-bennu.sh" in injected) is bool(man["bennu"])
+        assert "/etc/phenix/startup/01-burger-miniccc.sh" in injected  # every round, bennu or not
+    if "monitor" in hosts:
+        assert "/root/burger-miniccc" in [i["dst"] for i in hosts["monitor"]["injections"]]
+    assert not any("burger-miniccc" in str(n.get("injections")) for n in hosts.values()
+                   if n["hardware"]["os_type"] == "windows")
+    assert "${" not in json.dumps(scorch_of(scen))  # SCORCH templating eats it
     health = scorch_of(scen)["components"][0]
     rtu = next(v for v in health["metadata"]["vms"] if v["hostname"] == "rtu-1")
     assert any("state established" in c["args"] for c in rtu["start"]) is not linux_only
@@ -87,8 +94,48 @@ def test_rtds_round(tmp_path, monkeypatch):
     assert [a["name"] for a in scen["spec"]["apps"]] == ["sceptre", "scorch"]
     assert scen["spec"]["apps"][0]["assetDir"] == "/phenix/topologies/site"
     dsts = [i["dst"] for i in topo["spec"]["nodes"][0]["injections"]]
-    assert dsts == ["/etc/phenix/startup/00-burger-bennu.sh", "/root/pybennu-6.0.0-py3-none-any.whl"]
+    assert dsts == ["/etc/phenix/startup/00-burger-bennu.sh", "/root/pybennu-6.0.0-py3-none-any.whl",
+                    "/root/burger-miniccc", "/etc/phenix/startup/01-burger-miniccc.sh"]
     sc = scorch_of(scen)
     assert sc["components"][0]["name"] == "health" and sc["runs"][0]["name"] == "health"
     assert next(c for c in sc["components"] if c["type"] == "rtds")["metadata"]["hostname"] == "pp1"
     assert "pip3 install" in burger.bennu_startup(man) and "dpkg" not in burger.bennu_startup(man)
+
+
+def test_fix_routers(monkeypatch):
+    sent = []
+
+    def fake_mm(exp, *a):
+        sent.append(" ".join(a))
+        out = "r1,u1\nrtu-1,u9\n" if a[-1].endswith("vm info") else ""
+        return burger.subprocess.CompletedProcess(a, 0, out, "")
+
+    monkeypatch.setattr(burger, "MM_CTR", "minimega")
+    monkeypatch.setattr(burger, "mm", fake_mm)
+    iface = lambda addr: {"address": addr, "mask": 24} if addr else {"name": "mgmt"}
+    topo = {"spec": {"nodes": [
+        {"general": {"hostname": "r1"}, "hardware": {"drives": [{"image": "minirouter.qc2"}]},
+         "network": {"interfaces": [iface("10.1.2.1"), iface(None), iface("10.1.1.1")]}},
+        {"general": {"hostname": "r2"}, "type": "Router", "network": {"interfaces": []}},
+        {"general": {"hostname": "rtu-1"}, "hardware": {"os_type": "linux", "drives": [{"image": "bennu.qc2"}]},
+         "network": {"interfaces": [iface("10.1.1.101")]}},
+    ]}}
+    monkeypatch.setattr(burger, "vm_uuids", lambda exp, want: {"r1": "u1", "rtu-1": "u9"})
+    burger.fix_routers("e", topo)
+    execs = [c for c in sent if c.startswith("cc exec")]
+    assert sent[0] == "cc filter uuid=u1" and sent[-1] == "clear cc filter"
+    assert len(execs) == 2  # eth0 and eth2; eth1 has no address, r2 is not listed, rtu-1 is no router
+    assert execs[0].startswith('cc exec /bin/sh -c "ip link set eth0 up; ip addr add 10.1.2.1/24 dev eth0')
+    assert "${" not in execs[0] and "replace" not in execs[0]
+    assert "eth2" in execs[1] and "10.1.1.1/24" in execs[1]
+
+    sent.clear()
+    monkeypatch.undo()
+    monkeypatch.setattr(burger, "mm", fake_mm)
+    assert burger.vm_uuids("e", {"r1"}) == {"r1": "u1", "rtu-1": "u9"}
+    assert sent == [".csv true .headers false .annotate false .columns name,uuid vm info"]
+
+    sent.clear()
+    monkeypatch.setattr(burger, "MM_CTR", "")
+    burger.fix_routers("e", topo)
+    assert sent == []

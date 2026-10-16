@@ -30,6 +30,8 @@ HERE = Path(__file__).resolve().parent
 ROUNDS_DIR = HERE / "rounds"
 WORK = Path(os.environ.get("BURGER_WORK", HERE / "work")).resolve()
 CTR = os.environ.get("BURGER_PHENIX_CONTAINER", "phenix")  # "" = phenix installed natively
+# miniccc comes from here, and router fixes go through it; "" disables both.
+MM_CTR = os.environ.get("BURGER_MINIMEGA_CONTAINER", "minimega")
 API = os.environ.get("BURGER_API", "http://localhost:3000/api/v1")
 TOKEN = os.environ.get("BURGER_TOKEN", "")
 PHENIX_DIR = os.environ.get("BURGER_PHENIX_DIR", "/phenix")  # phēnix's PHENIX_DIR
@@ -83,6 +85,12 @@ def ctr(*args, **kw):
 
 def phenix(*args, **kw):
     return ctr("phenix", *args, **kw)
+
+
+def mm(exp, *args):
+    """One minimega command in the experiment's namespace, via the container."""
+    return run(["docker", "exec", MM_CTR, "minimega", "-e",
+                " ".join(["namespace", exp, *args])], check=False, capture=True)
 
 
 def put(src, dst):
@@ -331,7 +339,7 @@ def build_bennu(rd, out, man, install):
     wt = rd / "bennu"
     repo = ensure_repo("bennu").resolve()
     image = "burger-bennu-build:22.04"
-    run(["docker", "build", "-q", "-t", image, wt / "docker" / "test"])
+    run(["docker", "build", "-t", image, wt / "docker" / "test"])
     if "pybennu" in install:
         # Copied first: the build backend may write next to the sources.
         script = (f"cp -r {shlex.quote(str(wt.resolve()))}/src/pybennu /tmp/pyb && "
@@ -395,8 +403,9 @@ def cmd_install(args):
     put(out / "apps-python.tar", f"{stage}/apps-python.tar")
     ctr("tar", "-xf", f"{stage}/apps-python.tar", "-C", stage)
     ctr("python3", "-m", "pip", "install", "--quiet", "--break-system-packages", "--no-cache-dir",
-        "--force-reinstall", "--no-deps", f"{stage}/src/python")
+        "--force-reinstall", "--no-deps", "--no-build-isolation", f"{stage}/src/python")
     # --no-deps keeps the container's other packages alone; prove the deps are there.
+    # --no-build-isolation: the container has setuptools but no route to an index.
     ctr("python3", "-c", "import phenix_apps.apps.scorch.app, phenix_apps.apps.sceptre")
     put(out / "phenix-app-mirror", "/usr/local/bin/phenix-app-mirror")
     ctr("chown", "0:0", "/usr/local/bin/phenix-app-mirror")  # docker cp keeps the host uid
@@ -420,16 +429,18 @@ def health_component(rnd, man, linux_only):
         return c
 
     deb = (man.get("bennu") or {}).get("deb_version")
+    # No ${...} in any cc string: SCORCH templating eats it. And a command with
+    # a validator must print something: cc.py crashes on empty stdout.
     version_check = check(
-        "dpkg-query -W -f='${Version}\\n' bennu",
+        "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
         f"v=$(cat); [ \"$v\" = {shlex.quote(deb)} ] || {{ echo \"$1 runs bennu $v, want {deb}\" >&2; exit 1; }}"
-        if deb else "grep -q . || { echo \"$1: bennu not installed\" >&2; exit 1; }",
+        if deb else "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
     )
     # The RTU's provider endpoint is the last tcp:// endpoint in its config
     # (comms first, then <output>); query it to prove provider and path are up.
     provider_query = check(
-        "ep=$(sed -n 's:.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*:\\1:p' /etc/sceptre/config.xml | tail -1); "
-        "[ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; "
+        "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); "
+        "echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; "
         "bennu-probe --endpoint \"$ep\" --command query",
         "grep -q 'lock' || { echo \"$1: provider query returned no waterway tags\" >&2; exit 1; }",
     )
@@ -438,7 +449,7 @@ def health_component(rnd, man, linux_only):
     wants = ([("Setting up bennu", "dpkg -i")] if deb else []) + \
             ([("Successfully installed pybennu", "pip install")] if wheel else [])
     install_checks = [check(
-        "cat /var/log/burger-bennu.log",
+        "cat /var/log/burger-bennu.log 2>&1",
         f"log=$(cat); grep -q {shlex.quote(want)} <<<\"$log\" || "
         f"{{ echo \"$1: {what} of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }}",
     ) for want, what in wants]
@@ -455,8 +466,8 @@ def health_component(rnd, man, linux_only):
             provider_query, version_check]
         if not linux_only:  # SCADA/OPC only exist with the Windows nodes
             cmds.append(check(
-                "ss -Htn state established '( sport = :502 )'",
-                "grep -q . || { echo \"$1: nothing is polling Modbus :502\" >&2; exit 1; }",
+                "ss -Htn state established '( sport = :502 )' | wc -l",
+                "[ \"$(cat)\" -gt 0 ] || { echo \"$1: nothing is polling Modbus :502\" >&2; exit 1; }",
             ))
         vms.append({"hostname": host, "start": cmds})
     vms.append({"hostname": "simulink-provider", "start": [
@@ -483,7 +494,7 @@ def bennu_nodes(rnd):
 def bennu_startup(man):
     """Installs the round's bennu build before sceptre-start.sh runs
     (phenix-start.sh runs /etc/phenix/startup/* in glob order)."""
-    lines = ["#!/bin/bash", "# everything-burger: install the round's bennu PR build", ": >/var/log/burger-bennu.log"]
+    lines = ["#!/bin/bash", "# everything-burger: install the round's bennu PR build", "echo '# burger bennu install log' >/var/log/burger-bennu.log"]
     if man["bennu"].get("deb_version"):
         lines.append("dpkg -i /root/burger-bennu.deb >>/var/log/burger-bennu.log 2>&1")
     if man["bennu"].get("wheel"):
@@ -493,6 +504,28 @@ def bennu_startup(man):
                      f">>/var/log/burger-bennu.log 2>&1 || pip3 install --no-deps --force-reinstall {w} "
                      ">>/var/log/burger-bennu.log 2>&1")
     return "\n".join(lines) + "\n"
+
+
+# bennu.qc2 ships miniccc.service without the binary and never loads
+# virtio_console, so its VMs never register with cc. Install the minimega
+# container's own miniccc (same ron protocol) before sceptre's startup.
+MINICCC_STARTUP = """#!/bin/bash
+# install miniccc (matching the host's minimega) and start it
+exec >>/var/log/burger-miniccc.log 2>&1
+install -D -m 0755 /root/burger-miniccc /opt/minimega/bin/miniccc
+modprobe virtio_console
+for _ in $(seq 60); do [ -e /dev/virtio-ports/cc ] && break; sleep 1; done
+ls /dev/virtio-ports/
+systemctl restart miniccc 2>/dev/null ||
+  nohup /opt/minimega/bin/miniccc -v=false -serial /dev/virtio-ports/cc -logfile /var/log/miniccc.log &
+"""
+
+
+def miniccc_injections(stage_dir):
+    return [{"src": f"{stage_dir}/burger-miniccc", "dst": "/root/burger-miniccc",
+             "description": "burger: miniccc from the minimega container"},
+            {"src": f"{stage_dir}/01-burger-miniccc.sh", "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+             "description": "burger: install and start miniccc", "permissions": "0755"}]
 
 
 def bennu_injections(man, stage_dir):
@@ -542,6 +575,11 @@ def render(rnd, man, waterway_dir, linux_only, stage_dir):
         for n in nodes:
             if n["general"]["hostname"] in bennu_nodes(rnd):
                 n.setdefault("injections", []).extend(bennu_injections(man, stage_dir))
+    if MM_CTR:  # Windows images carry their own working miniccc
+        cc_hosts = set(bennu_nodes(rnd)) | ({"monitor"} if rnd.get("monitor") else set())
+        for n in nodes:
+            if n["general"]["hostname"] in cc_hosts and n["hardware"].get("os_type") != "windows":
+                n.setdefault("injections", []).extend(miniccc_injections(stage_dir))
 
     scorch = rnd.get("scorch") or {}
     health = health_component(rnd, man, linux_only)
@@ -574,6 +612,12 @@ def cmd_up(args):
     out = require_built(rnd, man)
     if man.get("bennu"):
         (out / "00-burger-bennu.sh").write_text(bennu_startup(man))
+    if MM_CTR:
+        if run(["docker", "cp", f"{MM_CTR}:/opt/minimega/bin/miniccc", out / "burger-miniccc"],
+               check=False).returncode:
+            sys.exit(f"burger: cannot copy miniccc out of container '{MM_CTR}'; set "
+                     "BURGER_MINIMEGA_CONTAINER to the minimega container ('' skips the miniccc injection)")
+        (out / "01-burger-miniccc.sh").write_text(MINICCC_STARTUP)
     topo, scen = render(rnd, man, rd / "waterway", args.linux_only, stage_dir)
     (out / "topology.json").write_text(json.dumps(topo, indent=2))
     (out / "scenario.json").write_text(json.dumps(scen, indent=2))
@@ -587,6 +631,7 @@ def cmd_up(args):
     phenix("experiment", "create", exp, "-t", exp, "-s", exp)
     phenix("experiment", "start", exp)
     wait_running(exp, args.timeout)
+    fix_routers(exp, topo)
     say(f"experiment {exp} is up; next: ./burger scorch {rnd['name']}")
 
 
@@ -615,10 +660,65 @@ def not_running(exp):
     return ", ".join(down_vms)
 
 
+def is_router(node):
+    # Topologies mark routers inconsistently; the image name is what matches in practice.
+    drives = (node.get("hardware") or {}).get("drives") or [{}]
+    return (node.get("type") == "Router" or (node.get("hardware") or {}).get("os_type") == "minirouter"
+            or "minirouter" in str(drives[0].get("image", "")))
+
+
+def vm_uuids(exp, want, timeout=60):
+    """name -> uuid from minimega (phēnix's API has no uuid), retried until
+    every wanted VM is listed or the timeout passes."""
+    deadline = time.time() + timeout
+    while True:
+        out = mm(exp, ".csv true .headers false .annotate false .columns name,uuid vm info").stdout
+        uuids = dict(ln.strip().split(",", 1) for ln in out.splitlines() if ln.count(",") == 1)
+        if want <= set(uuids) or time.time() > deadline:
+            return uuids
+        time.sleep(5)
+
+
+def fix_routers(exp, topo):
+    """Re-deliver each router's interface config over cc. The vrouter app can
+    report success while the minirouter CLI fails (control socket missing),
+    leaving every interface down. cc queues per filter until the client
+    registers; each command ends with a show, so its response proves the state."""
+    if not MM_CTR:
+        return
+    routers = [n for n in topo["spec"]["nodes"] if is_router(n)]
+    if not routers:
+        return
+    uuids = vm_uuids(exp, {n["general"]["hostname"] for n in routers})
+    for node in routers:
+        name = node["general"]["hostname"]
+        uuid = uuids.get(name)
+        if not uuid:
+            say(f"router '{name}': not in minimega's VM list; skipping its interface fix")
+            continue
+        if mm(exp, "cc", "filter", f"uuid={uuid}").returncode:
+            say(f"router '{name}': minimega in '{MM_CTR}' unreachable; skipping its interface fix")
+            continue
+        for i, iface in enumerate(node["network"]["interfaces"]):  # minimega attaches NICs in order
+            if not iface.get("address"):
+                continue
+            # busybox ip: no `addr replace`; `add` of a present address errors harmlessly.
+            cmd = (f"ip link set eth{i} up; "
+                   f"ip addr add {iface['address']}/{iface['mask']} dev eth{i} 2>&1; "
+                   f"echo 1 > /proc/sys/net/ipv4/ip_forward; "
+                   f"ip -4 addr show dev eth{i}")
+            mm(exp, "cc", "exec", "/bin/sh", "-c", f'"{cmd}"')  # quoted: one argument to sh -c
+        mm(exp, "clear", "cc", "filter")
+        say(f"router '{name}': interface config queued over cc (vrouter workaround)")
+
+
 def down(rnd):
     exp = rnd["exp"]
-    if api(f"/experiments/{exp}"):
-        phenix("experiment", "delete", exp, "-f")
+    info = api(f"/experiments/{exp}")
+    if info:
+        if info.get("running"):
+            phenix("experiment", "stop", exp)
+        phenix("experiment", "delete", exp)
     phenix("config", "delete", f"scenario/{exp}", f"topology/{exp}", check=False, capture=True)
 
 
@@ -652,9 +752,20 @@ def cmd_scorch(args):
         # Health waits on sceptre startup (field devices sleep 60 s, Windows
         # boots slowly), so retry it; every other run gets one shot.
         deadline = time.time() + (args.settle if runs[i].get("name") == "health" else 0)
+        busy = 0
         while True:
             since = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-            phenix("experiment", "scorch", rnd["exp"], "-r", str(i), check=False)
+            res = phenix("experiment", "scorch", rnd["exp"], "-r", str(i), check=False, stderr=subprocess.PIPE)
+            sys.stderr.write(res.stderr or "")
+            # A crashed attempt can still be winding down phēnix-side: wait it
+            # out without spending the attempt (or the deadline) on it.
+            if "already running" in (res.stderr or ""):
+                busy += 1
+                if busy > 20:
+                    sys.exit(f"burger: SCORCH on {rnd['exp']} still busy after 10 min")
+                say("SCORCH is still finishing a previous run; retrying in 30 s")
+                time.sleep(30)
+                continue
             results = collect(rnd, i, since)
             failed = [r for r in evaluate(runs[i], results) if r[3] == "FAIL"]
             if not failed or time.time() > deadline:
@@ -766,6 +877,15 @@ def render_report(rnd, man, state, rows):
 # ---------------------------------------------------------------- preflight / round
 
 
+# Images can be thin overlays whose backing files sit on network storage:
+# `test -f` passes while reads hang forever. Exit 2 = missing, 124 = hung.
+READ_PROBE = ('f=$1; [ -f "$f" ] || exit 2; files=$f; '
+              'if command -v qemu-img >/dev/null; then '
+              'files=$(qemu-img info -U --backing-chain "$f" | sed -n "s/^image: //p"); fi; [ -n "$files" ] || files=$f; '
+              'cd "$(dirname "$f")" && for x in $files; do '
+              'dd if="$x" of=/dev/null bs=64k count=1 status=none || exit 4; done')
+
+
 def cmd_preflight(args):
     checks = []
 
@@ -789,9 +909,15 @@ def cmd_preflight(args):
     if not args.linux_only:
         images += ["opc.qc2", "historian.qc2", "hmi_win7.qc2", "scada.qc2", "engineer_workstation.qc2"]
     for img in images:
-        chk(f"image {img}", ctr("test", "-f", f"{PHENIX_DIR}/images/{img}", check=False).returncode == 0,
-            "build it or use --linux-only" if img.endswith(("win7.qc2", "opc.qc2", "historian.qc2",
-                                                           "scada.qc2", "workstation.qc2")) else "")
+        rc = ctr("timeout", "60", "bash", "-c", READ_PROBE, "probe", f"{PHENIX_DIR}/images/{img}", check=False).returncode
+        chk(f"image {img}", rc == 0,
+            "unreadable: a read through its backing chain failed or hung (network storage?)" if rc not in (0, 2)
+            else "build it or use --linux-only" if img.endswith(("win7.qc2", "opc.qc2", "historian.qc2",
+                                                                 "scada.qc2", "workstation.qc2")) else "")
+    if MM_CTR:
+        chk(f"miniccc in container '{MM_CTR}'",
+            run(["docker", "exec", MM_CTR, "test", "-f", "/opt/minimega/bin/miniccc"], check=False).returncode == 0,
+            "set BURGER_MINIMEGA_CONTAINER ('' skips the miniccc injection and router fix)")
     chk("pip in phēnix", ctr("python3", "-m", "pip", "--version", check=False, capture=True).returncode == 0)
     df = ctr("df", "-Pk", PHENIX_DIR, check=False, capture=True).stdout.split("\n")[1:2]
     free_gb = int(df[0].split()[3]) // 2**20 if df and df[0] else 0
@@ -838,12 +964,12 @@ def main():
         sp = add(name, fn, help_)
         sp.add_argument("--linux-only", action="store_true", help="drop the Windows nodes")
         sp.add_argument("--timeout", type=int, default=900, help="seconds to wait for VMs")
-        sp.add_argument("--settle", type=int, default=900, help="seconds to retry the health run")
+        sp.add_argument("--settle", type=int, default=1800, help="seconds to retry the health run")
         if name == "round":
             sp.add_argument("--keep", action="store_true", help="leave the experiment running")
     sp = add("scorch", cmd_scorch, "run the round's SCORCH runs (all by default)")
     sp.add_argument("--run", type=int)
-    sp.add_argument("--settle", type=int, default=900, help="seconds to retry the health run")
+    sp.add_argument("--settle", type=int, default=1800, help="seconds to retry the health run")
     add("verify", cmd_verify, "check install, experiment, models, and SCORCH results")
     add("down", cmd_down, "delete the round's experiment and configs")
 

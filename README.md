@@ -43,6 +43,10 @@ five licensed Windows images unless you pass `--linux-only`).
 ./burger install baseline     # put upstream main back into phēnix when done
 ```
 
+The phēnix container's entrypoint reinstalls upstream phenix-apps on every
+boot, so re-run `./burger install <round>` after any phenix container restart
+(`verify` flags the mismatch).
+
 `round` stops at the first failing step and leaves the experiment up for
 debugging; after `verify` it deletes the experiment unless you pass `--keep`.
 To debug, run the steps by hand:
@@ -127,6 +131,7 @@ repo, from `work/rounds/<round>/manifest.json`.
 | `BURGER_TOKEN` | unset | JWT, when phēnix auth is on |
 | `BURGER_WORK` | `work/` next to `burger` | clones, worktrees, builds, results |
 | `BURGER_APPS_REPO`, `BURGER_BENNU_REPO`, `BURGER_TOPOLOGIES_REPO` | `work/repos/*` | use an existing clone; burger only adds `refs/burger/*` and worktrees |
+| `BURGER_MINIMEGA_CONTAINER` | `minimega` | container burger copies `miniccc` from and sends router cc commands through; empty disables both |
 | `BURGER_PHENIX_DIR` | `/phenix` | phēnix's base directory (images, configs, SCORCH output) |
 | `BURGER_ASSETS` | `<phenix dir>/topologies/burger-waterway` | where the waterway copy goes |
 | `BURGER_RTDS_*` | see [the rtds round](#the-rtds-round) | site values for `rtds` |
@@ -144,6 +149,7 @@ comes from the topologies repo's `main`.
 | Rendered configs, bennu build | `/phenix/burger/<round>/` |
 | Apps install | pip into the phēnix container; `phenix-app-mirror` into `/usr/local/bin`; marker `/tmp/burger/installed.json` |
 | bennu in the VMs | `/root/burger-bennu.deb` or the pybennu wheel, installed by `/etc/phenix/startup/00-burger-bennu.sh` before phēnix's startup scripts and `sceptre-start.sh`; log `/var/log/burger-bennu.log` |
+| miniccc in the VMs | `/root/burger-miniccc`, installed and started by `/etc/phenix/startup/01-burger-miniccc.sh` on the bennu nodes and `monitor` (not Windows); log `/var/log/burger-miniccc.log` |
 | SCORCH output | `/phenix/images/ebwes-<round>/files/scorch/run-N/`, copied to `work/rounds/<round>/results/` |
 
 ## Adding a round or a PR
@@ -157,6 +163,25 @@ and/or `pybennu`, and `bennu.nodes` the VMs that get it. `${VAR}` and
 fails and names the files when a PR conflicts with the ones before it.
 
 ## Limitations
+
+- burger works around three image/upstream defects; each deserves an upstream report:
+  - `bennu.qc2` ships `miniccc.service` without the binary and never loads
+    `virtio_console`, so its VMs never register with cc. `up` injects the
+    minimega container's own `miniccc`.
+  - phenix-apps `scorch/cc/cc.py` crashes (`'NoneType' object has no attribute
+    'encode'`) when a command with a validator prints nothing; every health
+    command with a validator prints something. Upstream fix:
+    `(results["stdout"] or "").encode()`.
+  - The vrouter app reports success when the minirouter CLI cannot reach its
+    control socket, leaving router interfaces down. Once the VMs run, `up`
+    re-sends each router's interface addresses over cc (busybox-safe `ip addr
+    add`, UUIDs from minimega's `vm info`).
+- `./burger bennu-check` does not work behind a TLS-intercepting proxy: bennu's
+  `run.sh` builds its own unpatched Docker context. Run it on an unproxied host
+  until sceptre-bennu's `docker/test/Dockerfile` can take site CAs; until then
+  the #56/#57 test-suite coverage is outstanding on proxied hosts.
+- SCORCH templating eats `${...}` in cc commands and validators; keep it out of
+  any `cc` component, including the ones in `rounds/*.yaml`.
 
 - Written against phēnix and minimega source; the first live run is its real test.
 - `--linux-only` drops SCADA, OPC, HMI and historian, so nothing polls the RTUs
