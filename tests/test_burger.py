@@ -4,6 +4,7 @@
 """
 
 import importlib.machinery
+import copy
 import importlib.util
 import json
 import os
@@ -57,6 +58,22 @@ def test_render_every_round(name, linux_only):
     if rnd.get("mgmt_vlan"):
         vlans = {i["vlan"] for n in topo["spec"]["nodes"] for i in n["network"]["interfaces"]}
         assert "MGMT" not in vlans and rnd["mgmt_vlan"] in vlans
+
+
+def test_pollers_need_background_and_stop(monkeypatch):
+    docs = {"t": {"metadata": {}, "spec": {"nodes": []}}, "s": {"metadata": {}, "spec": {"apps": []}}}
+    monkeypatch.setattr(burger, "load_yaml", lambda p: copy.deepcopy(docs[p]))
+    hs = {"name": "hs", "type": "hoststats", "metadata": {}}
+    run = {"name": "r", "start": ["hs"], "stop": ["hs"]}
+    rnd = {"name": "x", "exp": "ebwes-x", "base": {"topology": "t", "scenario": "s"}, "unset": [],
+           "scorch": {"components": [hs], "runs": [run]}}
+    with pytest.raises(SystemExit, match="background: true"):
+        burger.render(rnd, {"bennu": None}, None, False, "/s")
+    hs["background"] = True
+    burger.render(rnd, {"bennu": None}, None, False, "/s")
+    run["stop"] = []
+    with pytest.raises(SystemExit, match="list it in stop"):
+        burger.render(rnd, {"bennu": None}, None, False, "/s")
 
 
 def test_evaluate():
@@ -166,9 +183,10 @@ def test_scorch_settle_is_a_hard_cap(monkeypatch):
     monkeypatch.setattr(burger, "collect", lambda r, i, since="": {})  # never healthy
 
     burger.cmd_scorch(burger.argparse.Namespace(round="x", run=None, settle=1000))
-    # attempts at 0, 360, 720 would end at 1020 > 1000: only two fit
-    assert attempts == [0, 360]
-    assert clock["now"] <= 1000
+    # the clock starts when the first attempt ends (300): deadline 1300; a
+    # fourth attempt at 1080 would end at 1380, so three fit
+    assert attempts == [0, 360, 720]
+    assert clock["now"] <= 1300
 
     attempts.clear()
     clock["now"] = 0.0

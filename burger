@@ -46,6 +46,9 @@ REPOS = {
 }
 BENNU_NODES = ("rtu-1", "rtu-2", "simulink-provider")
 RTUS = ("rtu-1", "rtu-2")
+# Components whose start polls until phēnix stops it.
+# ponytail: hand-kept list; add a type here when its PR says "background".
+POLLERS = {"hoststats"}
 MAX_EXP_NAME = 15  # phēnix bridge-name limit (api/experiment/experiment.go)
 GIT_ID = ["-c", "user.name=burger", "-c", "user.email=burger@localhost"]
 
@@ -592,6 +595,11 @@ def render(rnd, man, waterway_dir, linux_only, stage_dir):
             if missing:
                 sys.exit(f"burger: round '{rnd['name']}' run '{r.get('name')}' {stage} names "
                          f"unknown components {missing}")
+        for c in components:
+            if c.get("type") in POLLERS and c["name"] in r.get("start", []) and \
+                    not (c.get("background") and c["name"] in r.get("stop", [])):
+                sys.exit(f"burger: round '{rnd['name']}' run '{r.get('name')}': {c['name']} polls until "
+                         "stopped; give it `background: true` and list it in stop, or the run hangs")
     # The round's pipeline replaces any the base scenario already has.
     scen["spec"]["apps"] = [a for a in scen["spec"]["apps"] if a["name"] != "scorch"]
     scen["spec"]["apps"] += copy.deepcopy(rnd.get("apps_extra", []))
@@ -752,9 +760,10 @@ def cmd_scorch(args):
         # Health waits on sceptre startup (field devices sleep 60 s, Windows
         # boots slowly), so retry it; every other run gets one shot.
         health = runs[i].get("name") == "health"
-        deadline = time.time() + (args.settle if health else 0)
+        deadline = None  # set when the first attempt ends: VM boot time is not billed to --settle
         if health:
-            say(f"run {i} (health): retrying until healthy, for at most {args.settle} s (--settle)")
+            say(f"run {i} (health): retrying until healthy, for at most {args.settle} s "
+                "after the first attempt (--settle)")
         busy = 0
         while True:
             since = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -774,6 +783,8 @@ def cmd_scorch(args):
             failed = [r for r in evaluate(runs[i], results) if r[3] == "FAIL"]
             if not failed:
                 break
+            if deadline is None:
+                deadline = time.time() + (args.settle if health else 0)
             # Hard cap: retry only if another attempt like this one ends before the deadline.
             if time.time() + 60 + (time.time() - began) > deadline:
                 if health:
@@ -974,11 +985,11 @@ def main():
         sp.add_argument("--linux-only", action="store_true", help="drop the Windows nodes")
         sp.add_argument("--timeout", type=int, default=900, help="seconds to wait for VMs")
         if name == "round":
-            sp.add_argument("--settle", type=int, default=1800, help="cap on seconds spent retrying the health run")
+            sp.add_argument("--settle", type=int, default=900, help="cap on seconds spent retrying the health run")
             sp.add_argument("--keep", action="store_true", help="leave the experiment running")
     sp = add("scorch", cmd_scorch, "run the round's SCORCH runs (all by default)")
     sp.add_argument("--run", type=int)
-    sp.add_argument("--settle", type=int, default=1800, help="cap on seconds spent retrying the health run")
+    sp.add_argument("--settle", type=int, default=900, help="cap on seconds spent retrying the health run")
     add("verify", cmd_verify, "check install, experiment, models, and SCORCH results")
     add("down", cmd_down, "delete the round's experiment and configs")
 

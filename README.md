@@ -48,8 +48,10 @@ boot, so re-run `./burger install <round>` after any phenix container restart
 (`verify` flags the mismatch).
 
 `scorch` (and `round`) retries the health run until it passes or `--settle`
-seconds (default 1800) run out. The cap is hard: a retry starts only if an
-attempt as long as the last one would end in time.
+seconds (default 900) run out, counted from the end of the first attempt so VM
+boot time is not billed to it. The cap is hard: a retry starts only if an
+attempt as long as the last one would end in time. Other runs get one attempt,
+so no `--settle` value rescues a hung component.
 
 `round` stops at the first failing step and leaves the experiment up for
 debugging; after `verify` it deletes the experiment unless you pass `--keep`.
@@ -163,7 +165,10 @@ characters): `apps.prs` merged in order, optional `bennu.pr`, and optional
 `scorch.components` and `scorch.runs` appended after the health run. A
 `base: {topology, scenario}` replaces waterway, `bennu.install` picks `deb`
 and/or `pybennu`, and `bennu.nodes` the VMs that get it. `${VAR}` and
-`${VAR:-default}` read the environment. `sync`
+`${VAR:-default}` read the environment. A component whose `start` polls until
+phēnix stops it (hoststats) needs `background: true` and an entry in the run's
+`stop`, or `start` never returns and the run hangs; `render` refuses a round
+that breaks this. `sync`
 fails and names the files when a PR conflicts with the ones before it.
 
 ## Limitations

@@ -32,8 +32,11 @@ scorch:
     - name: pipe
       type: pipe
       metadata: {pipe: burger, data: hello-from-burger}
+    # Polls until stopped: start never returns unless backgrounded, and only a
+    # stop entry ends it. vmstats returns from start at once, so it needs neither.
     - name: hoststats
       type: hoststats
+      background: true
       metadata: {pollPeriod: 5}
     - name: vmstats
       type: vmstats
@@ -51,7 +54,7 @@ scorch:
       configure: [disrupt]
       # disrupt (baseline) holds start for run_duration: captures run during it.
       start: [pcap, tcpdump, mm-capture, pipe, hoststats, vmstats, qos, disrupt]
-      stop: [pcap, tcpdump, mm-capture, vmstats, qos]
+      stop: [pcap, tcpdump, mm-capture, hoststats, vmstats, qos]
       cleanup: [disrupt, pipe]
     # Runs named extras* are advisory: their failures do not fail verify.
     - name: extras-erspan
