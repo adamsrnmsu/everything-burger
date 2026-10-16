@@ -104,3 +104,20 @@ def test_advisory_downgrade(settings, tmp_path):
     assert [r.verdict for r in run_checks(ctx.item, ctx)] == ["advisory-FAIL"]
     ctx = dataclasses.replace(ctx, item=dataclasses.replace(ctx.item, advisory=False))
     assert [r.verdict for r in run_checks(ctx.item, ctx)] == ["FAIL"]
+
+
+def test_check_exception_is_fail_row(settings, tmp_path):
+    item = dataclasses.replace(
+        load_item("pcap", settings),
+        verify=[
+            {"files": {"glob": "["}},
+            {"csv": {"glob": "*.csv", "columns": []}},
+            {"files": {"glob": "*"}},
+        ],
+    )
+    ctx, loop = make_ctx(settings, tmp_path, item=item)
+    (loop / "a.csv").write_bytes(b"\xff\xfe\x00bad")
+    rows = run_checks(item, ctx)
+    assert len(rows) == 3
+    assert [r.verdict for r in rows[:2]] == ["FAIL", "FAIL"]
+    assert any("Error" in r.reason for r in rows[:2])

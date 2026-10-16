@@ -24,7 +24,10 @@ def run_checks(item: Item, ctx: CheckContext) -> list[Row]:
             continue
         if name not in CHECKS:
             raise BurgerError(f"{item.path}: unknown check '{name}' (known: {', '.join(CHECKS)})")
-        r = CHECKS[name](spec, ctx)
+        try:
+            r = CHECKS[name](spec, ctx)
+        except Exception as e:  # a broken check is one FAIL row; the rest still run
+            r = Row(item.name, name, "FAIL", f"check raised {type(e).__name__}: {e}", [])
         if item.advisory and r.verdict == "FAIL":
             r.verdict = "advisory-FAIL"
         rows.append(r)

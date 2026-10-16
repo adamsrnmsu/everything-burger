@@ -112,7 +112,7 @@ def test_golden_scorch_components(settings, topologies, name, linux_only):
         return Counter(
             (c["type"], json.dumps(c["metadata"], sort_keys=True))
             for c in scorch_of(doc)["components"]
-            if c["name"] != "health"
+            if not c["name"].startswith("health") and c["name"] != "siren-log"
         )
 
     want = shape(golden(name, linux_only, "scenario"))
@@ -154,10 +154,10 @@ def test_pybennu_render(settings, topologies):
     siren = next(v for v in health["metadata"]["vms"] if v["hostname"] == "siren")
     assert not any("pybennu-siren.log" in c["args"] for c in siren["start"])
     comps = scorch_of(scen)["components"]
-    extra = next(c for c in comps if c["name"] == "siren-checks")
+    extra = next(c for c in comps if c["name"] == "health-siren")
     assert "pybennu-siren.log" in json.dumps(extra["metadata"])
     run = next(r for r in scorch_of(scen)["runs"] if r["name"] == "extras-siren")
-    assert run["start"] == ["siren-checks"]
+    assert run["start"] == ["health-siren"]
 
 
 def test_site_route_render(settings, monkeypatch, tmp_path):

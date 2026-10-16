@@ -102,3 +102,13 @@ def test_item_locations():
         {"name": "m", "start": ["a", "b"], "stop": ["a"]},
     ]
     assert item_locations(runs)["a"] == (1, "a")
+
+
+def test_advisory_vm_checks_get_own_health_extras(settings):
+    comps, runs = compose(res(settings, "pybennu"), MAN)
+    hard = next(c for c in comps if c["name"] == "health")
+    assert "pybennu-siren.log" not in json.dumps(hard)
+    extra = next(c for c in comps if c["name"] == "health-siren")
+    assert "pybennu-siren.log" in json.dumps(extra)
+    run = next(r for r in runs if r["name"] == "extras-siren")
+    assert run["start"] == ["health-siren"]

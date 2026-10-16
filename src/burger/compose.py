@@ -39,19 +39,21 @@ def _version_check(deb: str) -> dict:
     )
 
 
-def health_component(res: Resolved, man: dict, only: Item | None = None) -> dict | None:
-    """A SCORCH cc component: the bennu build's install and version checks, then item vm checks.
+def health_checks(
+    res: Resolved, man: dict, only: Item | None = None
+) -> list[tuple[str, str, dict]]:
+    """(item, host, cc check) in the order a health component runs them.
 
-    Advisory bennu items are left out (they get their own `only=` component in an extras run).
+    Burger's own install and version checks come first, under the item name 'bennu'.
+    Advisory items are left out (they get their own `only=` component in an extras run).
     """
-    checks: dict[str, list[dict]] = {}
+    out: list[tuple[str, str, dict]] = []
     install = [] if only else _install_checks(man)
     if install:
         deb = man["bennu"].get("deb_version")
         for host in res.route.bennu_nodes:
-            checks[host] = [*install, *([_version_check(deb)] if deb else [])]
-    items = [only] if only else [i for i in res.items if not (i.kind == "bennu" and i.advisory)]
-    for item in items:
+            out += [("bennu", host, c) for c in [*install, *([_version_check(deb)] if deb else [])]]
+    for item in [only] if only else [i for i in res.items if not i.advisory]:
         for v in item.verify:
             vm = v.get("vm") if isinstance(v, dict) else None
             if not vm:
@@ -60,15 +62,21 @@ def health_component(res: Resolved, man: dict, only: Item | None = None) -> dict
             if vm.get("expect"):
                 run += f" | grep -Eq {shlex.quote(str(vm['expect']))}"
             hosts = vm["host"] if isinstance(vm["host"], list) else [vm["host"]]
-            for host in hosts:
-                checks.setdefault(host, []).append(_check(run))
+            out += [(item.name, host, _check(run)) for host in hosts]
+    return out
+
+
+def health_component(res: Resolved, man: dict, only: Item | None = None) -> dict | None:
+    """A SCORCH cc component running health_checks, grouped per host."""
+    checks: dict[str, list[dict]] = {}
+    for _, host, c in health_checks(res, man, only):
+        checks.setdefault(host, []).append(c)
     if not checks:
         return None
-    vms = [{"hostname": h, "start": c} for h, c in checks.items()]
     return {
-        "name": f"{only.name}-checks" if only else "health",
+        "name": f"health-{only.name}" if only else "health",
         "type": "cc",
-        "metadata": {"vms": vms},
+        "metadata": {"vms": [{"hostname": h, "start": c} for h, c in checks.items()]},
     }
 
 
@@ -98,9 +106,14 @@ def compose(res: Resolved, man: dict) -> tuple[list[dict], list[dict]]:
         runs = [main] if len(main) > 1 else []
         runs += [_run(f"extras-{i.name}", [i]) for i in scorch if i.advisory]
         for i in res.items:
-            extra = health_component(res, man, only=i) if i.kind == "bennu" and i.advisory else None
-            if extra:
-                components.append(extra)
+            extra = health_component(res, man, only=i) if i.advisory else None
+            if not extra:
+                continue
+            components.append(extra)
+            run = next((r for r in runs if r["name"] == f"extras-{i.name}"), None)
+            if run:
+                run["start"] = [*run.get("start", []), extra["name"]]
+            else:
                 runs.append({"name": f"extras-{i.name}", "start": [extra["name"]]})
     health = health_component(res, man)
     if health:
