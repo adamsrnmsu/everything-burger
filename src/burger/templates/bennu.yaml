@@ -1,0 +1,15 @@
+# A bennu behavior, checked inside the VMs by the health component. Edit every field.
+# Check it offline with: burger check <switchboard>
+name: __NAME__
+kind: bennu
+type: __NAME__
+about: >
+  Instructions for the next person: which bennu process this is, which VM runs
+  it and what a pass means.
+routes: []              # waterway, soap, site; empty = validate-only (never run)
+advisory: false         # true: failures are reported but do not fail the board
+config: {}
+requires: {}            # env: [], cc_nodes: [], keep_nodes: []
+verify:
+  - status: ok
+  # - vm: {host: "{route.provider}", run: "pgrep -f __NAME__"}   # exit 0 = pass; must print something

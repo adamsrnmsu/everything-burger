@@ -1,0 +1,15 @@
+# A phenix scenario app (such as mirror or mgmt_tap). Edit every field.
+# Check it offline with: burger check <switchboard>
+name: __NAME__
+kind: app
+type: __NAME__          # the app name in the scenario
+about: >
+  Instructions for the next person: what the app does to the experiment and
+  how its verify checks prove it worked.
+routes: []              # waterway, soap, site; empty = validate-only (never run)
+config: {}              # scenario app metadata
+hosts: []               # [{hostname: monitor, metadata: {interface: mirror}}]
+requires: {}            # monitor: true, mgmt_vlan: "mgmt", env: [], apps_prs: []
+verify:
+  - status: ok
+  # - vm: {host: monitor, run: "timeout 30 tcpdump -nn -i any -c 3 'tcp port 502'"}

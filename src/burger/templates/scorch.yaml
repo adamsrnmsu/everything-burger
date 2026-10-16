@@ -1,0 +1,23 @@
+# A SCORCH component. Copy of burger's template: edit every field, delete what you do not need.
+# Check it offline with: burger check <switchboard>
+name: __NAME__          # unique; the file name without .yaml
+kind: scorch            # scorch | app | bennu
+type: __NAME__          # the SCORCH component type phenix-apps knows
+about: >
+  Instructions for the next person: what this component does, what it leaves
+  in the run's output folder, and what a pass means.
+routes: []              # waterway, soap, site; empty = validate-only (never run)
+stages: [start, stop]   # configure | start | stop | cleanup
+holds: false            # true: blocks `start` for its duration, ordered last
+background: false       # true: polls until stopped; needs a stop stage and a POLLERS type
+advisory: false         # true: runs in an extras-* run whose failures do not fail the board
+config:                 # SCORCH metadata exactly as phenix-apps expects
+  vms: [{hostname: "{route.rtus[0]}", interface: 0}]   # {route.<key>} comes from routes/*.yaml
+requires: {}            # debs: {packages: [], nodes: []}, apps: [], apps_prs: [], env: [], monitor: true
+verify:
+  - status: ok          # no error return in the component's status files
+  # - files: {glob: "*.pcap", min: 1}
+  # - log: {path: "*.log", lacks: "ERROR"}
+# waterway: {}          # per-route overrides of config/verify
+# soap: {}
+# site: {}
