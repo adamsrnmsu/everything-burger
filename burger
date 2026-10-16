@@ -509,9 +509,10 @@ def bennu_startup(man):
     return "\n".join(lines) + "\n"
 
 
-# bennu.qc2 ships miniccc.service without the binary and never loads
-# virtio_console, so its VMs never register with cc. Install the minimega
-# container's own miniccc (same ron protocol) before sceptre's startup.
+# On the rig tested, bennu VMs had no miniccc binary and no virtio_console
+# loaded, so they never registered with cc (likely an image built without
+# `phenix image inject-miniexe`). Install the minimega container's own miniccc
+# (same ron protocol) before sceptre's startup, whatever the image carries.
 MINICCC_STARTUP = """#!/bin/bash
 # install miniccc (matching the host's minimega) and start it
 exec >>/var/log/burger-miniccc.log 2>&1

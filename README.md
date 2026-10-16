@@ -108,7 +108,9 @@ re-run `sync` and the rest of the round.
    `ERROR` lines in a passing stage are reported as `WARN`. Runs named
    `extras*` are advisory.
    A background component (`background: true`) may leave no `start` file:
-   phēnix kills it at stop, so its `stop` stage carries the verdict.
+   phēnix kills it at stop
+   ([sceptre-phenix#457](https://github.com/sandialabs/sceptre-phenix/issues/457)),
+   so its `stop` stage carries the verdict.
 
 The report names the exact SHAs of `main`, each PR, bennu and the topologies
 repo, from `work/rounds/<round>/manifest.json`.
@@ -175,18 +177,21 @@ fails and names the files when a PR conflicts with the ones before it.
 
 ## Limitations
 
-- burger works around three image/upstream defects; each deserves an upstream report:
-  - `bennu.qc2` ships `miniccc.service` without the binary and never loads
-    `virtio_console`, so its VMs never register with cc. `up` injects the
-    minimega container's own `miniccc`.
+- burger works around these rig, image and upstream problems:
+  - On the rig tested, bennu VMs never registered with cc: no `miniccc` binary
+    at `/opt/minimega/bin/miniccc` and no `virtio_console` loaded. That is
+    likely an image built without `phenix image inject-miniexe`, not a defect
+    in `bennu.qc2` itself. `up` injects the minimega container's own `miniccc`
+    either way, so the agent always matches the server.
   - phenix-apps `scorch/cc/cc.py` crashes (`'NoneType' object has no attribute
     'encode'`) when a command with a validator prints nothing; every health
-    command with a validator prints something. Upstream fix:
-    `(results["stdout"] or "").encode()`.
+    command with a validator prints something. Reported as
+    [sceptre-phenix-apps#186](https://github.com/sandialabs/sceptre-phenix-apps/issues/186).
   - The vrouter app reports success when the minirouter CLI cannot reach its
     control socket, leaving router interfaces down. Once the VMs run, `up`
     re-sends each router's interface addresses over cc (busybox-safe `ip addr
-    add`, UUIDs from minimega's `vm info`).
+    add`, UUIDs from minimega's `vm info`). Reported as
+    [sceptre-phenix-images#42](https://github.com/sandialabs/sceptre-phenix-images/issues/42).
 - `./burger bennu-check` does not work behind a TLS-intercepting proxy: bennu's
   `run.sh` builds its own unpatched Docker context. Run it on an unproxied host
   until sceptre-bennu's `docker/test/Dockerfile` can take site CAs; until then
