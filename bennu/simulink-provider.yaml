@@ -1,0 +1,12 @@
+name: simulink-provider
+kind: bennu
+type: simulink-provider
+about: The Simulink provider and its solver run on the provider VM.
+routes: [waterway]
+verify:
+  - vm:
+      host: "{route.provider}"
+      run: "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'"
+  - vm:
+      host: "{route.provider}"
+      run: "pgrep -f '(^|/)simulinksolver( |$)'"

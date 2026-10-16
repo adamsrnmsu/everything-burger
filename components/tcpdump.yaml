@@ -1,0 +1,13 @@
+name: tcpdump
+kind: scorch
+type: tcpdump
+about: >
+  Runs tcpdump inside the second RTU on every interface, filtered to the ICS port.
+routes: [waterway, soap]
+stages: [start, stop]
+config:
+  vms: [{hostname: "{route.rtus[1]}", iface: any, filter: "tcp port {route.ics_port}"}]
+verify:
+  - status: ok
+  - files: {glob: "*.pcap", min: 1}  # TODO(live): confirm file names from one run
+  - pcap: {glob: "*.pcap", tcp_port: "{route.ics_port}", min_packets: 10}  # TODO(live): confirm file names from one run

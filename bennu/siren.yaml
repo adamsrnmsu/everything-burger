@@ -1,0 +1,12 @@
+name: siren
+kind: bennu
+type: siren
+about: >
+  Advisory: without the LabJack, pybennu-siren fails after startup, so its
+  log file proves only #59's file sink, not siren.
+routes: [soap]
+advisory: true
+verify:
+  - vm:
+      host: siren
+      run: "test -s /var/log/bennu/pybennu-siren.log"

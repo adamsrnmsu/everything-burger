@@ -1,0 +1,10 @@
+name: qos
+kind: scorch
+type: qos
+about: Adds 20 ms of delay to the second RTU's first interface.
+routes: [waterway, soap]
+stages: [start, stop]
+config:
+  vms: [{hostname: "{route.rtus[1]}", interface: 0, delay: 20ms}]
+verify:
+  - status: ok

@@ -1,0 +1,19 @@
+name: disruption-dos
+kind: scorch
+type: disruption
+about: >
+  DoS disruption model from models.yaml. No route has a Kali attacker, so this
+  only goes through phenix-scorch-validate.
+routes: []
+stages: [configure, start, cleanup]
+holds: true
+config:
+  current_disruption: dos
+  run_duration: 300
+  dos:
+    attack_duration: 60
+    start_delay: 10
+    attacker: {hostname: kali, script_path: /root/dos.py, results_path: /root/results}
+    targets: [{hostname: rtu-1}]
+verify:
+  - status: ok

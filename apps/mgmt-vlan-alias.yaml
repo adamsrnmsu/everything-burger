@@ -1,0 +1,8 @@
+name: mgmt-vlan-alias
+kind: app
+type: mgmt-vlan-alias
+about: >
+  Renames the MGMT VLAN to lowercase mgmt in the scenario; #158 makes the
+  sceptre app match it case-insensitively.
+routes: [waterway]
+requires: {mgmt_vlan: mgmt, apps_prs: [158]}

@@ -1,0 +1,12 @@
+name: modbus-polled
+kind: bennu
+type: modbus-polled
+about: >
+  Something (SCADA or OPC) holds an established Modbus connection to each RTU.
+  Needs the Windows nodes, so it is skipped under --linux-only.
+routes: [waterway]
+requires: {windows: true}
+verify:
+  - vm:
+      host: "{route.rtus}"
+      run: "ss -Htn state established '( sport = :502 )' | grep -q ."

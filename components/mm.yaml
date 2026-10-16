@@ -1,0 +1,11 @@
+name: mm
+kind: scorch
+type: mm
+about: Starts and stops a minimega capture on the phenix bridge.
+routes: [waterway, soap, site]
+stages: [start, stop]
+config:
+  start: [{type: start_capture, capture: {bridge: phenix, filename: burger-bridge.pcap}}]
+  stop: [{type: stop_capture, capture: {bridge: phenix}}]
+verify:
+  - status: ok

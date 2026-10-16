@@ -1,0 +1,12 @@
+name: erspan
+kind: scorch
+type: erspan
+about: >
+  Host-side OVS change on bridge phenix with placeholder TEST-NET addresses.
+  Advisory: a failure here does not fail the switchboard.
+routes: [waterway, soap, site]
+stages: [configure, cleanup]
+advisory: true
+config: {local_bridge: phenix, local_ip: 192.0.2.1, remote_ip: 192.0.2.2}
+verify:
+  - status: ok

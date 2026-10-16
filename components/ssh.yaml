@@ -1,0 +1,20 @@
+name: ssh
+kind: scorch
+type: ssh
+about: >
+  ssh into a waterway RTU over mgmt_tap, which gives the phenix host an
+  address on the MGMT network. The password lands in the rendered scenario;
+  keep it a lab-only value.
+routes: [waterway]
+stages: [start]
+config:
+  ip: 172.16.1.101
+  user: root
+  password: "${BURGER_VM_PASSWORD}"
+  cmds: [uptime, "dpkg-query -W bennu"]
+requires:
+  apps: [apps/mgmt_tap]
+  env: [BURGER_VM_PASSWORD]
+  apps_prs: [170]
+verify:
+  - status: ok

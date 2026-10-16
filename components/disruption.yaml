@@ -1,0 +1,12 @@
+name: disruption
+kind: scorch
+type: disruption
+about: >
+  Holds the start stage open for run_duration seconds so captures and polls
+  have traffic to see. Baseline means nothing is attacked.
+routes: [waterway, soap, site]
+stages: [configure, start, cleanup]
+holds: true
+config: {current_disruption: baseline, run_duration: 30}
+verify:
+  - status: ok

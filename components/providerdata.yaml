@@ -1,0 +1,17 @@
+name: providerdata
+kind: scorch
+type: providerdata
+about: Exports the route provider's data logs, ahead of rtds stop stopping the provider.
+routes: [soap, site]
+stages: [configure, start, stop]
+config: {hostname: "{route.provider}", export_logs: true}
+requires:
+  apps_prs: [177]
+verify:
+  - status: ok
+site:
+  config:
+    elasticsearch:
+      verify: ${BURGER_RTDS_ES_VERIFY:-false}
+      server: ${BURGER_RTDS_ES_SERVER:-http://127.0.0.1:9200}
+      index: ${BURGER_RTDS_ES_INDEX:-rtds-clean}

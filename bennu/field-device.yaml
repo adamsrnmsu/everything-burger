@@ -1,0 +1,36 @@
+name: field-device
+kind: bennu
+type: field-device
+about: >
+  The C++ field device on each RTU serves Modbus and gets its values from the
+  provider.
+routes: [waterway, soap]
+verify:
+  - vm:
+      host: "{route.rtus}"
+      run: "ss -Hltn '( sport = :502 )' | grep -q ."
+  - vm:
+      host: "{route.rtus}"
+      # Anchored: bennu-watcherd's argv contains bennu-field-deviced.firmware.
+      run: "pgrep -f '(^|/)bennu-field-deviced?( |$)'"
+  - vm:
+      host: "{route.rtus}"
+      run: >-
+        ep=$(sed -n 's#.*<endpoint>\(tcp://[^<]*\)</endpoint>.*#\1#p' /etc/sceptre/config.xml | tail -1);
+        echo "# provider endpoint: $ep";
+        [ -n "$ep" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; };
+        timeout 30 bennu-probe --endpoint "$ep" --command query
+      expect: lock
+soap:
+  verify:
+    - vm:
+        host: "{route.rtus}"
+        run: "pgrep -f '(^|/)bennu-field-deviced?( |$)'"
+    - vm:
+        host: "{route.rtus}"
+        run: >-
+          ep=$(sed -n 's#.*<endpoint>\(tcp://[^<]*\)</endpoint>.*#\1#p' /etc/sceptre/config.xml | tail -1);
+          echo "# provider endpoint: $ep";
+          [ -n "$ep" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; };
+          timeout 30 bennu-probe --endpoint "$ep" --command query
+        expect: "bus-"

@@ -1,0 +1,22 @@
+name: iperf
+kind: scorch
+type: iperf
+about: >
+  iperf between two RTUs on the ICS network. bennu.qc2 has no iperf3, so the
+  jammy packages are installed into both VMs at boot.
+routes: [waterway]
+stages: [configure, start, stop, cleanup]
+config:
+  run_duration: 20
+  iperf_paths: {linux: /usr/bin/iperf3}
+  servers:
+    - hostname: "{route.rtus[0]}"
+      port_range_start: 5201
+      clients: [{hostname: "{route.rtus[1]}"}]
+requires:
+  debs:
+    packages: [iperf3, libiperf0, libsctp1]
+    nodes: "{route.rtus}"
+  apps_prs: [165]
+verify:
+  - status: ok

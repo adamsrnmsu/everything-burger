@@ -1,0 +1,15 @@
+name: mirror
+kind: app
+type: mirror
+about: >
+  Mirror app feeding a monitor VM; the monitor must see Modbus, delivered
+  GRE-encapsulated even on a single host.
+routes: [waterway]
+hosts:
+  - hostname: monitor
+    metadata: {interface: mirror, vlans: [SCADA, ICS]}
+requires: {monitor: true}
+verify:
+  - vm:
+      host: monitor
+      run: "timeout 30 tcpdump -nn -i any -c 3 'tcp port 502 or ip proto 47'"

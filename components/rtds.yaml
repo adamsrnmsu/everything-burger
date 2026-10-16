@@ -1,0 +1,27 @@
+name: rtds
+kind: scorch
+type: rtds
+about: >
+  Runs the RTDS lifecycle against the route's provider. On soap, RSCAD and
+  Elasticsearch are off and export_config is off, because a PyPower provider
+  has no rtds_config.yaml. On site, values come from BURGER_RTDS_* variables.
+routes: [soap, site]
+stages: [configure, start, stop, cleanup]
+config: {hostname: "{route.provider}"}
+requires:
+  apps_prs: [166]
+verify:
+  - status: ok
+soap:
+  config: {export_config: false, export_logs: true}
+site:
+  config:
+    export_logs: true
+    export_config: true
+    rscad_automation:
+      enabled: ${BURGER_RTDS_RSCAD:-false}
+      url: ${BURGER_RTDS_RSCAD_URL:-http://127.0.0.1:8000}
+    elasticsearch:
+      verify: ${BURGER_RTDS_ES_VERIFY:-false}
+      server: ${BURGER_RTDS_ES_SERVER:-http://127.0.0.1:9200}
+      index: ${BURGER_RTDS_ES_INDEX:-rtds-clean}

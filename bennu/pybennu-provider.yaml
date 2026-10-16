@@ -1,0 +1,19 @@
+name: pybennu-provider
+kind: bennu
+type: pybennu-provider
+about: >
+  pybennu-power-solver (PyPower) runs as the provider and loguru writes its
+  log without errors. Anchored pgrep patterns cannot match the cc shell's own
+  command line.
+routes: [soap, site]
+verify:
+  - vm:
+      host: "{route.provider}"
+      run: "pgrep -f '(^|/)pybennu-power-solver( |$)'"
+  - vm:
+      host: "{route.provider}"
+      # #59: sceptre-start.sh runs start -d, so loguru writes DEBUG here.
+      run: "grep -Eq ' \\| (INFO|DEBUG) +\\| ' /var/log/bennu/pybennu-power-solver.log"
+  - vm:
+      host: "{route.provider}"
+      run: "! grep -E ' \\| (ERROR|CRITICAL) +\\| ' /var/log/bennu/pybennu-power-solver.log"

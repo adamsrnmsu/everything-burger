@@ -1,0 +1,11 @@
+name: vmstats
+kind: scorch
+type: vmstats
+about: Polls VM statistics once a second. Start returns at once.
+routes: [waterway, soap]
+stages: [start, stop]
+config:
+  vms: ["{route.rtus[0]}", "{route.rtus[1]}", "{route.provider}"]
+  pollPeriod: 1
+verify:
+  - status: ok

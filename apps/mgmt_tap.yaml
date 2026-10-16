@@ -1,0 +1,6 @@
+name: mgmt_tap
+kind: app
+type: mgmt_tap
+about: Gives the phenix host an address on the MGMT network.
+routes: [waterway]
+config: {subnet: 172.16.0.0/16, vlan: MGMT}
