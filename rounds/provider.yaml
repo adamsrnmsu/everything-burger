@@ -1,0 +1,44 @@
+# #177 providerdata, #166 rtds and #169 collector (with the #164 disruption it
+# reads), live on soap: its power-provider is a pybennu PyPower provider
+# (pybennu-power-solver with /etc/sceptre/config.ini), the kind providerdata
+# and rtds drive. waterway's provider is the C++ Simulink one.
+#
+# rtds runs its lifecycle only: RSCAD and Elasticsearch are off, and
+# export_config is off because a PyPower provider has no rtds_config.yaml. Its
+# RTDS data checks need the site rig (the rtds round).
+#
+# All of soap is kept, so the rig needs ignition.qc2 and ubuntu-soaptools.qc2
+# besides bennu.qc2. soap's own mirror app stays in the scenario.
+description: "#158 #164 #166 #169 #177 on soap's PyPower provider"
+topology: soap
+apps:
+  prs: [158, 164, 166, 169, 177]
+# soap's bennu.qc2 VMs, which get burger's miniccc
+cc_nodes: [power-provider, rtu-1, rtu-2, rtu-3, rtu-4, siren]
+validate: true
+health:
+  - hostname: power-provider
+    start: ["pgrep -f pybennu-power-solver"]
+scorch:
+  components:
+    - name: baseline
+      type: disruption
+      metadata: {current_disruption: baseline, permutation: 0, run_duration: 60}
+    - name: rtds
+      type: rtds
+      metadata: {hostname: power-provider, export_config: false, export_logs: true}
+    - name: providerdata
+      type: providerdata
+      metadata: {hostname: power-provider, export_logs: true}
+    - name: collector
+      type: collector
+      metadata: {}
+  runs:
+    - name: provider
+      configure: [rtds, providerdata]
+      # baseline holds start for run_duration while the provider runs.
+      start: [rtds, providerdata, baseline]
+      # rtds stop stops the provider, so providerdata exports first; the
+      # collector reads both folders last.
+      stop: [providerdata, rtds, collector]
+      cleanup: [rtds]

@@ -17,6 +17,9 @@ a PR set.
 | `metadata` | #158, #164–#177 | #58 | disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos (+ advisory erspan); all 14 models validated offline; lowercase mgmt VLAN for #158 |
 | `harden` | #155, #158 | #58 | cc validators, pcap, tcpdump, mm, mgmt_tap, mirror app into a `monitor` VM |
 | `rtds` | #158, #164, #166, #169, #177 | #58 pybennu wheel | rtds, providerdata, collector and a baseline disruption on **your RTDS rig's** topology, not waterway |
+| `provider` | #158, #164, #166, #169, #177 | stock `bennu.qc2` | providerdata, rtds (lifecycle only) and collector with a baseline disruption, on **soap**'s pybennu PyPower provider |
+| `iperf` | #165 | stock `bennu.qc2` | iperf from rtu-2 to rtu-1 on waterway; burger installs iperf3 into both |
+| `ssh` | #170 | stock `bennu.qc2` | ssh to rtu-1 over `mgmt_tap`; needs `BURGER_VM_PASSWORD` |
 
 Every round also gets a `health` run: a SCORCH `cc` component whose validators
 check, inside the VMs, that `bennu-field-deviced`, the Simulink provider and
@@ -25,7 +28,8 @@ bennu is the version the round built, and (with the Windows nodes) that
 something is polling Modbus on each RTU. In `harden` it also checks that
 the monitor VM sees mirrored Modbus traffic (the mirror app delivers it
 GRE-encapsulated, to the monitor's predefined `mirror` interface). In `rtds` it only checks that the
-PR build of pybennu installed on the provider.
+PR build of pybennu installed on the provider. In `provider` the round's own
+`health` list replaces it: `pybennu-power-solver` is running on the provider.
 
 ## Run book
 
@@ -123,10 +127,11 @@ repo, from `work/rounds/<round>/manifest.json`.
 | #155 | `harden`: cc validators, pcap, tcpdump, mm, mgmt_tap, mirror | kafka (no broker); art, ssh |
 | #158 | `metadata` and `harden`; `metadata` renames the mgmt VLAN to `mgmt` | |
 | #164 disruption | `metadata` (baseline); dos model offline | dos and physical live (no Kali, no OPC script) |
-| #165 iperf | offline model only | live: `iperf3` is not in `bennu.qc2`; Windows client |
-| #166 rtds, #177 providerdata, #169 collector | `rtds` round on your rig; models offline in `metadata` | |
+| #165 iperf | `iperf` round (burger installs iperf3); model offline in `metadata` | Windows client |
+| #166 rtds | `provider` round (lifecycle on a PyPower provider); `rtds` round on your rig; model offline in `metadata` | RTDS data checks off waterway/soap |
+| #177 providerdata, #169 collector | `provider` round; `rtds` round on your rig; models offline in `metadata` | |
 | #167 pcap, #168 tcpdump, #172 mm, #173 pipe, #174 hoststats, #175 vmstats, #176 qos | `metadata` live | pcap `create_merged_pcap`/`convertToJSON` live |
-| #170 ssh | offline model only | live: no host route to the VMs without mgmt_tap |
+| #170 ssh | `ssh` round over `mgmt_tap`; model offline in `metadata` | |
 | #171 erspan | `metadata` advisory run (local-only, TEST-NET peer) | a real receiver |
 | bennu #55 | every round but `baseline`: field devices and the Simulink provider run the PR build | |
 | bennu #56 | `rtds` round (the provider runs the PR pybennu); `./burger bennu-check bennu` | |
@@ -144,23 +149,24 @@ repo, from `work/rounds/<round>/manifest.json`.
 | `BURGER_APPS_REPO`, `BURGER_BENNU_REPO`, `BURGER_TOPOLOGIES_REPO` | `work/repos/*` | use an existing clone; burger only adds `refs/burger/*` and worktrees |
 | `BURGER_MINIMEGA_CONTAINER` | `minimega` | container burger copies `miniccc` from and sends router cc commands through; empty disables both |
 | `BURGER_PHENIX_DIR` | `/phenix` | phēnix's base directory (images, configs, SCORCH output) |
-| `BURGER_ASSETS` | `<phenix dir>/topologies/burger-waterway` | where the waterway copy goes |
 | `BURGER_RTDS_*` | see [the rtds round](#the-rtds-round) | site values for `rtds` |
+| `BURGER_VM_PASSWORD` | unset | root password of the `bennu.qc2` image, for the `ssh` round only. It ends up in the rendered `scenario.json`, so keep it a lab-only value |
 
-Fixed: upstream repos are `sandialabs/*`, PRs merge onto `main`, and waterway
-comes from the topologies repo's `main`.
+Fixed: upstream repos are `sandialabs/*`, PRs merge onto `main`, and the
+topologies (waterway, soap) come from the topologies repo's `main`.
 
 ### Where files go
 
 | What | Where |
 |---|---|
 | Clones | `work/repos/{apps,bennu,topologies}` (only `refs/burger/*` and worktrees are added) |
-| Merged trees, builds, results | `work/rounds/<round>/{apps,bennu,waterway,out,results}`, plus `manifest.json` and `report.md` |
-| waterway assets in phēnix | `$BURGER_ASSETS` (`/phenix/topologies/burger-waterway`); the scenario's `assetDir` and inject paths are rewritten to it, so your own `/phenix/topologies/waterway` is not touched. The `rtds` round copies nothing: its scenario's paths are used as they are |
+| Merged trees, builds, results | `work/rounds/<round>/{apps,bennu,<topology>,out,results}`, plus `manifest.json` and `report.md` |
+| Topology assets in phēnix | `<phenix dir>/topologies/burger-<topology>`; every `/phenix/topologies/<topology>` path in the topology and scenario is rewritten to it, so your own copy is not touched. The `rtds` round copies nothing: its scenario's paths are used as they are |
 | Rendered configs, bennu build | `/phenix/burger/<round>/` |
 | Apps install | pip into the phēnix container; `phenix-app-mirror` into `/usr/local/bin`; marker `/tmp/burger/installed.json` |
 | bennu in the VMs | `/root/burger-bennu.deb` or the pybennu wheel, installed by `/etc/phenix/startup/00-burger-bennu.sh` before phēnix's startup scripts and `sceptre-start.sh`; log `/var/log/burger-bennu.log` |
 | miniccc in the VMs | `/root/burger-miniccc`, installed and started by `/etc/phenix/startup/01-burger-miniccc.sh` on the bennu nodes and `monitor` (not Windows); log `/var/log/burger-miniccc.log` |
+| Packages in the VMs | a round's `debs`, downloaded for jammy at `build` into `out/debs/`, injected to `/root/burger-debs/` and installed by `/etc/phenix/startup/02-burger-debs.sh`; log `/var/log/burger-debs.log` |
 | SCORCH output | `/phenix/images/ebwes-<round>/files/scorch/run-N/`, copied to `work/rounds/<round>/results/` |
 
 ## Adding a round or a PR
@@ -170,13 +176,28 @@ characters): `apps.prs` merged in order, optional `bennu.pr`, and optional
 `scorch.components` and `scorch.runs` appended after the health run. A
 `base: {topology, scenario}` replaces waterway, `bennu.install` picks `deb`
 and/or `pybennu`, and `bennu.nodes` the VMs that get it. `${VAR}` and
-`${VAR:-default}` read the environment. A component whose `start` polls until
+`${VAR:-default}` read the environment. `topology` picks the topologies-repo
+directory (`waterway`, the default, or `soap`), `cc_nodes` the VMs that get
+burger's miniccc (default: `bennu.nodes`, then waterway's bennu VMs), `health`
+a list of `{hostname, start: [command, ...]}` replacing the built-in waterway
+health checks, and `debs: {packages, nodes}` jammy packages to install in VMs.
+A component whose `start` polls until
 phēnix stops it (hoststats) needs `background: true` and an entry in the run's
 `stop`, or `start` never returns and the run hangs; `render` refuses a round
 that breaks this. `sync`
 fails and names the files when a PR conflicts with the ones before it.
 
 ## Limitations
+
+- The `provider` round keeps all of soap, so the rig needs `ignition.qc2`
+  (licensed; not in sceptre-phenix-images) and `ubuntu-soaptools.qc2`
+  (`make ubuntu-soaptools`) besides `bennu.qc2`; `preflight` only checks the
+  waterway images. soap's own `mirror` app stays in its scenario, so a mirror
+  post-start failure there is silent and can leave a GRE port behind
+  ([sceptre-phenix-apps#187](https://github.com/sandialabs/sceptre-phenix-apps/issues/187),
+  [#188](https://github.com/sandialabs/sceptre-phenix-apps/issues/188)).
+- The `ssh` round reaches rtu-1 through `mgmt_tap`'s tap on the host, so it
+  only works when the phēnix container shares the host's network.
 
 - burger works around these rig, image and upstream problems:
   - On the rig tested, bennu VMs never registered with cc: no `miniccc` binary
@@ -211,5 +232,5 @@ fails and names the files when a PR conflicts with the ones before it.
 ## Tests
 
 ```bash
-BURGER_WATERWAY=../sceptre-phenix-topologies/waterway python3 -m pytest tests
+BURGER_TOPOLOGIES=../sceptre-phenix-topologies python3 -m pytest tests
 ```

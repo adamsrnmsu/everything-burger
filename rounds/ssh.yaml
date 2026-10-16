@@ -1,0 +1,26 @@
+# #170 ssh into a waterway RTU. mgmt_tap gives the phēnix host an address on
+# the MGMT network, so it can reach rtu-1 at 172.16.1.101; phēnix's default
+# image setup allows root login.
+#
+#   BURGER_VM_PASSWORD   root password of the bennu.qc2 image   (required)
+#
+# The password lands in the rendered scenario.json; keep it a lab-only value.
+description: "#170 ssh to rtu-1 over mgmt_tap"
+apps:
+  prs: [170]
+validate: true
+apps_extra:
+  - name: mgmt_tap
+    metadata: {subnet: 172.16.0.0/16, vlan: MGMT}
+scorch:
+  components:
+    - name: ssh
+      type: ssh
+      metadata:
+        ip: 172.16.1.101
+        user: root
+        password: "${BURGER_VM_PASSWORD}"
+        cmds: [uptime, "dpkg-query -W bennu"]
+  runs:
+    - name: ssh
+      start: [ssh]

@@ -35,9 +35,9 @@ MM_CTR = os.environ.get("BURGER_MINIMEGA_CONTAINER", "minimega")
 API = os.environ.get("BURGER_API", "http://localhost:3000/api/v1")
 TOKEN = os.environ.get("BURGER_TOKEN", "")
 PHENIX_DIR = os.environ.get("BURGER_PHENIX_DIR", "/phenix")  # phēnix's PHENIX_DIR
-# Never the user's own waterway copy.
-ASSETS = os.environ.get("BURGER_ASSETS", f"{PHENIX_DIR}/topologies/burger-waterway")
-STOCK_ASSETS = "/phenix/topologies/waterway"
+# A round's topology: a directory of the topologies repo, and its two files.
+TOPOLOGIES = {"waterway": ("waterway-topology.yaml", "waterway-scenario.yaml"),
+              "soap": ("topology.yaml", "scenario.yaml")}
 
 REPOS = {
     "apps": "https://github.com/sandialabs/sceptre-phenix-apps.git",
@@ -158,7 +158,18 @@ def load_round(name):
     rnd["exp"] = f"ebwes-{name}"
     if len(rnd["exp"]) > MAX_EXP_NAME:
         sys.exit(f"burger: round name '{name}' makes experiment '{rnd['exp']}' longer than {MAX_EXP_NAME} chars")
+    if topology(rnd) not in TOPOLOGIES:
+        sys.exit(f"burger: round '{name}' topology '{topology(rnd)}' is not one of {', '.join(TOPOLOGIES)}")
     return rnd
+
+
+def topology(rnd):
+    return rnd.get("topology", "waterway")
+
+
+def assets(name):
+    """Where a topology's assets go in phēnix: never the user's own copy."""
+    return f"{PHENIX_DIR}/topologies/burger-{name}"
 
 
 def round_dir(name):
@@ -245,8 +256,8 @@ def sync_round(rnd):
     trepo = ensure_repo("topologies")
     fetch(trepo, REPOS["topologies"], [])
     man["topologies"] = rev(trepo, "refs/burger/main")
-    shutil.rmtree(rd / "waterway", ignore_errors=True)
-    subprocess.run(f"git -C {shlex.quote(str(trepo))} archive refs/burger/main waterway "
+    shutil.rmtree(rd / topology(rnd), ignore_errors=True)
+    subprocess.run(f"git -C {shlex.quote(str(trepo))} archive refs/burger/main {topology(rnd)} "
                    f"| tar -x -C {shlex.quote(str(rd))}", shell=True, check=True)
 
     (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
@@ -330,6 +341,15 @@ def cmd_build(args):
          "-v", f"{out}:/out", "-w", "/src", "-e", "CGO_ENABLED=0", "-e", "GOCACHE=/tmp/gocache",
          "-e", "GOPATH=/tmp/gopath", "-e", "GOFLAGS=-buildvcs=false", "golang:1.24",
          "go", "build", "-o", "/out/phenix-app-mirror", "./cmd/phenix-app-mirror"])
+
+    packages = (rnd.get("debs") or {}).get("packages")
+    if packages:
+        # jammy: phēnix's default image release, which bennu.qc2 is built on.
+        shutil.rmtree(out / "debs", ignore_errors=True)
+        (out / "debs").mkdir()
+        run(["docker", "run", "--rm", "-v", f"{out / 'debs'}:/out", "-w", "/out", "ubuntu:22.04",
+             "bash", "-ec", f"apt-get update -qq && apt-get download -q {shlex.join(packages)} && "
+             f"chown {uid} /out/*.deb"])
 
     if man["bennu"]:
         build_bennu(rd, out, man, rnd["bennu"].get("install", ["deb"]))
@@ -431,6 +451,11 @@ def health_component(rnd, man, linux_only):
             c["validator"] = validator
         return c
 
+    if rnd.get("health"):  # the round's own checks, for a topology burger has none for
+        vms = [{"hostname": v["hostname"], "start": [check(c) for c in v["start"]]}
+               for v in rnd["health"]]
+        return {"name": "health", "type": "cc", "metadata": {"vms": vms}}
+
     deb = (man.get("bennu") or {}).get("deb_version")
     # No ${...} in any cc string: SCORCH templating eats it. And a command with
     # a validator must print something: cc.py crashes on empty stdout.
@@ -456,7 +481,7 @@ def health_component(rnd, man, linux_only):
         f"log=$(cat); grep -q {shlex.quote(want)} <<<\"$log\" || "
         f"{{ echo \"$1: {what} of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }}",
     ) for want, what in wants]
-    if rnd.get("base"):  # a site topology: only the install can be checked generically
+    if rnd.get("base") or topology(rnd) != "waterway":  # only the install checks generically
         vms = [{"hostname": h, "start": install_checks + ([version_check] if deb else [])}
                for h in bennu_nodes(rnd)] if install_checks else []
         return {"name": "health", "type": "cc", "metadata": {"vms": vms}} if vms else None
@@ -538,6 +563,20 @@ def miniccc_injections(stage_dir):
              "description": "burger: install and start miniccc", "permissions": "0755"}]
 
 
+DEBS_STARTUP = """#!/bin/bash
+# everything-burger: install the round's packages
+# find: works whether phēnix copies the directory's contents or the directory
+find /root/burger-debs -name '*.deb' -exec dpkg -i {} + >/var/log/burger-debs.log 2>&1
+"""
+
+
+def debs_injections(stage_dir):
+    return [{"src": f"{stage_dir}/debs/", "dst": "/root/burger-debs/",
+             "description": "burger: the round's packages"},
+            {"src": f"{stage_dir}/02-burger-debs.sh", "dst": "/etc/phenix/startup/02-burger-debs.sh",
+             "description": "burger: install the round's packages", "permissions": "0755"}]
+
+
 def bennu_injections(man, stage_dir):
     inj = [{"src": f"{stage_dir}/00-burger-bennu.sh", "dst": "/etc/phenix/startup/00-burger-bennu.sh",
             "description": "burger: install bennu PR build", "permissions": "0755"}]
@@ -550,14 +589,15 @@ def bennu_injections(man, stage_dir):
     return inj
 
 
-def render(rnd, man, waterway_dir, linux_only, stage_dir):
-    """Build the round's topology and scenario documents from waterway, or
-    from the round's `base` topology and scenario."""
+def render(rnd, man, topology_dir, linux_only, stage_dir):
+    """Build the round's topology and scenario documents from its topology
+    (waterway unless the round says otherwise), or from its `base` files."""
     if rnd.get("unset"):
         sys.exit(f"burger: round '{rnd['name']}' needs " + ", ".join(sorted(set(rnd["unset"]))))
     name, base = rnd["exp"], rnd.get("base")
-    topo = load_yaml(base["topology"] if base else Path(waterway_dir) / "waterway-topology.yaml")
-    scen = load_yaml(base["scenario"] if base else Path(waterway_dir) / "waterway-scenario.yaml")
+    files = TOPOLOGIES[topology(rnd)]
+    topo = load_yaml(base["topology"] if base else Path(topology_dir) / files[0])
+    scen = load_yaml(base["scenario"] if base else Path(topology_dir) / files[1])
     topo["metadata"]["name"] = name
     scen["metadata"]["name"] = name
     scen["metadata"].setdefault("annotations", {})["topology"] = name
@@ -577,19 +617,25 @@ def render(rnd, man, waterway_dir, linux_only, stage_dir):
             for iface in n["network"]["interfaces"]:
                 if iface.get("vlan") == "MGMT":
                     iface["vlan"] = mgmt
-    if man.get("bennu"):
-        hosts = {n["general"]["hostname"] for n in nodes}
-        missing = [h for h in bennu_nodes(rnd) if h not in hosts]
+    hosts = {n["general"]["hostname"] for n in nodes}
+    debs_nodes = (rnd.get("debs") or {}).get("nodes") or []
+    for key, want in (("bennu.nodes", bennu_nodes(rnd) if man.get("bennu") else []),
+                      ("cc_nodes", rnd.get("cc_nodes") or []), ("debs.nodes", debs_nodes)):
+        missing = [h for h in want if h not in hosts]
         if missing:
-            sys.exit(f"burger: round '{rnd['name']}' bennu.nodes {missing} are not in the topology")
+            sys.exit(f"burger: round '{rnd['name']}' {key} {missing} are not in the topology")
+    if man.get("bennu"):
         for n in nodes:
             if n["general"]["hostname"] in bennu_nodes(rnd):
                 n.setdefault("injections", []).extend(bennu_injections(man, stage_dir))
     if MM_CTR:  # Windows images carry their own working miniccc
-        cc_hosts = set(bennu_nodes(rnd)) | ({"monitor"} if rnd.get("monitor") else set())
+        cc_hosts = set(rnd.get("cc_nodes") or bennu_nodes(rnd)) | ({"monitor"} if rnd.get("monitor") else set())
         for n in nodes:
             if n["general"]["hostname"] in cc_hosts and n["hardware"].get("os_type") != "windows":
                 n.setdefault("injections", []).extend(miniccc_injections(stage_dir))
+    for n in nodes:
+        if n["general"]["hostname"] in debs_nodes:
+            n.setdefault("injections", []).extend(debs_injections(stage_dir))
 
     scorch = rnd.get("scorch") or {}
     health = health_component(rnd, man, linux_only)
@@ -614,7 +660,9 @@ def render(rnd, man, waterway_dir, linux_only, stage_dir):
 
     if base:  # its assets are already where its scenario says
         return topo, scen
-    return topo, json.loads(json.dumps(scen).replace(STOCK_ASSETS, ASSETS))
+    # Both documents: soap's topology injects from its asset directory too.
+    stock, ours = f"/phenix/topologies/{topology(rnd)}", assets(topology(rnd))
+    return tuple(json.loads(json.dumps(d).replace(stock, ours)) for d in (topo, scen))
 
 
 # ---------------------------------------------------------------- up / down
@@ -627,20 +675,22 @@ def cmd_up(args):
     out = require_built(rnd, man)
     if man.get("bennu"):
         (out / "00-burger-bennu.sh").write_text(bennu_startup(man))
+    if rnd.get("debs"):
+        (out / "02-burger-debs.sh").write_text(DEBS_STARTUP)
     if MM_CTR:
         if run(["docker", "cp", f"{MM_CTR}:/opt/minimega/bin/miniccc", out / "burger-miniccc"],
                check=False).returncode:
             sys.exit(f"burger: cannot copy miniccc out of container '{MM_CTR}'; set "
                      "BURGER_MINIMEGA_CONTAINER to the minimega container ('' skips the miniccc injection)")
         (out / "01-burger-miniccc.sh").write_text(MINICCC_STARTUP)
-    topo, scen = render(rnd, man, rd / "waterway", args.linux_only, stage_dir)
+    topo, scen = render(rnd, man, rd / topology(rnd), args.linux_only, stage_dir)
     (out / "topology.json").write_text(json.dumps(topo, indent=2))
     (out / "scenario.json").write_text(json.dumps(scen, indent=2))
     (rd / "state.json").write_text(json.dumps({"linux_only": args.linux_only}))
 
     down(rnd)
     if not rnd.get("base"):
-        put(rd / "waterway", ASSETS)
+        put(rd / topology(rnd), assets(topology(rnd)))
     put(out, stage_dir)
     phenix("config", "create", f"{stage_dir}/topology.json", f"{stage_dir}/scenario.json")
     phenix("experiment", "create", exp, "-t", exp, "-s", exp)
@@ -753,7 +803,7 @@ def state_of(rnd):
 
 def runs_of(rnd, man, linux_only):
     """The rendered runs, and the names of the background components."""
-    _, scen = render(rnd, man, round_dir(rnd["name"]) / "waterway", linux_only, "")
+    _, scen = render(rnd, man, round_dir(rnd["name"]) / topology(rnd), linux_only, "")
     md = next(a for a in scen["spec"]["apps"] if a["name"] == "scorch")["metadata"]
     return md["runs"], {c["name"] for c in md["components"] if c.get("background")}
 

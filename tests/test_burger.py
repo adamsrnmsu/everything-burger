@@ -1,6 +1,6 @@
 """Offline checks for burger: render every round, judge status files.
 
-    BURGER_WATERWAY=/path/to/sceptre-phenix-topologies/waterway python3 -m pytest tests
+    BURGER_TOPOLOGIES=/path/to/sceptre-phenix-topologies python3 -m pytest tests
 """
 
 import importlib.machinery
@@ -18,8 +18,8 @@ spec = importlib.util.spec_from_loader("burger", loader)
 burger = importlib.util.module_from_spec(spec)
 loader.exec_module(burger)
 
-WATERWAY = Path(os.environ.get("BURGER_WATERWAY", ROOT / "work/repos/topologies/waterway"))
-needs_waterway = pytest.mark.skipif(not WATERWAY.is_dir(), reason="set BURGER_WATERWAY")
+TOPOLOGIES = Path(os.environ.get("BURGER_TOPOLOGIES", ROOT / "work/repos/topologies"))
+needs_topologies = pytest.mark.skipif(not (TOPOLOGIES / "waterway").is_dir(), reason="set BURGER_TOPOLOGIES")
 MAN = {"apps": {"head": "a" * 40, "base": "b" * 40, "prs": {}},
        "bennu": {"pr": 58, "sha": "c" * 40, "deb_version": "6.0.1.abc1234"}, "topologies": "d" * 40}
 
@@ -28,19 +28,32 @@ def scorch_of(scen):
     return next(a for a in scen["spec"]["apps"] if a["name"] == "scorch")["metadata"]
 
 
-@needs_waterway
+@needs_topologies
 @pytest.mark.parametrize("name", burger.all_rounds())
 @pytest.mark.parametrize("linux_only", [False, True])
-def test_render_every_round(name, linux_only):
+def test_render_every_round(name, linux_only, monkeypatch):
+    monkeypatch.setenv("BURGER_VM_PASSWORD", "lab")  # the ssh round requires it
     rnd = burger.load_round(name)
     if rnd.get("base"):
         pytest.skip("site topology; see test_rtds_round")
     man = MAN if rnd.get("bennu") else {**MAN, "bennu": None}
-    topo, scen = burger.render(rnd, man, WATERWAY, linux_only, "/phenix/burger/x")
+    where = burger.topology(rnd)
+    topo, scen = burger.render(rnd, man, TOPOLOGIES / where, linux_only, "/phenix/burger/x")
     assert topo["metadata"]["name"] == scen["metadata"]["name"] == rnd["exp"]
     assert scen["metadata"]["annotations"]["topology"] == rnd["exp"]
-    assert burger.STOCK_ASSETS + "/" not in str(scen)
+    stock = f"/phenix/topologies/{where}"
+    assert stock + "/" not in json.dumps(topo) and stock not in json.dumps(scen)  # both rewritten
     hosts = {n["general"]["hostname"]: n for n in topo["spec"]["nodes"]}
+    assert "${" not in json.dumps(scorch_of(scen))  # SCORCH templating eats it
+    debs = (rnd.get("debs") or {}).get("nodes") or []
+    for h, n in hosts.items():
+        assert ("/etc/phenix/startup/02-burger-debs.sh" in str(n.get("injections"))) is (h in debs)
+    if where != "waterway":
+        for h in rnd["cc_nodes"]:
+            assert "/etc/phenix/startup/01-burger-miniccc.sh" in str(hosts[h]["injections"])
+        health = scorch_of(scen)["components"][0]
+        assert [v["hostname"] for v in health["metadata"]["vms"]] == [v["hostname"] for v in rnd["health"]]
+        return
     assert ("opc" in hosts) is not linux_only
     for h in burger.BENNU_NODES:
         injected = [i["dst"] for i in hosts[h].get("injections", [])]
@@ -52,7 +65,6 @@ def test_render_every_round(name, linux_only):
         assert (mirror["vlan"], mirror["address"], mirror["mask"]) == ("mirror", "10.248.171.254", 24)
     assert not any("burger-miniccc" in str(n.get("injections")) for n in hosts.values()
                    if n["hardware"]["os_type"] == "windows")
-    assert "${" not in json.dumps(scorch_of(scen))  # SCORCH templating eats it
     health = scorch_of(scen)["components"][0]
     rtu = next(v for v in health["metadata"]["vms"] if v["hostname"] == "rtu-1")
     assert any("state established" in c["args"] for c in rtu["start"]) is not linux_only
