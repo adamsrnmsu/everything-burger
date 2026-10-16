@@ -107,6 +107,8 @@ re-run `sync` and the rest of the round.
    `return` is not an error. A missing file means the component crashed.
    `ERROR` lines in a passing stage are reported as `WARN`. Runs named
    `extras*` are advisory.
+   A background component (`background: true`) may leave no `start` file:
+   phēnix kills it at stop, so its `stop` stage carries the verdict.
 
 The report names the exact SHAs of `main`, each PR, bennu and the topologies
 repo, from `work/rounds/<round>/manifest.json`.

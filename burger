@@ -745,14 +745,16 @@ def state_of(rnd):
 
 
 def runs_of(rnd, man, linux_only):
+    """The rendered runs, and the names of the background components."""
     _, scen = render(rnd, man, round_dir(rnd["name"]) / "waterway", linux_only, "")
-    return next(a for a in scen["spec"]["apps"] if a["name"] == "scorch")["metadata"]["runs"]
+    md = next(a for a in scen["spec"]["apps"] if a["name"] == "scorch")["metadata"]
+    return md["runs"], {c["name"] for c in md["components"] if c.get("background")}
 
 
 def cmd_scorch(args):
     rnd = load_round(args.round)
     man, state = manifest(rnd["name"]), state_of(rnd)
-    runs = runs_of(rnd, man, state["linux_only"])
+    runs, background = runs_of(rnd, man, state["linux_only"])
     if args.run is not None and not 0 <= args.run < len(runs):
         sys.exit(f"burger: round '{rnd['name']}' has runs 0-{len(runs) - 1}")
     wanted = range(len(runs)) if args.run is None else [args.run]
@@ -780,7 +782,7 @@ def cmd_scorch(args):
                 time.sleep(30)
                 continue
             results = collect(rnd, i, since)
-            failed = [r for r in evaluate(runs[i], results) if r[3] == "FAIL"]
+            failed = [r for r in evaluate(runs[i], results, background) if r[3] == "FAIL"]
             if not failed:
                 break
             if deadline is None:
@@ -808,23 +810,31 @@ def collect(rnd, i, since=""):
             doc = json.loads(f.read_text())
         except ValueError:
             continue
+        if not isinstance(doc, dict):  # components save other JSON (erspan) beside status files
+            continue
         if str(doc.get("start", "")) < since:
             continue
         results.setdefault((doc.get("component"), doc.get("stage")), []).append(doc)
     return results
 
 
-def evaluate(run_spec, results):
+def evaluate(run_spec, results, background=frozenset()):
     """(run, component, stage, verdict, detail) per stage a run lists.
 
     The status file's `return` is the stage's return value, `Error occurred: …`
     on an exception; a component that exits without one (sys.exit) leaves no
-    file, which is a failure too.
+    file, which is a failure too. Except a background component's start:
+    phēnix's shell runner SIGKILLs it on stop (exec.CommandContext races its
+    own SIGTERM), so it never writes one; its stop stage carries the verdict.
     """
     rows = []
     for stage in ("configure", "start", "stop", "cleanup"):
         for comp in run_spec.get(stage, []):
             docs = results.get((comp, stage), [])
+            if not docs and stage == "start" and comp in background:
+                rows.append((run_spec.get("name"), comp, stage, "ok",
+                             "no start status: background component, ended by SCORCH at stop"))
+                continue
             if not docs:
                 rows.append((run_spec.get("name"), comp, stage, "FAIL", "no status file (component crashed or never ran)"))
                 continue
@@ -867,9 +877,10 @@ def cmd_verify(args):
         rows.append(("-", "phenix-scorch-validate", "-", "ok" if res.returncode == 0 else "FAIL",
                      "" if res.returncode == 0 else "see output above"))
 
-    for i, run_spec in enumerate(runs_of(rnd, man, state["linux_only"])):
+    runs, background = runs_of(rnd, man, state["linux_only"])
+    for i, run_spec in enumerate(runs):
         advisory = str(run_spec.get("name", "")).startswith("extras")
-        for row in evaluate(run_spec, collect(rnd, i)):
+        for row in evaluate(run_spec, collect(rnd, i), background):
             rows.append(row[:3] + (("advisory-" + row[3]) if advisory and row[3] == "FAIL" else row[3], row[4]))
 
     report = render_report(rnd, man, state, rows)

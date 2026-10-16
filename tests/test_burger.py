@@ -86,6 +86,25 @@ def test_evaluate():
     verdicts = {row[1]: row[3] for row in burger.evaluate(spec_, results)}
     assert verdicts == {"good": "ok", "boom": "FAIL", "gone": "FAIL", "noisy": "WARN"}
 
+    # a background component's missing start status is ok; its stop is still judged
+    bg = {"name": "r", "start": ["poll"], "stop": ["poll"]}
+    rows = {(r[1], r[2]): r[3] for r in burger.evaluate(bg, {}, {"poll"})}
+    assert rows == {("poll", "start"): "ok", ("poll", "stop"): "FAIL"}
+
+
+def test_collect_skips_non_status_json(tmp_path, monkeypatch):
+    def fake_fetch(src, dst):
+        loop = Path(dst) / "erspan" / "loop-0-count-0"
+        loop.mkdir(parents=True)
+        (loop / "meta.json").write_text("[1, 2]")
+        (loop / "start.json").write_text('{"component": "erspan", "stage": "start", "start": "2026"}')
+        return True
+
+    monkeypatch.setattr(burger, "WORK", tmp_path)
+    monkeypatch.setattr(burger, "fetch_from_phenix", fake_fetch)
+    results = burger.collect({"name": "x", "exp": "ebwes-x"}, 0)
+    assert list(results) == [("erspan", "start")]
+
 
 def test_rtds_round(tmp_path, monkeypatch):
     for var in ("BURGER_RTDS_TOPOLOGY", "BURGER_RTDS_SCENARIO", "BURGER_RTDS_PROVIDER"):
@@ -179,7 +198,7 @@ def test_scorch_settle_is_a_hard_cap(monkeypatch):
     monkeypatch.setattr(burger, "load_round", lambda n: {"name": n, "exp": "ebwes-x"})
     monkeypatch.setattr(burger, "manifest", lambda n: {})
     monkeypatch.setattr(burger, "state_of", lambda r: {"linux_only": False})
-    monkeypatch.setattr(burger, "runs_of", lambda r, m, l: [{"name": "health", "start": ["health"]}])
+    monkeypatch.setattr(burger, "runs_of", lambda r, m, l: ([{"name": "health", "start": ["health"]}], set()))
     monkeypatch.setattr(burger, "collect", lambda r, i, since="": {})  # never healthy
 
     burger.cmd_scorch(burger.argparse.Namespace(round="x", run=None, settle=1000))
