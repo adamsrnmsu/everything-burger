@@ -17,7 +17,7 @@ a PR set.
 | `pybennu` | upstream `main` | #59 deb and pybennu wheel | soap without Ignition: `pybennu-power-solver` runs and logs through loguru, each C++ RTU queries it; siren's log file (advisory) |
 | `metadata` | #158, #164–#177 | #58 | disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos (+ advisory erspan); all 14 models validated offline; lowercase mgmt VLAN for #158 |
 | `harden` | #155, #158 | #58 | cc validators, pcap, tcpdump, mm, mgmt_tap, mirror app into a `monitor` VM |
-| `rtds` | #158, #164, #166, #169, #177 | #58 pybennu wheel | rtds, providerdata, collector and a baseline disruption on **your RTDS rig's** topology, not waterway |
+| `rtds` | #158, #164, #166, #169, #177 | #59 pybennu wheel | rtds, providerdata, collector and a baseline disruption on **your RTDS rig's** topology, not waterway |
 | `provider` | #158, #164, #166, #169, #177 | stock `bennu.qc2` | providerdata, rtds (lifecycle only) and collector with a baseline disruption, on **soap**'s pybennu PyPower provider |
 | `iperf` | #165 | stock `bennu.qc2` | iperf from rtu-2 to rtu-1 on waterway; burger installs iperf3 into both |
 | `ssh` | #170 | stock `bennu.qc2` | ssh to rtu-1 over `mgmt_tap`; needs `BURGER_VM_PASSWORD` |

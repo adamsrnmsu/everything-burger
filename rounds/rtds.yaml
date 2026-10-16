@@ -1,6 +1,6 @@
 # RTDS family on your own RTDS rig: #166 rtds, #177 providerdata, #169
 # collector (with the #164 disruption it reads), plus the PR build of pybennu
-# (#56 changed the RTDS publisher) on the provider VM.
+# (#56 changed the RTDS publisher, #59 its logging) on the provider VM.
 #
 # waterway has no RTDS, so this round starts from your site's topology and
 # scenario. Site values come from the environment, never from this file:
@@ -16,16 +16,16 @@
 #
 # The scenario keeps its own apps and assetDir; any scorch app in it is
 # replaced by the pipeline below.
-description: "#164 #166 #169 #177 + bennu #58 (pybennu) on a site RTDS rig"
+description: "#164 #166 #169 #177 + bennu #59 (pybennu) on a site RTDS rig"
 base:
   topology: ${BURGER_RTDS_TOPOLOGY}
   scenario: ${BURGER_RTDS_SCENARIO}
 apps:
   prs: [158, 164, 166, 169, 177]
 bennu:
-  pr: 58
-  includes: [54, 55, 56, 57]  # stacked under #58
+  pr: 59  # main with #54-#58, plus loguru (rtds.py now logs synchronously)
   install: [pybennu]
+  pip: ["loguru>=0.7,<1"]  # #59's new dependency; the VMs have no index
   nodes: ["${BURGER_RTDS_PROVIDER:-power-provider}"]
 validate: true
 scorch:
