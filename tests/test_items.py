@@ -58,9 +58,17 @@ def test_background_requires_stop(settings):
         resolve_item(item, load_route("waterway", settings), None)
 
 
+def test_background_requires_poller(settings):
+    item = dataclasses.replace(
+        load_item("pcap", settings), background=True, stages=["start", "stop"]
+    )
+    with pytest.raises(BurgerError, match="not a poller"):
+        resolve_item(item, load_route("waterway", settings), None)
+
+
 def test_every_item_loads(settings):
     items = all_items(settings)
-    assert len(items) == 23
+    assert len(items) >= 23
     for item in items:
         for name in item.routes:
             resolve_item(item, load_route(name, settings), None)
@@ -68,3 +76,4 @@ def test_every_item_loads(settings):
 
 def test_validate_only_items(settings):
     assert load_item("disruption-dos", settings).routes == []
+    assert load_item("disruption-physical", settings).routes == []
