@@ -47,6 +47,10 @@ The phēnix container's entrypoint reinstalls upstream phenix-apps on every
 boot, so re-run `./burger install <round>` after any phenix container restart
 (`verify` flags the mismatch).
 
+`scorch` (and `round`) retries the health run until it passes or `--settle`
+seconds (default 1800) run out. The cap is hard: a retry starts only if an
+attempt as long as the last one would end in time.
+
 `round` stops at the first failing step and leaves the experiment up for
 debugging; after `verify` it deletes the experiment unless you pass `--keep`.
 To debug, run the steps by hand:

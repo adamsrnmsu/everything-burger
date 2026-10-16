@@ -441,7 +441,7 @@ def health_component(rnd, man, linux_only):
     provider_query = check(
         "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); "
         "echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; "
-        "bennu-probe --endpoint \"$ep\" --command query",
+        "timeout 30 bennu-probe --endpoint \"$ep\" --command query",
         "grep -q 'lock' || { echo \"$1: provider query returned no waterway tags\" >&2; exit 1; }",
     )
     wheel = (man.get("bennu") or {}).get("wheel")
@@ -751,10 +751,14 @@ def cmd_scorch(args):
     for i in wanted:
         # Health waits on sceptre startup (field devices sleep 60 s, Windows
         # boots slowly), so retry it; every other run gets one shot.
-        deadline = time.time() + (args.settle if runs[i].get("name") == "health" else 0)
+        health = runs[i].get("name") == "health"
+        deadline = time.time() + (args.settle if health else 0)
+        if health:
+            say(f"run {i} (health): retrying until healthy, for at most {args.settle} s (--settle)")
         busy = 0
         while True:
             since = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            began = time.time()
             res = phenix("experiment", "scorch", rnd["exp"], "-r", str(i), check=False, stderr=subprocess.PIPE)
             sys.stderr.write(res.stderr or "")
             # A crashed attempt can still be winding down phēnix-side: wait it
@@ -768,7 +772,12 @@ def cmd_scorch(args):
                 continue
             results = collect(rnd, i, since)
             failed = [r for r in evaluate(runs[i], results) if r[3] == "FAIL"]
-            if not failed or time.time() > deadline:
+            if not failed:
+                break
+            # Hard cap: retry only if another attempt like this one ends before the deadline.
+            if time.time() + 60 + (time.time() - began) > deadline:
+                if health:
+                    say(f"run {i} (health) still failing at the --settle cap: {failed[0][4]}")
                 break
             say(f"run {i} ({runs[i].get('name')}) not healthy yet: {failed[0][4]}; retrying in 60 s")
             time.sleep(60)
@@ -964,12 +973,12 @@ def main():
         sp = add(name, fn, help_)
         sp.add_argument("--linux-only", action="store_true", help="drop the Windows nodes")
         sp.add_argument("--timeout", type=int, default=900, help="seconds to wait for VMs")
-        sp.add_argument("--settle", type=int, default=1800, help="seconds to retry the health run")
         if name == "round":
+            sp.add_argument("--settle", type=int, default=1800, help="cap on seconds spent retrying the health run")
             sp.add_argument("--keep", action="store_true", help="leave the experiment running")
     sp = add("scorch", cmd_scorch, "run the round's SCORCH runs (all by default)")
     sp.add_argument("--run", type=int)
-    sp.add_argument("--settle", type=int, default=1800, help="seconds to retry the health run")
+    sp.add_argument("--settle", type=int, default=1800, help="cap on seconds spent retrying the health run")
     add("verify", cmd_verify, "check install, experiment, models, and SCORCH results")
     add("down", cmd_down, "delete the round's experiment and configs")
 

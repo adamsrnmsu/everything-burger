@@ -139,3 +139,38 @@ def test_fix_routers(monkeypatch):
     monkeypatch.setattr(burger, "MM_CTR", "")
     burger.fix_routers("e", topo)
     assert sent == []
+
+
+def test_scorch_settle_is_a_hard_cap(monkeypatch):
+    clock = {"now": 0.0}
+    attempts = []
+
+    class FakeTime:
+        time = staticmethod(lambda: clock["now"])
+
+        @staticmethod
+        def sleep(n):
+            clock["now"] += n
+
+    def fake_phenix(*a, **kw):
+        attempts.append(clock["now"])
+        clock["now"] += 300  # an unregistered VM costs a full cc client grace
+        return burger.subprocess.CompletedProcess(a, 0, None, "")
+
+    monkeypatch.setattr(burger, "time", FakeTime)
+    monkeypatch.setattr(burger, "phenix", fake_phenix)
+    monkeypatch.setattr(burger, "load_round", lambda n: {"name": n, "exp": "ebwes-x"})
+    monkeypatch.setattr(burger, "manifest", lambda n: {})
+    monkeypatch.setattr(burger, "state_of", lambda r: {"linux_only": False})
+    monkeypatch.setattr(burger, "runs_of", lambda r, m, l: [{"name": "health", "start": ["health"]}])
+    monkeypatch.setattr(burger, "collect", lambda r, i, since="": {})  # never healthy
+
+    burger.cmd_scorch(burger.argparse.Namespace(round="x", run=None, settle=1000))
+    # attempts at 0, 360, 720 would end at 1020 > 1000: only two fit
+    assert attempts == [0, 360]
+    assert clock["now"] <= 1000
+
+    attempts.clear()
+    clock["now"] = 0.0
+    burger.cmd_scorch(burger.argparse.Namespace(round="x", run=None, settle=0))
+    assert attempts == [0]  # the first attempt always runs
