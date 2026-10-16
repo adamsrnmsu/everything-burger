@@ -38,15 +38,19 @@ def _version_check(deb: str) -> dict:
     )
 
 
-def health_component(res: Resolved, man: dict) -> dict | None:
-    """A SCORCH cc component: the bennu build's install and version checks, then every item's vm checks."""
+def health_component(res: Resolved, man: dict, only: Item | None = None) -> dict | None:
+    """A SCORCH cc component: the bennu build's install and version checks, then every item's vm checks.
+
+    Advisory bennu items are left out (they get their own `only=` component in an extras run).
+    """
     checks: dict[str, list[dict]] = {}
-    install = _install_checks(man)
+    install = [] if only else _install_checks(man)
     if install:
         deb = man["bennu"].get("deb_version")
         for host in res.route.bennu_nodes:
             checks[host] = [*install, *([_version_check(deb)] if deb else [])]
-    for item in res.items:
+    items = [only] if only else [i for i in res.items if not (i.kind == "bennu" and i.advisory)]
+    for item in items:
         for v in item.verify:
             vm = v.get("vm") if isinstance(v, dict) else None
             if not vm:
@@ -60,7 +64,7 @@ def health_component(res: Resolved, man: dict) -> dict | None:
     if not checks:
         return None
     vms = [{"hostname": h, "start": c} for h, c in checks.items()]
-    return {"name": "health", "type": "cc", "metadata": {"vms": vms}}
+    return {"name": f"{only.name}-checks" if only else "health", "type": "cc", "metadata": {"vms": vms}}
 
 
 def _run(name: str, items: list[Item]) -> dict:
@@ -88,6 +92,11 @@ def compose(res: Resolved, man: dict) -> tuple[list[dict], list[dict]]:
         main = _run(res.board.name, [i for i in scorch if not i.advisory])
         runs = [main] if len(main) > 1 else []
         runs += [_run(f"extras-{i.name}", [i]) for i in scorch if i.advisory]
+        for i in res.items:
+            extra = health_component(res, man, only=i) if i.kind == "bennu" and i.advisory else None
+            if extra:
+                components.append(extra)
+                runs.append({"name": f"extras-{i.name}", "start": [extra["name"]]})
     health = health_component(res, man)
     if health:
         components.insert(0, health)

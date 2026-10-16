@@ -116,10 +116,6 @@ def test_golden_scorch_components(settings, topologies, name, linux_only):
         )
 
     want = shape(golden(name, linux_only, "scenario"))
-    if name == "pybennu":
-        # Intended deviation: siren is a bennu item, so its log check is a health
-        # check now, not the old standalone siren-log component.
-        want = Counter({k: v for k, v in want.items() if "pybennu-siren.log" not in k[1]})
     assert shape(scen) == want
 
 
@@ -156,7 +152,12 @@ def test_pybennu_render(settings, topologies):
         )
         assert (out.returncode == 0) is ok, line
     siren = next(v for v in health["metadata"]["vms"] if v["hostname"] == "siren")
-    assert any("pybennu-siren.log" in c["args"] for c in siren["start"])
+    assert not any("pybennu-siren.log" in c["args"] for c in siren["start"])
+    comps = scorch_of(scen)["components"]
+    extra = next(c for c in comps if c["name"] == "siren-checks")
+    assert "pybennu-siren.log" in json.dumps(extra["metadata"])
+    run = next(r for r in scorch_of(scen)["runs"] if r["name"] == "extras-siren")
+    assert run["start"] == ["siren-checks"]
 
 
 def test_site_route_render(settings, monkeypatch, tmp_path):
