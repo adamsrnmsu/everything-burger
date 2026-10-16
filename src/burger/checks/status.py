@@ -41,8 +41,17 @@ def evaluate(run_spec, results, background=frozenset()):
                 msg = "no status file (component crashed or never ran)"
                 rows.append((name, comp, stage, "FAIL", msg))
                 continue
-            errs = [str(d.get("return")) for d in docs if str(d.get("return", "")).startswith("Error occurred")]
-            logged = [ln for d in docs for ln in d.get("logs", []) if " ERROR " in ln or " CRITICAL " in ln]
+            errs = [
+                str(d.get("return"))
+                for d in docs
+                if str(d.get("return", "")).startswith("Error occurred")
+            ]
+            logged = [
+                ln
+                for d in docs
+                for ln in d.get("logs", [])
+                if " ERROR " in ln or " CRITICAL " in ln
+            ]
             if errs:
                 rows.append((name, comp, stage, "FAIL", errs[0][:200]))
             elif logged:

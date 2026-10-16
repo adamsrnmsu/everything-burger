@@ -57,7 +57,7 @@ for _ in $(seq 60); do [ -e /dev/virtio-ports/cc ] && break; sleep 1; done
 ls /dev/virtio-ports/
 systemctl restart miniccc 2>/dev/null ||
   nohup /opt/minimega/bin/miniccc -v=false -serial /dev/virtio-ports/cc -logfile /var/log/miniccc.log &
-"""
+"""  # noqa: E501
 
 
 def miniccc_injections(stage_dir):

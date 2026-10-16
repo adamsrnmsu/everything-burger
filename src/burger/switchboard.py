@@ -58,7 +58,9 @@ def all_switchboards(settings: Settings) -> list[str]:
 def load_switchboard(name: str, settings: Settings) -> Switchboard:
     path = _dir(settings) / f"{name}.yaml"
     if not path.is_file():
-        raise BurgerError(f"no switchboard '{name}' (known: {', '.join(all_switchboards(settings))})")
+        raise BurgerError(
+            f"no switchboard '{name}' (known: {', '.join(all_switchboards(settings))})"
+        )
     doc, unset = load_yaml(path, _FIELDS)
     if "route" not in doc:
         raise BurgerError(f"{path}: missing field 'route'")
@@ -71,7 +73,8 @@ def load_switchboard(name: str, settings: Settings) -> Switchboard:
         bad = sorted(set(bennu) - _BENNU_KEYS)
         if bad:
             raise BurgerError(
-                f"{path}: unknown bennu field '{bad[0]}' (allowed: {', '.join(sorted(_BENNU_KEYS))})"
+                f"{path}: unknown bennu field '{bad[0]}' "
+                f"(allowed: {', '.join(sorted(_BENNU_KEYS))})"
             )
         if "pr" not in bennu:
             raise BurgerError(f"{path}: bennu needs 'pr'")
@@ -148,7 +151,9 @@ def resolve(board: Switchboard, settings: Settings, linux_only: bool = False) ->
     if unset:
         problems.append(f"unset environment variables: {', '.join(_unique(unset))}")
     if problems:
-        raise BurgerError("\n".join([f"switchboard '{board.name}':", *(f"  {p}" for p in problems)]))
+        raise BurgerError(
+            "\n".join([f"switchboard '{board.name}':", *(f"  {p}" for p in problems)])
+        )
     req = [i.requires for i in items]
     debs = [r.get("debs", {}) for r in req]
     requires = Requires(

@@ -22,8 +22,8 @@ def _install_checks(man: dict) -> list[dict]:
     return [
         _check(
             "cat /var/log/burger-bennu.log 2>&1",
-            f"log=$(cat); grep -Eq {shlex.quote(want)} <<<\"$log\" || "
-            f"{{ echo \"$1: {what} of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }}",
+            f'log=$(cat); grep -Eq {shlex.quote(want)} <<<"$log" || '
+            f'{{ echo "$1: {what} of the PR build failed: $(tail -3 <<<"$log")" >&2; exit 1; }}',
         )
         for want, what in wants
     ]
@@ -34,12 +34,13 @@ def _version_check(deb: str) -> dict:
     # a validator must print something: cc.py crashes on empty stdout.
     return _check(
         "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-        f"v=$(cat); [ \"$v\" = {shlex.quote(deb)} ] || {{ echo \"$1 runs bennu $v, want {deb}\" >&2; exit 1; }}",
+        f'v=$(cat); [ "$v" = {shlex.quote(deb)} ] || '
+        f'{{ echo "$1 runs bennu $v, want {deb}" >&2; exit 1; }}',
     )
 
 
 def health_component(res: Resolved, man: dict, only: Item | None = None) -> dict | None:
-    """A SCORCH cc component: the bennu build's install and version checks, then every item's vm checks.
+    """A SCORCH cc component: the bennu build's install and version checks, then item vm checks.
 
     Advisory bennu items are left out (they get their own `only=` component in an extras run).
     """
@@ -64,7 +65,11 @@ def health_component(res: Resolved, man: dict, only: Item | None = None) -> dict
     if not checks:
         return None
     vms = [{"hostname": h, "start": c} for h, c in checks.items()]
-    return {"name": f"{only.name}-checks" if only else "health", "type": "cc", "metadata": {"vms": vms}}
+    return {
+        "name": f"{only.name}-checks" if only else "health",
+        "type": "cc",
+        "metadata": {"vms": vms},
+    }
 
 
 def _run(name: str, items: list[Item]) -> dict:

@@ -72,7 +72,8 @@ def build_bennu(host, wt: Path, out: Path, man: dict, install: list[str], pip: l
         script = (
             f"cp -r {shlex.quote(str(wt.resolve()))}/src/pybennu /tmp/pyb && "
             # bennu's own `make dist`; jammy's pip cannot run the uv_build backend.
-            "pip3 install -q uv && uv build -q --wheel -o /tmp/w /tmp/pyb && cp /tmp/w/pybennu-*.whl /out/ && "
+            "pip3 install -q uv && uv build -q --wheel -o /tmp/w /tmp/pyb "
+            "&& cp /tmp/w/pybennu-*.whl /out/ && "
             f"chown {os.getuid()}:{os.getgid()} /out/pybennu-*.whl"
         )
         host.run(

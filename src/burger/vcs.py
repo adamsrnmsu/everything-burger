@@ -85,7 +85,9 @@ def sync(res: Resolved, settings: Settings, host) -> dict:
             capture=True,
         )
         if merged.returncode != 0:
-            bad = host.git(wt, "diff", "--name-only", "--diff-filter=U", capture=True).stdout.split()
+            bad = host.git(
+                wt, "diff", "--name-only", "--diff-filter=U", capture=True
+            ).stdout.split()
             host.git(wt, "merge", "--abort", check=False)
             raise BurgerError(
                 f"switchboard '{board.name}': #{n} conflicts with the PRs before it "

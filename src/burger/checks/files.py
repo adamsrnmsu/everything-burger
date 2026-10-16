@@ -12,7 +12,9 @@ def files(spec: dict, ctx: CheckContext) -> Row:
     need, min_bytes = spec.get("min", 1), spec.get("min_bytes", 0)
     big = [p for p in found if p.stat().st_size >= min_bytes]
     ok = len(big) >= need
-    reason = f"{len(big)} file(s) match {spec['glob']}" + (f" at >= {min_bytes} bytes" if min_bytes else "")
+    reason = f"{len(big)} file(s) match {spec['glob']}" + (
+        f" at >= {min_bytes} bytes" if min_bytes else ""
+    )
     return row(ctx, "files", ok, reason if ok else f"{reason}, need {need}", found)
 
 

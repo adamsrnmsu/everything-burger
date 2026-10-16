@@ -106,7 +106,9 @@ def pcap(spec: dict, ctx: CheckContext) -> Row:
     total = 0
     for p in found:
         try:
-            total += count_packets(p, spec.get("tcp_port"), spec.get("udp_port"), spec.get("ip_proto"))
+            total += count_packets(
+                p, spec.get("tcp_port"), spec.get("udp_port"), spec.get("ip_proto")
+            )
         except BurgerError as e:
             return row(ctx, "pcap", False, f"{p.name}: {e}", found)
     need = spec.get("min_packets", 1)

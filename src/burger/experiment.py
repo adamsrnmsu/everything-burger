@@ -9,13 +9,12 @@ from pathlib import Path
 
 from loguru import logger
 
-from burger.bennu import build_bennu
+from burger.bennu import bennu_startup, build_bennu
 from burger.checks.status import collect_status, evaluate
 from burger.compose import compose
 from burger.config import BurgerError, Settings
 from burger.render import DEBS_STARTUP, MINICCC_STARTUP, render
 from burger.switchboard import Resolved
-from burger.bennu import bennu_startup
 from burger.vcs import board_dir, load_manifest
 
 
@@ -100,7 +99,9 @@ def install(res: Resolved, settings: Settings, host) -> None:
     marker = json.dumps({"switchboard": name, "apps": man["apps"]["head"]})
     host.ctr("sh", "-c", f"echo {shlex.quote(marker)} > /tmp/burger/installed.json")
     where = f"container {settings.ctr}" if settings.ctr else "this host"
-    logger.info("installed apps {} (switchboard '{}') into {}", man["apps"]["head"][:10], name, where)
+    logger.info(
+        "installed apps {} (switchboard '{}') into {}", man["apps"]["head"][:10], name, where
+    )
 
 
 def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
@@ -114,13 +115,19 @@ def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
         (out / "02-burger-debs.sh").write_text(DEBS_STARTUP)
     if settings.mm_ctr:
         copied = host.run(
-            ["docker", "cp", f"{settings.mm_ctr}:/opt/minimega/bin/miniccc", out / "burger-miniccc"],
+            [
+                "docker",
+                "cp",
+                f"{settings.mm_ctr}:/opt/minimega/bin/miniccc",
+                out / "burger-miniccc",
+            ],
             check=False,
         )
         if copied.returncode:
             raise BurgerError(
                 f"cannot copy miniccc out of container '{settings.mm_ctr}'; set "
-                "BURGER_MINIMEGA_CONTAINER to the minimega container ('' skips the miniccc injection)"
+                "BURGER_MINIMEGA_CONTAINER to the minimega container ('' skips the"
+                " miniccc injection)"
             )
         (out / "01-burger-miniccc.sh").write_text(MINICCC_STARTUP)
     topo_dir = rd / res.route.topology_dir if res.route.topology_dir else None
@@ -185,7 +192,9 @@ def vm_uuids(host, exp: str, want: set, timeout: int = 60) -> dict:
     every wanted VM is listed or the timeout passes."""
     deadline = time.time() + timeout
     while True:
-        out = host.mm(exp, ".csv true .headers false .annotate false .columns name,uuid vm info").stdout
+        out = host.mm(
+            exp, ".csv true .headers false .annotate false .columns name,uuid vm info"
+        ).stdout
         uuids = dict(ln.strip().split(",", 1) for ln in out.splitlines() if ln.count(",") == 1)
         if want <= set(uuids) or time.time() > deadline:
             return uuids
@@ -207,7 +216,9 @@ def fix_routers(host, settings: Settings, exp: str, topo: dict) -> None:
         name = node["general"]["hostname"]
         uuid = uuids.get(name)
         if not uuid:
-            logger.warning("router '{}': not in minimega's VM list; skipping its interface fix", name)
+            logger.warning(
+                "router '{}': not in minimega's VM list; skipping its interface fix", name
+            )
             continue
         if host.mm(exp, "cc", "filter", f"uuid={uuid}").returncode:
             logger.warning(
@@ -242,7 +253,7 @@ def down(res: Resolved, host) -> None:
 
 
 def collect(res: Resolved, settings: Settings, host, i: int, since: str = "") -> dict:
-    """Status files of run i, keyed by (component, stage); `since` drops files older than this attempt."""
+    """Status files of run i, keyed by (component, stage); `since` drops older files."""
     dst = board_dir(settings, res.board.name) / "results" / f"run-{i}"
     src = f"{settings.phenix_dir}/images/{res.board.exp}/files/scorch/run-{i}"
     if not host.fetch(src, dst):
@@ -307,7 +318,10 @@ def scorch(
                     )
                 break
             logger.info(
-                "run {} ({}) not healthy yet: {}; retrying in 60 s", i, runs[i].get("name"), failed[0][4]
+                "run {} ({}) not healthy yet: {}; retrying in 60 s",
+                i,
+                runs[i].get("name"),
+                failed[0][4],
             )
             clock.sleep(60)
     logger.info("scorch done; next: burger verify {}", name)

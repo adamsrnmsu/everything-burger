@@ -19,7 +19,7 @@ HANDLED_BY_VERIFY = ("status", "vm")
 def run_checks(item: Item, ctx: CheckContext) -> list[Row]:
     rows = []
     for entry in item.verify:
-        (name, spec), = entry.items()
+        ((name, spec),) = entry.items()
         if name in HANDLED_BY_VERIFY:
             continue
         if name not in CHECKS:
