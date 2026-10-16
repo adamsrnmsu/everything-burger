@@ -9,3 +9,5 @@ __pycache__/
 .beads/proxieddb/
 *.gate.lock*
 .beads/
+.venv/
+*.egg-info/
