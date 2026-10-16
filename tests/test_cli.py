@@ -126,5 +126,5 @@ def test_results_table_keeps_bracket_text():
     from burger.ui import results_table
 
     c = Console(width=120, record=True)
-    c.print(results_table([Row("i", "c", "FAIL", "[docs] x [/path]")]))
+    c.print(results_table([Row("i", "c", "FAIL", "[docs] x [/path]", [])]))
     assert "[docs] x [/path]" in c.export_text()
