@@ -12,6 +12,7 @@ class CheckContext:
     route: Route
     manifest: dict
     work: Path
+    linux_only: bool = False
 
 
 @dataclass

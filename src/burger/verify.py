@@ -131,7 +131,7 @@ def verify(res: Resolved, settings, host) -> list[Row]:
         if item.name in where:
             n, comp = where[item.name]
             dirs = sorted((rd / "results" / f"run-{n}" / comp).glob("loop-*"))
-        rows += run_checks(item, CheckContext(item, dirs, res.route, man, rd))
+        rows += run_checks(item, CheckContext(item, dirs, res.route, man, rd, res.linux_only))
 
     (rd / "report.md").write_text(render_report(res, man, {"linux_only": res.linux_only}, rows))
     return rows

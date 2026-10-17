@@ -13,11 +13,11 @@ from tests.conftest import MAN
 from tests.fakes import FakeHost
 
 
-def setup(settings, monkeypatch, name="bennu", results=None, enable=()):
+def setup(settings, monkeypatch, name="bennu", results=None, enable=(), linux_only=False):
     board = load_switchboard(name, settings)
     for item in enable:
         board.items[item] = True
-    res = resolve(board, settings)
+    res = resolve(board, settings, linux_only)
     rd = board_dir(settings, name)
     rd.mkdir(parents=True)
     (rd / "manifest.json").write_text(json.dumps({**MAN, "synced": "now"}))
@@ -91,3 +91,22 @@ def test_advisory_item_in_explicit_run_stays_advisory(settings, monkeypatch):
     res.board = dataclasses.replace(res.board, runs=runs)
     rows = [r for r in v.verify(res, settings, host) if r.item == "erspan"]
     assert rows and all(r.verdict == "advisory-FAIL" for r in rows)
+
+
+def test_windows_checks_skipped_under_linux_only(settings, monkeypatch):
+    res, host = setup(settings, monkeypatch, name="harden", linux_only=True)
+    assert "tcpdump -nn" not in json.dumps(health_checks(res, MAN))  # not in the health run
+    rows = v.verify(res, settings, host)
+    skipped = {
+        (r.item, r.check.split(":")[0]) for r in rows if r.reason == "needs the Windows nodes"
+    }
+    assert skipped == {("pcap", "pcap"), ("tcpdump", "pcap"), ("mirror", "vm monitor")}
+    assert all(r.verdict == "skipped" for r in rows if r.reason == "needs the Windows nodes")
+
+
+def test_windows_checks_run_with_windows(settings, monkeypatch):
+    res, host = setup(settings, monkeypatch, name="harden")
+    assert "tcpdump -nn" in json.dumps(health_checks(res, MAN))
+    rows = v.verify(res, settings, host)
+    assert not [r for r in rows if r.reason == "needs the Windows nodes"]
+    assert next(r for r in rows if r.item == "tcpdump" and r.check == "pcap").verdict == "FAIL"

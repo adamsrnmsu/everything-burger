@@ -22,4 +22,4 @@ overrides:
     verify:
       - status: ok
       - files: {glob: "*.pcap", min: 1}
-      - pcap: {glob: "*.pcap", tcp_port: 502, ip_proto: 47, min_packets: 10}
+      - pcap: {glob: "*.pcap", tcp_port: 502, ip_proto: 47, min_packets: 10, windows: true}

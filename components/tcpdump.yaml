@@ -10,4 +10,5 @@ config:
 verify:
   - status: ok
   - files: {glob: "*.pcap", min: 1}
-  - pcap: {glob: "*.pcap", tcp_port: "{route.ics_port}", min_packets: 10}
+  # The traffic is SCADA/OPC polling: skipped without the Windows nodes.
+  - pcap: {glob: "*.pcap", tcp_port: "{route.ics_port}", min_packets: 10, windows: true}

@@ -61,7 +61,7 @@ def health_checks(
     for item in [only] if only else [i for i in res.items if not i.advisory]:
         for v in item.verify:
             vm = v.get("vm") if isinstance(v, dict) else None
-            if not vm:
+            if not vm or (vm.get("windows") and res.linux_only):  # verify marks it skipped
                 continue
             run = str(vm.get("run", ""))
             if vm.get("expect"):

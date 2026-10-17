@@ -13,3 +13,4 @@ verify:
   - vm:
       host: monitor
       run: "timeout 30 tcpdump -nn -i any -c 3 'tcp port 502 or ip proto 47'"
+      windows: true  # the Modbus it mirrors is SCADA/OPC polling
