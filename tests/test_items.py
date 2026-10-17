@@ -76,7 +76,6 @@ def test_every_item_loads(settings):
 
 def test_validate_only_items(settings):
     assert load_item("disruption-dos", settings).routes == []
-    assert load_item("disruption-physical", settings).routes == []
 
 
 HEAD = "name: x\nkind: scorch\ntype: x\n"

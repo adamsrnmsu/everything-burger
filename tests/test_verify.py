@@ -77,7 +77,7 @@ def test_advisory_not_failing(settings, monkeypatch):
 
 
 def test_models_yaml_includes_validate_only(settings, monkeypatch):
-    res, host = setup(settings, monkeypatch, name="metadata", enable=["disruption-dos"])
+    res, host = setup(settings, monkeypatch, name="metadata")  # metadata as shipped
     v.verify(res, settings, host)
     doc = yaml.safe_load((board_dir(settings, "metadata") / "out" / "models.yaml").read_text())
     assert "disruption-dos" in [c["name"] for c in doc["components"]]

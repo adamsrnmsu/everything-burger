@@ -1,11 +1,14 @@
 # #160 metadata models (#164-#177) plus #158, on the bennu stack. Models no
-# route can run are checked offline by phenix-scorch-validate.
+# route can run (disruption-dos) are checked offline by phenix-scorch-validate;
+# the rtds, providerdata, collector, iperf and ssh models are validated on
+# their own boards.
 about: "#158 + #164-#177 metadata models + bennu #58"
 route: waterway
 apps: {prs: [158, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177]}
 bennu: {pr: 58}
 items:
   disruption: on
+  disruption-dos: on
   pcap: on
   tcpdump: on
   mm: on
