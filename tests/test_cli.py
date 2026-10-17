@@ -187,3 +187,17 @@ def test_user_facing_text_says_switchboards():
 
     assert "round" not in cli._parser().description + burger.__doc__
     assert "rounds need" not in Path(cli.__file__).read_text()
+
+
+def test_banner_draws_the_mascot():
+    from io import StringIO
+
+    from rich.console import Console
+
+    from burger import ui
+
+    buf = StringIO()
+    ui.banner(Console(file=buf, force_terminal=True, color_system="truecolor", width=100))
+    out = buf.getvalue()
+    assert "\x1b[38;2;" in out  # the truecolor art, not plain text
+    assert len(ui.MASCOT.plain.splitlines()) == 29

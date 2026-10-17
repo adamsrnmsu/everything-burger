@@ -19,7 +19,7 @@ burger = "burger.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-burger = ["templates/*.yaml"]
+burger = ["templates/*.yaml", "assets/*.ans"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

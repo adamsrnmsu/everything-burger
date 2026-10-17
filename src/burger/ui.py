@@ -1,4 +1,5 @@
 import sys
+from importlib.resources import files
 from pathlib import Path
 
 import pyfiglet
@@ -9,24 +10,9 @@ from rich.text import Text
 
 from burger.checks import Row
 
-MASCOT = r"""
-         _.-~~~~-._
-       .~  ~~~~~~  ~.        pompadour
-      /  ~~~~~~~~~~  \
-     |   .--.  .--.   |
-     |   |oo|  |oo|   |
-      \   '--'  '--'  /
-       \    \____/   /
-     ___'.  `----'  .'___
-    /   \ '-.____.-' /   \
-   |  _  \__/ || \__/  _  |   <- burger on a tray
-   | (_)  [=======]  (_) |
-   |  ||==[ BURGER ]==||  |
-   |  ||  [=======]  ||  |
-   '--'|  |  overalls |  |'--'
-       |__|__|    |__|__|
-       (___)(___) (___)(___)
-"""
+# Truecolor ASCII art, generated once by scripts/make_mascot.py and shipped as
+# package data, so nothing extra is installed to draw it.
+MASCOT = Text.from_ansi((files("burger") / "assets" / "mascot.ans").read_text())
 
 _STYLE = {
     "ok": "green",
@@ -39,7 +25,7 @@ _STYLE = {
 
 def banner(console: Console) -> None:
     console.print(pyfiglet.figlet_format("BURGER", font="standard"), style="bold red", end="")
-    console.print(MASCOT, style="yellow", highlight=False, markup=False)
+    console.print(MASCOT)
 
 
 def results_table(rows: list[Row]) -> Table:
