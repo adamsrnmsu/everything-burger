@@ -29,13 +29,16 @@ def _install_checks(man: dict) -> list[dict]:
     ]
 
 
-def _version_check(deb: str) -> dict:
+def _version_check(deb: str | None) -> dict:
+    """The PR build's version, or with no deb built, that bennu is installed at all."""
     # No ${...} in any cc string: SCORCH templating eats it. And a command with
     # a validator must print something: cc.py crashes on empty stdout.
     return _check(
         "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
         f'v=$(cat); [ "$v" = {shlex.quote(deb)} ] || '
-        f'{{ echo "$1 runs bennu $v, want {deb}" >&2; exit 1; }}',
+        f'{{ echo "$1 runs bennu $v, want {deb}" >&2; exit 1; }}'
+        if deb
+        else '[ "$(cat)" != none ] || { echo "$1: bennu not installed" >&2; exit 1; }',
     )
 
 
@@ -48,11 +51,13 @@ def health_checks(
     Advisory items are left out (they get their own `only=` component in an extras run).
     """
     out: list[tuple[str, str, dict]] = []
-    install = [] if only else _install_checks(man)
-    if install:
-        deb = man["bennu"].get("deb_version")
-        for host in res.route.bennu_nodes:
-            out += [("bennu", host, c) for c in [*install, *([_version_check(deb)] if deb else [])]]
+    deb = (man.get("bennu") or {}).get("deb_version")
+    first = [] if only else _install_checks(man)
+    # Parity with the old script: stock bennu is asserted installed on waterway only.
+    if not only and (deb or res.route.name == "waterway"):
+        first.append(_version_check(deb))
+    for host in res.route.bennu_nodes if first else []:
+        out += [("bennu", host, c) for c in first]
     for item in [only] if only else [i for i in res.items if not i.advisory]:
         for v in item.verify:
             vm = v.get("vm") if isinstance(v, dict) else None

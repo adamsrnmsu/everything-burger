@@ -6,8 +6,8 @@ import pytest
 import yaml
 
 from burger.compose import compose, health_component, item_locations
-from burger.config import BurgerError
-from burger.switchboard import load_switchboard, resolve
+from burger.config import BurgerError, Settings
+from burger.switchboard import all_switchboards, load_switchboard, resolve
 from tests.conftest import MAN
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -112,3 +112,45 @@ def test_advisory_vm_checks_get_own_health_extras(settings):
     assert "pybennu-siren.log" in json.dumps(extra)
     run = next(r for r in runs if r["name"] == "extras-siren")
     assert run["start"] == ["health-siren"]
+
+
+_ROOT = Settings.from_env(Path(__file__).resolve().parents[1])
+WATERWAY = [b for b in all_switchboards(_ROOT) if load_switchboard(b, _ROOT).route == "waterway"]
+
+
+@pytest.fixture(autouse=True)
+def vm_password(monkeypatch):
+    monkeypatch.setenv("BURGER_VM_PASSWORD", "lab")  # ssh's scenario needs it
+
+
+@pytest.mark.parametrize("linux_only", [False, True])
+@pytest.mark.parametrize("name", WATERWAY)
+def test_every_waterway_board_has_rtu_health(settings, name, linux_only):
+    """The old per-round invariant: rtu-1 health serves Modbus (and is polled, with Windows)."""
+    comps, runs = compose(res(settings, name, linux_only=linux_only), MAN)
+    assert runs[0] == {"name": "health", "start": ["health"]}
+    args = "\n".join(c["args"] for c in rtu1(comps[0]))
+    assert "-Hltn" in args
+    assert ("state established" in args) == (not linux_only)
+
+
+def test_no_deb_waterway_asserts_bennu_installed(settings):
+    stock = {**MAN, "bennu": None}
+    old = next(c for c in rtu1(golden_scorch("baseline")["components"][0]) if "dpkg" in c["args"])
+    for name in ("baseline", "iperf", "ssh"):
+        assert old in rtu1(health_component(res(settings, name), stock))
+
+
+def test_provider_health_is_power_solver_only(settings):
+    comps, runs = compose(res(settings, "provider"), {**MAN, "bennu": None})
+    assert runs[0]["name"] == "health"
+    (vm,) = comps[0]["metadata"]["vms"]
+    assert vm["hostname"] == "power-provider"
+    assert [c["args"] for c in vm["start"]] == ["pgrep -f '(^|/)pybennu-power-solver( |$)'"]
+
+
+def test_site_wheel_only_has_no_version_check(settings, monkeypatch):
+    for v, f in (("SITE_TOPOLOGY", "topology"), ("SITE_SCENARIO", "scenario")):
+        monkeypatch.setenv(f"BURGER_{v}", str(GOLDEN / f"site-{f}.yaml"))
+    man = {**MAN, "bennu": {"pr": 59, "sha": "c" * 40, "wheel": "pybennu-1-py3-none-any.whl"}}
+    assert "dpkg-query" not in json.dumps(health_component(res(settings, "rtds"), man))

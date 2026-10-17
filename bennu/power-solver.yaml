@@ -1,0 +1,12 @@
+name: power-solver
+kind: bennu
+type: power-solver
+about: >
+  pybennu-power-solver (PyPower) runs as the provider. Only the process: its
+  log format differs between stock bennu.qc2 and #59 (see pybennu-provider).
+  The anchored pattern cannot match the cc shell's own command line.
+routes: [soap, site]
+verify:
+  - vm:
+      host: "{route.provider}"
+      run: "pgrep -f '(^|/)pybennu-power-solver( |$)'"

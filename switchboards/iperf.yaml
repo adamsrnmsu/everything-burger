@@ -1,10 +1,14 @@
-# #165 iperf between two waterway RTUs on the ICS network.
+# #165 iperf between two waterway RTUs on the ICS network. The bennu items give
+# it the waterway health run, which also waits out VM boot (--settle).
 about: "#165 iperf, rtu-2 to rtu-1"
 route: waterway
 apps: {prs: [165]}
 items:
   iperf: on
   disruption: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
 runs:
   - name: iperf
     configure: [iperf]

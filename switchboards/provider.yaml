@@ -8,6 +8,7 @@ items:
   providerdata: on
   collector: on
   disruption: on
+  bennu/power-solver: on
 overrides:
   disruption: {config: {permutation: 0, run_duration: 60}}
 runs:

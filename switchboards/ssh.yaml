@@ -5,6 +5,9 @@ route: waterway
 apps: {prs: [170]}
 items:
   ssh: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
 runs:
   - name: ssh
     start: [ssh]
