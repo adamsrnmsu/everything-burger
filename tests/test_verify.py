@@ -38,21 +38,53 @@ def setup(settings, monkeypatch, name="bennu", results=None, enable=(), linux_on
     return res, host
 
 
-def test_health_attribution(settings, monkeypatch):
+def _health_rows(settings, monkeypatch, pick):
+    """verify's vm rows when the health check pick(checks) fails, with the checks."""
     results = {}
     res, host = setup(settings, monkeypatch, results=results)
     checks = health_checks(res, MAN)
-    on_host = [c for c in checks if c[1] == checks[0][1]]
-    bad = on_host[1]
+    bad = pick(checks)
     err = f"Error occurred: command '{bad[2]['args']}' failed: boom"
     results[("health", "start")] = [{"return": err}]
     rows = [r for r in v.verify(res, settings, host) if r.check.startswith("vm ")]
     assert len(rows) == len(checks)
-    n = checks.index(bad)
-    assert rows[n].verdict == "FAIL" and "boom" in rows[n].reason
-    assert rows[0].verdict == "ok"
-    later = [r for r, c in zip(rows, checks, strict=True) if c in on_host[2:]]
-    assert later and all(r.verdict == "skipped" and "not reached" in r.reason for r in later)
+    return checks, rows, bad
+
+
+def test_health_attribution_unique_command(settings, monkeypatch):
+    checks, rows, bad = _health_rows(
+        settings,
+        monkeypatch,
+        lambda cs: next(c for c in cs if "simulink-provider(" in c[2]["args"]),
+    )
+    sp = [(c, r) for c, r in zip(checks, rows, strict=True) if c[1] == bad[1]]
+    n = [c for c, _ in sp].index(bad)
+    assert sp[n][1].verdict == "FAIL" and "boom" in sp[n][1].reason
+    assert n and all((r.verdict, r.reason) == ("ok", "") for _, r in sp[:n])
+    after = sp[n + 1 :]
+    assert after and all((r.verdict, r.reason) == ("skipped", "not reached") for _, r in after)
+    others = [r for c, r in zip(checks, rows, strict=True) if c[1] != bad[1]]
+    assert others and all((r.verdict, r.reason) == ("skipped", "not confirmed") for r in others)
+
+
+def test_health_attribution_shared_command_does_not_guess(settings, monkeypatch):
+    checks, rows, bad = _health_rows(
+        settings, monkeypatch, lambda cs: next(c for c in cs if "dpkg-query" in c[2]["args"])
+    )
+    shared = [r for c, r in zip(checks, rows, strict=True) if c[2] == bad[2]]
+    assert len(shared) == 3
+    for r in shared:
+        assert r.verdict == "skipped"
+        assert "one of rtu-1, rtu-2, simulink-provider" in r.reason and "boom" in r.reason
+    rest = [r for c, r in zip(checks, rows, strict=True) if c[2] != bad[2]]
+    assert rest and all((r.verdict, r.reason) == ("skipped", "not confirmed") for r in rest)
+
+
+def test_health_warn_does_not_confirm(settings, monkeypatch):
+    results = {("health", "start"): [{"return": "", "logs": ["x ERROR y"]}]}
+    res, host = setup(settings, monkeypatch, results=results)
+    rows = [r for r in v.verify(res, settings, host) if r.check.startswith("vm ")]
+    assert rows and {r.verdict for r in rows} == {"skipped"}
 
 
 def test_health_ok_marks_vm_checks_ok(settings, monkeypatch):

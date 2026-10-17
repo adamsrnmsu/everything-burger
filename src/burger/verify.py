@@ -60,26 +60,36 @@ def _label(host: str, args: str) -> str:
     return f"vm {host}: {' '.join(args.split())[:60]}"
 
 
-def _attribute(checks, error: str, failed: bool, advisory: bool) -> list[Row]:
-    """One row per vm check of a health component, from the component's start status."""
-    if not failed:
+def _attribute(checks, error: str, verdict: str, advisory: bool) -> list[Row]:
+    """One row per vm check of a health component, from the component's start status.
+
+    Only an `ok` start confirms the checks. A failure names the command, not the
+    host: when several checks share its args, every candidate is skipped rather than
+    guessing. Checks the failure says nothing about are skipped as not confirmed.
+    """
+    if verdict == "ok":
         return [Row(i, _label(h, c["args"]), "ok", "", []) for i, h, c in checks]
-    bad = next(
-        (n for n, (_, _, c) in enumerate(checks) if f"command '{c['args']}' failed" in error), None
-    )
+    hits = [n for n, (_, _, c) in enumerate(checks) if f"command '{c['args']}' failed" in error]
+    hosts = ", ".join(dict.fromkeys(checks[n][1] for n in hits))
     rows = []
     for n, (item, host, c) in enumerate(checks):
         label = _label(host, c["args"])
-        if bad is None:
+        if not hits:
             rows.append(
                 Row(item, label, "skipped", f"health failed, no check named: {error[:100]}", [])
             )
-        elif n == bad:
+        elif n in hits and len(hits) > 1:
+            reason = f"health failed on one of {hosts}: {error[:200]}"
+            rows.append(Row(item, label, "skipped", reason, []))
+        elif n in hits:
             rows.append(Row(item, label, "advisory-FAIL" if advisory else "FAIL", error[:200], []))
-        elif n > bad and host == checks[bad][1]:
-            rows.append(Row(item, label, "skipped", "not reached", []))
+        elif len(hits) == 1 and host == checks[hits[0]][1]:
+            ran = n < hits[0]
+            rows.append(
+                Row(item, label, "ok" if ran else "skipped", "" if ran else "not reached", [])
+            )
         else:
-            rows.append(Row(item, label, "ok", "", []))
+            rows.append(Row(item, label, "skipped", "not confirmed", []))
     return rows
 
 
@@ -122,8 +132,7 @@ def verify(res: Resolved, settings, host) -> list[Row]:
         comp = f"health-{item.name}" if item else "health"
         checks = health_checks(res, man, item or None)
         if checks and (comp, "start") in status:
-            failed = status[(comp, "start")] == "FAIL"
-            rows += _attribute(checks, errors.get(comp, ""), failed, bool(item))
+            rows += _attribute(checks, errors.get(comp, ""), status[(comp, "start")], bool(item))
 
     where = item_locations(runs)
     for item in res.items:
