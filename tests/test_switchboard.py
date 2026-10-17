@@ -97,3 +97,11 @@ def test_switchboard_shapes(settings, tmp_path, body):
     (tmp_path / "switchboards" / "zz.yaml").write_text("route: waterway\n" + body)
     with pytest.raises(BurgerError, match=r"zz\.yaml: \w+ must be a mapping"):
         load_switchboard("zz", dataclasses.replace(settings, root=tmp_path))
+
+
+def test_harden_tcpdump_counts_gre(settings):
+    res = resolve(load_switchboard("harden", settings), settings)
+    tcpdump = next(i for i in res.items if i.name == "tcpdump")
+    spec = next(v["pcap"] for v in tcpdump.verify if "pcap" in v)
+    assert spec["tcp_port"] == 502 and spec["ip_proto"] == 47
+    assert [next(iter(v)) for v in tcpdump.verify] == ["status", "files", "pcap"]
