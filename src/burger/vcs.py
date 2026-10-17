@@ -105,6 +105,7 @@ def sync(res: Resolved, settings: Settings, host) -> dict:
         man["bennu"] = {"pr": bennu_pr, "sha": _rev(host, brepo, f"refs/burger/pr/{bennu_pr}")}
 
     topo = res.route.topology_dir  # a site route brings its own topology: nothing to archive
+    man["topologies"] = None
     if topo:
         trepo = _ensure_repo(host, settings, "topologies")
         _fetch(host, trepo, REPOS["topologies"], [])

@@ -148,7 +148,7 @@ def render_report(res: Resolved, man: dict, state: dict, rows: list[Row]) -> str
         "",
         f"- apps: `{man['apps']['head'][:10]}` = main `{man['apps']['base'][:10]}` + {prs}",
         f"- bennu: {bennu}",
-        f"- topologies: `{man['topologies'][:10]}`"
+        f"- topologies: `{(man.get('topologies') or 'site route')[:10]}`"
         + (" (linux-only)" if state["linux_only"] else ""),
         f"- synced {man.get('synced')}",
         "",

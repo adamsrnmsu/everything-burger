@@ -99,8 +99,13 @@ def _run(args, s, host) -> int:
     for cmd in ("sync", "build", "install", "up", "scorch"):
         step = argparse.Namespace(**{**vars(args), "cmd": cmd, "run": None})
         _one(step, s, host, name)
+        if cmd == "sync":  # render and compose offline first: hostname/run errors before docker
+            res, rd = _board(s, name, args.linux_only), vcs.board_dir(s, name)
+            topo = res.route.topology_dir
+            stage = f"{s.phenix_dir}/burger/{name}"
+            render(res, vcs.load_manifest(s, name), rd / topo if topo else None, stage, s)
     code = _verify(_board(s, name, args.linux_only), s, host)
-    if code == 0 and not args.keep:  # a failing round stays up to debug
+    if code == 0 and not args.keep:  # a failing switchboard stays up to debug
         _one(argparse.Namespace(cmd="down"), s, host, name)
     return code
 
@@ -157,7 +162,11 @@ def _preflight(args, s, host) -> int:
     )
     df = host.ctr("df", "-Pk", s.phenix_dir, check=False, capture=True).stdout.split("\n")[1:2]
     free_gb = int(df[0].split()[3]) // 2**20 if df and df[0] else 0
-    chk(f"{free_gb} GiB free on {s.phenix_dir}", free_gb >= 20, "rounds need ~20 GiB of snapshots")
+    chk(
+        f"{free_gb} GiB free on {s.phenix_dir}",
+        free_gb >= 20,
+        "switchboards need ~20 GiB of snapshots",
+    )
     out.print(results_table(rows))
     return int(any(r.verdict == "FAIL" for r in rows))
 
@@ -262,7 +271,7 @@ def _check(args, s, host) -> int:
 
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="burger", description="Switchboard test rounds for sceptre-phenix"
+        prog="burger", description="Switchboards of tests for sceptre-phenix"
     )
     p.add_argument("--version", action="store_true")
     p.add_argument("--quiet", action="store_true", help="no banner")

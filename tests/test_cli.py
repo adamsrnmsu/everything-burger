@@ -1,13 +1,17 @@
 import json
+import subprocess
 import urllib.error
 from pathlib import Path
 
 import pytest
 
-from burger import cli
+from burger import cli, experiment
+from burger import verify as v
 from burger.cli import main
+from burger.compose import compose
 from burger.config import Settings
-from burger.items import load_item
+from burger.items import STAGES, load_item
+from tests.fakes import FakeHost
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -106,7 +110,6 @@ def test_uncaught_urlerror_is_one_red_line(monkeypatch, capsys):
 
 
 def test_preflight_api_failure_is_a_row_not_a_crash(monkeypatch, capsys):
-    from tests.fakes import FakeHost
 
     host = FakeHost()
 
@@ -128,3 +131,59 @@ def test_results_table_keeps_bracket_text():
     c = Console(width=120, record=True)
     c.print(results_table([Row("i", "c", "FAIL", "[docs] x [/path]", [])]))
     assert "[docs] x [/path]" in c.export_text()
+
+
+def _fake_run_chain(monkeypatch, board):
+    """`burger run <board>` on a FakeHost: real steps, fake docker builds and SCORCH results."""
+    golden = ROOT / "tests" / "golden"
+    monkeypatch.setenv("BURGER_SITE_TOPOLOGY", str(golden / "site-topology.yaml"))
+    monkeypatch.setenv("BURGER_SITE_SCENARIO", str(golden / "site-scenario.yaml"))
+    monkeypatch.setenv("BURGER_MINIMEGA_CONTAINER", "")
+    monkeypatch.setenv("BURGER_SITE_PROVIDER", "pp1")
+    # FakeHost's rev-parse prints nothing, so the synced apps head is "".
+    done = subprocess.CompletedProcess([], 0, json.dumps({"apps": ""}), "")
+    host = FakeHost({"docker exec phenix cat /tmp/burger/installed.json": done})
+    exp = f"ebwes-{board}"
+    host.api_responses = {
+        f"/experiments/{exp}": {"running": True},
+        f"/experiments/{exp}/vms": {"vms": [{"name": "a", "state": "running"}]},
+    }
+
+    def bennu_build(_host, _wt, out, man, *_a):
+        man["bennu"]["wheel"] = "pybennu-1-py3-none-any.whl"
+
+    def all_ok(res, settings, _host, i, since=""):
+        _, runs = compose(res, json.loads((settings.work / board / "manifest.json").read_text()))
+        return {(c, st): [{"return": ""}] for st in STAGES for c in runs[i].get(st, [])}
+
+    monkeypatch.setattr(experiment, "build_bennu", bennu_build)
+    monkeypatch.setattr(experiment, "collect", all_ok)
+    monkeypatch.setattr(v, "collect", all_ok)
+    monkeypatch.setattr(v, "run_checks", lambda *_a: [])  # no real SCORCH output files
+    monkeypatch.setattr(cli, "Host", lambda _s: host)
+    return host
+
+
+def test_run_site_route_reaches_report_and_down(tmp_path, monkeypatch, capsys):
+    host = _fake_run_chain(monkeypatch, "rtds")
+    assert main(["--quiet", "run", "rtds", "--settle", "0", "--timeout", "1"]) == 0
+    man = json.loads((tmp_path / "rtds" / "manifest.json").read_text())
+    assert man["topologies"] is None
+    report = (tmp_path / "rtds" / "report.md").read_text()
+    assert "topologies: `site route`" in report and "**PASS**" in report
+    assert host.calls[-1][3:6] == ["phenix", "config", "delete"]  # down ran last
+
+
+def test_run_renders_before_build(tmp_path, monkeypatch, capsys):
+    host = _fake_run_chain(monkeypatch, "rtds")
+    monkeypatch.setenv("BURGER_SITE_PROVIDER", "nosuch-vm")
+    assert main(["--quiet", "run", "rtds", "--settle", "0", "--timeout", "1"]) == 1
+    assert "not in the topology" in capsys.readouterr().err
+    assert not any(c[:2] in (["docker", "run"], ["docker", "build"]) for c in host.calls)
+
+
+def test_user_facing_text_says_switchboards():
+    import burger
+
+    assert "round" not in cli._parser().description + burger.__doc__
+    assert "rounds need" not in Path(cli.__file__).read_text()
