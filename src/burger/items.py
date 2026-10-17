@@ -15,6 +15,18 @@ KINDS = ("scorch", "app", "bennu")
 STAGES = ("configure", "start", "stop", "cleanup")
 _ROUTE_BLOCKS = ("waterway", "soap", "site")
 _TOKEN = re.compile(r"\{route\.(\w+)(?:\[(\d+)\])?\}")
+# Each verify entry is one check type -> the spec keys it needs (checks.CHECKS + status, vm).
+CHECK_KEYS = {
+    "status": (),
+    "vm": ("host", "run"),
+    "files": ("glob",),
+    "pcap": ("glob",),
+    "csv": ("glob",),
+    "log": ("glob",),
+    "json": ("glob", "field"),
+    "python": ("function",),
+}
+REQUIRES = set("debs apps apps_prs env monitor mgmt_vlan cc_nodes keep_nodes windows".split())
 
 
 @dataclass
@@ -37,6 +49,32 @@ class Item:
     overrides: dict = field(default_factory=dict)  # per-route blocks: waterway, soap, site
 
 
+def _check_fields(path: Path, doc: dict, where: str = "") -> None:
+    """Raise on a verify entry or requires key no code would read."""
+    for n, entry in enumerate(doc.get("verify") or []):
+        field = f"{where}verify[{n}]"
+        if not isinstance(entry, dict) or len(entry) != 1:
+            raise BurgerError(f"{path}: {field} must be one check, like `- files: {{glob: ...}}`")
+        ((name, spec),) = entry.items()
+        if name not in CHECK_KEYS:
+            raise BurgerError(
+                f"{path}: {field}: unknown check '{name}' (known: {', '.join(CHECK_KEYS)})"
+            )
+        need = CHECK_KEYS[name]
+        if not need or (name == "python" and isinstance(spec, str)):
+            continue
+        lacking = [k for k in need if not isinstance(spec, dict) or k not in spec]
+        if lacking:
+            raise BurgerError(f"{path}: {field}.{name} needs '{lacking[0]}'")
+    requires = doc.get("requires") or {}
+    bad = sorted(requires if not isinstance(requires, dict) else set(requires) - REQUIRES)
+    if bad:
+        raise BurgerError(
+            f"{path}: {where}requires.{bad[0]} is not a requirement "
+            f"(allowed: {', '.join(sorted(REQUIRES))})"
+        )
+
+
 def load_item(ref: str, settings: Settings) -> Item:
     path = settings.root / (ref if "/" in ref else f"components/{ref}")
     path = path.with_suffix(".yaml")
@@ -52,6 +90,10 @@ def load_item(ref: str, settings: Settings) -> Item:
     bad = [s for s in stages if s not in STAGES]
     if bad:
         raise BurgerError(f"{path}: unknown stage '{bad[0]}' (allowed: {', '.join(STAGES)})")
+    _check_fields(path, doc)
+    for r in _ROUTE_BLOCKS:
+        if isinstance(doc.get(r), dict):
+            _check_fields(path, doc[r], f"{r}.")
     return Item(
         name=doc["name"],
         kind=doc["kind"],
@@ -126,6 +168,7 @@ def resolve_item(item: Item, route: Route, override: dict | None) -> Item:
     d = _merge(d, overrides.get(route.name, {}))
     d = _subst(_merge(d, override or {}), route)
     out = Item(**d, overrides=overrides)
+    _check_fields(out.path, d)  # the switchboard's override may bring its own verify
     for run in _vm_runs(out):
         if "${" in run:
             raise BurgerError(f"{out.path}: vm check must not contain '${{': {run}")

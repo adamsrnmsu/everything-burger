@@ -17,7 +17,7 @@ requires: {}            # debs: {packages: [], nodes: []}, apps: [], apps_prs: [
 verify:
   - status: ok          # no error return in the component's status files
   # - files: {glob: "*.pcap", min: 1}
-  # - log: {path: "*.log", lacks: "ERROR"}
+  # - log: {glob: "*.log", lacks: "ERROR"}
 # waterway: {}          # per-route overrides of config/verify
 # soap: {}
 # site: {}

@@ -89,3 +89,11 @@ def test_override_for_unknown_item(settings):
             resolve(b, settings)
         assert "baseline.yaml" in str(e.value)
         assert "overrides.disruption" in str(e.value)
+
+
+@pytest.mark.parametrize("body", ["items: [pcap]\n", "apps: [158]\n", "overrides: [x]\n"])
+def test_switchboard_shapes(settings, tmp_path, body):
+    (tmp_path / "switchboards").mkdir()
+    (tmp_path / "switchboards" / "zz.yaml").write_text("route: waterway\n" + body)
+    with pytest.raises(BurgerError, match=r"zz\.yaml: \w+ must be a mapping"):
+        load_switchboard("zz", dataclasses.replace(settings, root=tmp_path))

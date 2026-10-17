@@ -78,6 +78,9 @@ def load_switchboard(name: str, settings: Settings) -> Switchboard:
             )
         if "pr" not in bennu:
             raise BurgerError(f"{path}: bennu needs 'pr'")
+    for key in ("items", "apps", "overrides"):
+        if not isinstance(doc.get(key) or {}, dict):
+            raise BurgerError(f"{path}: {key} must be a mapping, not {doc[key]!r}")
     items = doc.get("items") or {}
     for ref, on in items.items():
         if not isinstance(on, bool):
