@@ -133,9 +133,9 @@ this.
 | `metadata` | #158, #164–#177 | #58 | disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos (+ advisory erspan); lowercase mgmt VLAN for #158 |
 | `harden` | #155, #158 | #58 | cc validators, pcap, tcpdump, mm, mgmt_tap, mirror app into a `monitor` VM |
 | `rtds` | #158, #164, #166, #169, #177 | #59 pybennu wheel | rtds, providerdata, collector and a baseline disruption on **your rig's** topology (`site` route), not waterway |
-| `provider` | #158, #164, #166, #169, #177 | stock `bennu.qc2` | providerdata, rtds (lifecycle only) and collector with a baseline disruption, on **soap**'s pybennu PyPower provider |
-| `iperf` | #165 | stock `bennu.qc2` | iperf from rtu-2 to rtu-1 on waterway; burger installs iperf3 into both |
-| `ssh` | #170 | stock `bennu.qc2` | ssh to rtu-1 over `mgmt_tap`; needs `BURGER_VM_PASSWORD` |
+| `provider` | #158, #164, #166, #169, #177 | stock `bennu.qc2` | providerdata, rtds (lifecycle only) and collector with a baseline disruption, on **soap**'s pybennu PyPower provider; health: the solver runs |
+| `iperf` | #165 | stock `bennu.qc2` | iperf from rtu-2 to rtu-1 on waterway, after the waterway health checks; burger installs iperf3 into both |
+| `ssh` | #170 | stock `bennu.qc2` | ssh to rtu-1 over `mgmt_tap`, after the waterway health checks; needs `BURGER_VM_PASSWORD` |
 
 Models no route can run are validated offline by `phenix-scorch-validate`
 (items with `routes: []` are validate-only).
@@ -170,6 +170,7 @@ missing fails with "no output found at …"; it never passes.
 | `python` | a function in the item's folder returns pass/fail plus a message | `- python: check_totals` |
 
 Every check reports a one-line reason and the paths it read. Items marked `advisory` report `advisory-FAIL` and do not fail the board.
+A check with `windows: true` (traffic that the Windows SCADA/OPC pollers make) is `skipped` under `--linux-only`.
 
 ## Adding a test
 
@@ -304,7 +305,7 @@ topologies (waterway, soap) come from the topologies repo's `main`.
 - `--linux-only` drops SCADA, OPC, HMI and historian, so nothing polls the RTUs
   and the Modbus and mirror checks are skipped.
 - `--linux-only` in `harden` still adds the monitor VM and mirror app, but
-  with no SCADA traffic its tcpdump captures nothing and nothing flags it.
+  with no SCADA traffic its tcpdump captures nothing, so those checks are skipped.
 - The erspan advisory run adds an ERSPAN port to the host's `phenix` OVS bridge
   until its cleanup stage runs.
 
