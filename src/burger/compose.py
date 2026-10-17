@@ -104,28 +104,36 @@ def compose(res: Resolved, man: dict) -> tuple[list[dict], list[dict]]:
         if i.background:
             c["background"] = True
         components.append(c)
+    where = f"switchboard '{res.board.name}'"
     if res.board.runs is not None:
         runs = copy.deepcopy(res.board.runs)
+        placed = item_locations(runs)
+        lost = [i.name for i in scorch if not i.advisory and i.name not in placed]
+        if lost:
+            raise BurgerError(
+                f"{where} runs leave out enabled items {lost}; add them to a run or turn them off"
+            )
+        extras = [i for i in scorch if i.advisory and i.name not in placed]
     else:
         main = _run(res.board.name, [i for i in scorch if not i.advisory])
         runs = [main] if len(main) > 1 else []
-        runs += [_run(f"extras-{i.name}", [i]) for i in scorch if i.advisory]
-        for i in res.items:
-            extra = health_component(res, man, only=i) if i.advisory else None
-            if not extra:
-                continue
-            components.append(extra)
-            run = next((r for r in runs if r["name"] == f"extras-{i.name}"), None)
-            if run:
-                run["start"] = [*run.get("start", []), extra["name"]]
-            else:
-                runs.append({"name": f"extras-{i.name}", "start": [extra["name"]]})
+        extras = [i for i in scorch if i.advisory]
+    runs += [_run(f"extras-{i.name}", [i]) for i in extras]
+    for i in res.items:
+        extra = health_component(res, man, only=i) if i.advisory else None
+        if not extra:
+            continue
+        components.append(extra)
+        run = next((r for r in runs if r["name"] == f"extras-{i.name}"), None)
+        if run:
+            run["start"] = [*run.get("start", []), extra["name"]]
+        else:
+            runs.append({"name": f"extras-{i.name}", "start": [extra["name"]]})
     health = health_component(res, man)
     if health:
         components.insert(0, health)
         runs.insert(0, {"name": "health", "start": ["health"]})
     known = {c["name"] for c in components}
-    where = f"switchboard '{res.board.name}'"
     for r in runs:
         for stage in STAGES:
             missing = [c for c in r.get(stage, []) if c not in known]

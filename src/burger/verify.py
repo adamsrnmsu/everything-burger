@@ -103,13 +103,15 @@ def verify(res: Resolved, settings, host) -> list[Row]:
 
     components, runs = compose(res, man)
     background = {c["name"] for c in components if c.get("background")}
+    advisory_items = {i.name for i in res.items if i.advisory}
     status, errors = {}, {}
     for n, run in enumerate(runs):
         results = collect(res, settings, host, n)
-        advisory = str(run.get("name", "")).startswith("extras")
+        extras = str(run.get("name", "")).startswith("extras")
         for _, comp, stage, verdict, detail in evaluate(run, results, background):
             status[(comp, stage)] = verdict
             where = rd / "results" / f"run-{n}" / comp
+            advisory = extras or comp in advisory_items
             shown = "advisory-FAIL" if advisory and verdict == "FAIL" else verdict
             rows.append(
                 Row(comp, f"status {stage}", shown, detail, [str(where)] if where.exists() else [])

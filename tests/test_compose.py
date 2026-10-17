@@ -50,8 +50,9 @@ def test_pollers_need_background_and_stop(settings):
     ]
     with pytest.raises(BurgerError, match="background: true"):
         compose(r, MAN)
-    r = res(settings, "metadata")
-    r.board = dataclasses.replace(r.board, runs=[{"name": "x", "start": ["nope"]}])
+    r = res(settings, "iperf")
+    runs = [{**r.board.runs[0], "start": [*r.board.runs[0]["start"], "nope"]}]
+    r.board = dataclasses.replace(r.board, runs=runs)
     with pytest.raises(BurgerError, match="unknown components"):
         compose(r, MAN)
 
@@ -154,3 +155,23 @@ def test_site_wheel_only_has_no_version_check(settings, monkeypatch):
         monkeypatch.setenv(f"BURGER_{v}", str(GOLDEN / f"site-{f}.yaml"))
     man = {**MAN, "bennu": {"pr": 59, "sha": "c" * 40, "wheel": "pybennu-1-py3-none-any.whl"}}
     assert "dpkg-query" not in json.dumps(health_component(res(settings, "rtds"), man))
+
+
+def with_items(settings, name, *refs):
+    board = load_switchboard(name, settings)
+    board.items.update({r: True for r in refs})
+    return resolve(board, settings)
+
+
+def test_explicit_runs_must_place_enabled_items(settings):
+    with pytest.raises(BurgerError, match=r"runs leave out enabled items \['pipe'\]"):
+        compose(with_items(settings, "provider", "pipe"), MAN)
+
+
+def test_explicit_runs_keep_advisory_extras(settings):
+    comps, runs = compose(with_items(settings, "provider", "erspan", "bennu/siren"), MAN)
+    by_name = {r["name"]: r for r in runs}
+    assert "erspan" in json.dumps(by_name["extras-erspan"])
+    assert by_name["extras-siren"]["start"] == ["health-siren"]
+    assert "health-siren" in [c["name"] for c in comps]
+    assert [r["name"] for r in runs[:2]] == ["health", "provider"]

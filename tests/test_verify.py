@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import subprocess
 
@@ -82,3 +83,11 @@ def test_models_yaml_includes_validate_only(settings, monkeypatch):
     doc = yaml.safe_load((board_dir(settings, "metadata") / "out" / "models.yaml").read_text())
     assert "disruption-dos" in [c["name"] for c in doc["components"]]
     assert (board_dir(settings, "metadata") / "report.md").is_file()
+
+
+def test_advisory_item_in_explicit_run_stays_advisory(settings, monkeypatch):
+    res, host = setup(settings, monkeypatch, name="iperf", enable=["erspan"])
+    runs = [{**res.board.runs[0], "configure": ["iperf", "erspan"]}]
+    res.board = dataclasses.replace(res.board, runs=runs)
+    rows = [r for r in v.verify(res, settings, host) if r.item == "erspan"]
+    assert rows and all(r.verdict == "advisory-FAIL" for r in rows)
