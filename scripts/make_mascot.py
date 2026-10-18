@@ -13,8 +13,8 @@ import sys
 from PIL import Image
 
 RAMP = "+*#%@"
-COLS, ASPECT = 72, 0.5  # terminal cells are about twice as tall as wide
-LIFT = 0.55  # gamma < 1 brightens dark brown hair on a black terminal
+COLS, ASPECT = 52, 0.5  # 52 keeps the tall sceptre near 40 rows; cells are about 2:1
+LIFT = 0.55  # gamma < 1 brightens the dark patty and wood on a black terminal
 
 im = Image.open(sys.argv[1]).convert("RGBA")
 im = im.crop(im.getchannel("A").point(lambda a: 255 if a > 40 else 0).getbbox())
