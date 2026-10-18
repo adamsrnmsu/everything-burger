@@ -238,7 +238,8 @@ def test_site_image_reuse_and_rebuild(tmp_path):
     assert ctx.joinpath("Dockerfile").read_text().splitlines()[0] == "FROM reg.site/golang:1.24"
     assert ctx.joinpath("burger-site.crt").read_text().startswith("-----BEGIN CERTIFICATE-----")
     changed = load_site(
-        env=write_site(tmp_path, FULL.format(ca=ca(tmp_path)) + "# v2\n"), home=tmp_path
+        env=write_site(tmp_path, FULL.format(ca=ca(tmp_path)).replace("pypi.site", "pypi2.site")),
+        home=tmp_path,
     )
     assert changed.tag() != site.tag()
 
@@ -301,3 +302,66 @@ def test_probe_answers_errors_and_5xx(tmp_path):
     finally:
         srv.shutdown()
     assert probe(f"http://127.0.0.1:{srv.server_port}/", site, None, timeout=2)
+
+
+# ---------------------------------------------------------------- final review fixes
+
+
+def test_tag_follows_expanded_values(tmp_path):
+    cfg = write_site(tmp_path, "mirrors: {go: '${GOMIRROR}'}\n")
+    a = load_site(env={**cfg, "GOMIRROR": "https://go1"}, home=tmp_path).tag()
+    b = load_site(env={**cfg, "GOMIRROR": "https://go2"}, home=tmp_path).tag()
+    assert a != b
+
+
+def test_bundle_is_world_readable(tmp_path):
+    import stat
+
+    old = os.umask(0o077)
+    try:
+        site = load_site(env=write_site(tmp_path, f"ca_certs: [{ca(tmp_path)}]\n"), home=tmp_path)
+        mode = stat.S_IMODE(site.bundle(tmp_path / "work").stat().st_mode)
+    finally:
+        os.umask(old)
+    assert mode == 0o644
+
+
+def test_registry_gets_trailing_slash(tmp_path):
+    site = load_site(
+        env=write_site(tmp_path, "mirrors: {registry: reg.site/docker}\n"), home=tmp_path
+    )
+    assert site.image_name("ubuntu:22.04") == "reg.site/docker/ubuntu:22.04"
+
+
+def test_probe_honors_site_no_proxy(tmp_path, monkeypatch):
+    import burger.site as site_mod
+
+    seen = {}
+
+    class Opener:
+        def open(self, url, timeout):
+            raise OSError("unreached")
+
+    def build_opener(*handlers):
+        seen["proxies"] = next(h.proxies for h in handlers if hasattr(h, "proxies"))
+        return Opener()
+
+    monkeypatch.setattr(site_mod.urllib.request, "build_opener", build_opener)
+    cfg = "proxy: {https: 'http://p:8080', no_proxy: '.site.internal'}\n"
+    site = load_site(env=write_site(tmp_path, cfg), home=tmp_path)
+    site_mod.probe("https://pypi.site.internal/simple", site, None)
+    assert seen["proxies"] == {}
+    site_mod.probe("https://pypi.example.com/simple", site, None)
+    assert seen["proxies"] == {"https": "http://p:8080"}
+
+
+def test_stage_names_are_case_insensitive(tmp_path):
+    site = full_site(tmp_path)
+    out = patch_dockerfile("FROM ubuntu:22.04 AS Builder\nFROM builder\n", site).splitlines()
+    assert out.count("FROM builder") == 1
+    assert sum(ln.startswith("COPY burger-site.crt") for ln in out) == 1
+
+
+def test_suite_never_reads_the_hosts_site_file():
+    assert "BURGER_SITE_CONFIG" not in os.environ
+    assert load_site() is None  # HOME points at an empty temp dir, not the real one

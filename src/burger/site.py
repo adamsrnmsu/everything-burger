@@ -11,6 +11,7 @@ import re
 import shutil
 import ssl
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -50,7 +51,6 @@ class Site:
     ca_certs: tuple
     mirrors: dict
     dockerfile_extra: str
-    raw: bytes
 
     def bundle(self, work: Path) -> Path | None:
         """All CA files as one PEM bundle under work/site/, or None without ca_certs."""
@@ -59,6 +59,7 @@ class Site:
         path = work / "site" / "ca-bundle.pem"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("".join(p.read_text().rstrip("\n") + "\n" for p in self.ca_certs))
+        path.chmod(0o644)  # COPY keeps the mode; apt (_apt) and -u uid builds must read it
         return path
 
     def env(self, ca_path: str) -> dict[str, str]:
@@ -115,8 +116,9 @@ class Site:
         return "\n".join(lines)
 
     def tag(self) -> str:
-        """12 hex of the site file and CA bytes: a site-image tag that changes with either."""
-        h = hashlib.sha256(self.raw)
+        """12 hex of what a site image is made of (the expanded layer, the registry and the
+        CA bytes), so a change to any of them, or to a ${VAR} behind them, rebuilds it."""
+        h = hashlib.sha256((self.layer() + "\n" + self.image_name("")).encode())
         for ca in self.ca_certs:
             h.update(ca.read_bytes())
         return h.hexdigest()[:12]
@@ -158,9 +160,9 @@ def patch_dockerfile(text: str, site: Site) -> str:
             continue
         head, flags, image, rest = m.groups()
         stage = _STAGE.search(rest)
-        external = image.lower() != "scratch" and image not in stages
+        external = image.lower() != "scratch" and image.lower() not in stages  # Docker ignores case
         if stage:
-            stages.add(stage.group(1))
+            stages.add(stage.group(1).lower())
         if not external:
             out.append(line)
             continue
@@ -199,6 +201,8 @@ def load_site(env: Mapping[str, str] | None = None, home: Path | None = None) ->
     for key in ("git", "urls"):
         if not isinstance(mirrors.get(key) or {}, dict):
             raise BurgerError(f"{path}: mirrors.{key} must map origin URLs to mirror URLs")
+    if mirrors.get("registry") and not str(mirrors["registry"]).endswith("/"):
+        mirrors = {**mirrors, "registry": f"{mirrors['registry']}/"}  # a prefix: reg/x + /ubuntu
     cas = []
     for i, ca in enumerate(doc.get("ca_certs") or []):
         ca = Path(str(ca)).expanduser()
@@ -213,7 +217,6 @@ def load_site(env: Mapping[str, str] | None = None, home: Path | None = None) ->
         ca_certs=tuple(cas),
         mirrors=mirrors,
         dockerfile_extra=str(doc.get("dockerfile_extra") or ""),
-        raw=path.read_bytes(),
     )
 
 
@@ -268,6 +271,9 @@ def build_dockerfile(host, context: Path, tag: str) -> None:
 def probe(url: str, site: Site, bundle: Path | None, timeout: int = 15) -> str | None:
     """GET url through the site proxy, trusting the site CA. None on any answer below 500."""
     proxies = {k: v for k, v in site.proxy.items() if k in ("http", "https")}
+    host = urllib.parse.urlsplit(url).hostname or ""
+    if urllib.request.proxy_bypass_environment(host, {"no": site.proxy.get("no_proxy", "")}):
+        proxies = {}
     context = ssl.create_default_context(cafile=str(bundle) if bundle else None)
     opener = urllib.request.build_opener(
         urllib.request.ProxyHandler(proxies), urllib.request.HTTPSHandler(context=context)

@@ -295,3 +295,23 @@ def test_main_passes_the_site_to_host(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "Host", capture)
     main(["--quiet", "list"])
     assert seen["site"] is not None and seen["site"].mirrors["registry"] == "reg.site/"
+
+
+def test_preflight_redacts_mirror_tokens(monkeypatch, tmp_path, capsys):
+    from burger.site import load_site
+
+    cert = tmp_path / "ca.pem"
+    cert.write_text("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n")
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text(
+        f"ca_certs: [{cert}]\nmirrors:\n  pypi: https://u:tok@pypi.site/simple\n"
+        "  git: {'https://github.com/': 'https://u:tok@git.site/'}\n"
+    )
+    monkeypatch.setenv("BURGER_SITE_CONFIG", str(cfg))
+    host = _preflight_host(monkeypatch, load_site())
+    host.responses["git"] = subprocess.CompletedProcess(
+        [], 128, "", "fatal: https://u:tok@git.site/"
+    )
+    monkeypatch.setattr(cli, "probe", lambda *_a, **_k: None)
+    main(["--quiet", "preflight", "--linux-only"])
+    assert "tok" not in capsys.readouterr().out

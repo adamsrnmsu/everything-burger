@@ -20,7 +20,7 @@ from burger.items import all_items, load_item
 from burger.render import render
 from burger.routes import load_route
 from burger.shell import Host
-from burger.site import load_site, probe
+from burger.site import load_site, probe, redact
 from burger.switchboard import Resolved, all_switchboards, load_switchboard, resolve
 from burger.ui import banner, results_table, setup_logging
 
@@ -199,10 +199,14 @@ def _site_rows(host, rows, chk) -> None:
     ):
         if url:
             err = probe(url, site, bundle)
-            chk(f"{key} mirror {url}", err is None, err or "")
+            chk(redact(f"{key} mirror {url}"), err is None, err or "")
     if m.get("git"):
         res = host.run(["git", "ls-remote", REPOS["apps"], "HEAD"], check=False, capture=True)
-        chk("git mirror (ls-remote sceptre-phenix-apps)", res.returncode == 0, res.stderr.strip())
+        chk(
+            "git mirror (ls-remote sceptre-phenix-apps)",
+            res.returncode == 0,
+            redact(res.stderr.strip()),
+        )
     if str(m.get("gosumdb", "")).lower() == "off":
         rows.append(Row("-", "GOSUMDB=off", "WARN", "Go checksum verification is off", []))
 

@@ -80,6 +80,8 @@ registry mirror, and probes each mirror through the proxy with the CA bundle.
 - Values from the site file are baked into the local `burger-site/...` and
   bennu build images (`docker history` shows them). Keep secrets out of it;
   burger redacts `user:pass@` in URLs in its own logs and errors.
+- After removing the site file, run `docker rmi bennu-verify:22.04-lint`
+  once: bennu's `run.sh` reuses that tag, which still carries the site layer.
 - The site layer targets Debian/Ubuntu images, which is every image burger
   uses today.
 - This is tested against the exact commands burger issues and a saved copy of
