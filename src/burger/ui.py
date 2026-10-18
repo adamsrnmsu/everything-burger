@@ -10,9 +10,10 @@ from rich.text import Text
 
 from burger.checks import Row
 
-# Truecolor ASCII art, generated once by scripts/make_mascot.py and shipped as
-# package data, so nothing extra is installed to draw it.
-MASCOT = Text.from_ansi((files("burger") / "assets" / "mascot.ans").read_text())
+# Optional truecolor ASCII art (scripts/make_mascot.py), shipped as package data so
+# nothing extra is installed to draw it. Without the file, the banner is the figlet.
+_MASCOT_FILE = files("burger") / "assets" / "mascot.ans"
+MASCOT = Text.from_ansi(_MASCOT_FILE.read_text()) if _MASCOT_FILE.is_file() else None
 
 _STYLE = {
     "ok": "green",
@@ -25,7 +26,8 @@ _STYLE = {
 
 def banner(console: Console) -> None:
     console.print(pyfiglet.figlet_format("BURGER", font="standard"), style="bold red", end="")
-    console.print(MASCOT)
+    if MASCOT is not None:
+        console.print(MASCOT)
 
 
 def results_table(rows: list[Row]) -> Table:

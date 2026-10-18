@@ -9,8 +9,8 @@ default_language_version.python = "3.12"
 
 # Hooks at the same priority run concurrently; lower priorities run first, so
 # the fixers finish before the checks. tests/golden/ holds byte-exact renders
-# from the old script and src/burger/assets/mascot.ans is generated ANSI art:
-# both are kept out of the fixers.
+# from the old script and src/burger/assets/ holds generated ANSI art: both are
+# kept out of the fixers.
 
 # Lint and format Python (same rules as `make check`).
 [[repos]]

@@ -1,11 +1,11 @@
-"""Regenerate src/burger/assets/mascot.ans from a photo. Not part of the package.
+"""Make src/burger/assets/mascot.ans (the banner art) from an image. Not part of the package.
 
 Cut the background out first (e.g. `uvx --from 'rembg[cpu,cli]' rembg i photo.png cutout.png`),
 then:
 
     uvx --with pillow python scripts/make_mascot.py cutout.png > src/burger/assets/mascot.ans
 
-The photo stays out of the repo; only the generated art is committed.
+Use an image you own the rights to: the generated art ships in a public repo.
 """
 
 import sys
