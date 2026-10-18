@@ -5,6 +5,8 @@ from pathlib import Path
 
 from loguru import logger
 
+from burger.site import build_dockerfile
+
 
 def bennu_startup(man: dict) -> str:
     """Installs the round's bennu build before sceptre-start.sh runs
@@ -66,7 +68,7 @@ def bennu_injections(man: dict, stage_dir: str) -> list:
 def build_bennu(host, wt: Path, out: Path, man: dict, install: list[str], pip: list[str]) -> None:
     repo = Path(os.environ.get("BURGER_BENNU_REPO", host.s.work / "repos" / "bennu")).resolve()
     image = "burger-bennu-build:22.04"
-    host.run(["docker", "build", "-t", image, wt / "docker" / "test"])
+    build_dockerfile(host, wt / "docker" / "test", image)
     if "pybennu" in install:
         # Copied first: the build backend may write next to the sources.
         script = (
@@ -161,6 +163,8 @@ def bennu_check(host, wt: Path) -> None:
     """bennu's own docker harness (build, smoke, ctest, pytest, gotest) on the
     build's bennu PR: the coverage for pybennu (#56) and gobennu (#57), which
     waterway never runs."""
+    if host.site:  # run.sh builds its image only when the tag is missing: give it ours
+        build_dockerfile(host, wt / "docker" / "test", "bennu-verify:22.04-lint")
     host.run(
         [
             "bash",

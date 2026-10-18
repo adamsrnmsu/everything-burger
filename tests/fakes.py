@@ -15,8 +15,9 @@ class FakeHost(Host):
         self,
         responses: dict[str, subprocess.CompletedProcess] | None = None,
         settings: Settings | None = None,
+        site=None,
     ):
-        super().__init__(settings or Settings.from_env())
+        super().__init__(settings or Settings.from_env(), site)
         self.responses = responses or {}
         self.calls: list[list[str]] = []
         self.api_responses: dict[str, dict | None] = {}

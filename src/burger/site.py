@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -192,3 +193,51 @@ def load_site(env: Mapping[str, str] | None = None, home: Path | None = None) ->
         dockerfile_extra=str(doc.get("dockerfile_extra") or ""),
         raw=path.read_bytes(),
     )
+
+
+def _context(host, name: str, source: Path | None = None) -> Path:
+    """A fresh build directory under <work>/site/build/, seeded from source and the CA."""
+    ctx = host.s.work / "site" / "build" / name
+    shutil.rmtree(ctx, ignore_errors=True)
+    if source:
+        shutil.copytree(source, ctx)
+    ctx.mkdir(parents=True, exist_ok=True)
+    bundle = host.site.bundle(host.s.work)
+    if bundle:
+        shutil.copy(bundle, ctx / "burger-site.crt")
+    return ctx
+
+
+def site_image(host, image: str) -> str:
+    """The image to run: `image` itself without a site, else its site-layer image,
+    built only when that tag (which hashes the site file and CAs) is not there yet."""
+    site = host.site
+    if site is None:
+        return image
+    tag = f"burger-site/{re.sub(r'[/:]', '_', image)}:{site.tag()}"
+    if host.run(["docker", "image", "inspect", tag], check=False, capture=True).returncode:
+        ctx = _context(host, tag.split("/", 1)[1].replace(":", "-"))
+        (ctx / "Dockerfile").write_text(f"FROM {site.image_name(image)}\n{site.layer()}\n")
+        host.run(["docker", "build", *_build_args(site), "-t", tag, ctx])
+    return tag
+
+
+def _build_args(site: Site) -> list[str]:
+    args = []
+    for key, value in site.env("").items():
+        if key.lower() in ("http_proxy", "https_proxy", "no_proxy"):
+            args += ["--build-arg", f"{key}={value}"]
+    return args
+
+
+def build_dockerfile(host, context: Path, tag: str) -> None:
+    """docker build of a Dockerfile we do not own: as is without a site, else from a
+    patched copy of its context (site layer after each FROM, mirrors.urls applied)."""
+    site = host.site
+    if site is None:
+        host.run(["docker", "build", "-t", tag, context])
+        return
+    ctx = _context(host, re.sub(r"[/:]", "-", tag), context)
+    dockerfile = ctx / "Dockerfile"
+    dockerfile.write_text(patch_dockerfile(dockerfile.read_text(), site))
+    host.run(["docker", "build", *_build_args(site), "-t", tag, ctx])

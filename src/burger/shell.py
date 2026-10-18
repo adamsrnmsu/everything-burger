@@ -14,8 +14,9 @@ from burger.config import BurgerError, Settings
 class Host:
     """Everything that touches the machine: commands, the phēnix container, the REST API."""
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, site=None):
         self.s = settings
+        self.site = site  # burger.site.Site, or None without a site file
 
     def run(self, cmd, check=True, capture=False, **kw):
         cmd = [str(c) for c in cmd]

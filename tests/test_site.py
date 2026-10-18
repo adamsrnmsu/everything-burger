@@ -1,9 +1,14 @@
+import dataclasses
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from burger.config import BurgerError
-from burger.site import load_site, patch_dockerfile, redact
+from burger import bennu
+from burger.config import BurgerError, Settings
+from burger.site import build_dockerfile, load_site, patch_dockerfile, redact, site_image
+from tests.fakes import FakeHost
 
 PEM = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
 
@@ -169,3 +174,104 @@ def test_image_name(tmp_path):
     assert full_site(tmp_path).image_name("ubuntu:22.04") == "reg.site/ubuntu:22.04"
     plain = load_site(env=write_site(tmp_path, "proxy: {http: x}\n"), home=tmp_path)
     assert plain.image_name("ubuntu:22.04") == "ubuntu:22.04"
+
+
+# ---------------------------------------------------------------- docker steps (Task 3)
+
+
+def _host(tmp_path, site=None, responses=None):
+    settings = Settings.from_env(tmp_path)
+    settings = dataclasses.replace(settings, work=tmp_path / "work")
+    return FakeHost(responses or {}, settings, site=site)
+
+
+def test_no_site_commands_unchanged(tmp_path, monkeypatch):
+    """Without a site file, build_bennu and bennu_check issue exactly today's commands."""
+    monkeypatch.delenv("BURGER_BENNU_REPO", raising=False)
+    out = tmp_path / "out"
+    (out / "wheels").mkdir(parents=True)
+    (out / "pybennu-6.0.0-py3-none-any.whl").write_text("")
+    version = subprocess.CompletedProcess([], 0, "6.0.1\n", "")
+    host = _host(tmp_path, responses={"docker run --rm -v": version})
+    wt = tmp_path / "wt"
+    bennu.build_bennu(host, wt, out, {"bennu": {}}, ["deb", "pybennu"], ["loguru>=0.7,<1"])
+    bennu.bennu_check(host, wt)
+    T, R, W = str(tmp_path), str(tmp_path.resolve()), str((tmp_path / "work").resolve())
+    uid = f"{os.getuid()}:{os.getgid()}"
+    img = "burger-bennu-build:22.04"
+    assert host.calls == [
+        ["docker", "build", "-t", img, f"{T}/wt/docker/test"],
+        ["docker", "run", "--rm", "-v", f"{R}/wt:{R}/wt:ro", "-v", f"{T}/out:/out", img,
+         "bash", "-ec",
+         f"cp -r {R}/wt/src/pybennu /tmp/pyb && pip3 install -q uv && uv build -q --wheel "
+         f"-o /tmp/w /tmp/pyb && cp /tmp/w/pybennu-*.whl /out/ && chown {uid} /out/pybennu-*.whl"],
+        ["docker", "run", "--rm", "-v", f"{T}/out:/out", img, "bash", "-ec",
+         f"pip3 wheel -q --no-deps -w /out/wheels 'loguru>=0.7,<1' && chown -R {uid} /out/wheels"],
+        ["docker", "run", "--rm", "-v", f"{W}/repos/bennu:{W}/repos/bennu:ro",
+         "-v", f"{R}/wt:{R}/wt:ro", "-v", f"{T}/out:/out", img, "bash", "-ec",
+         "git config --global --add safe.directory '*' && mkdir -p /tmp/b && cd /tmp/b && "
+         f"cmake -DBUILD_TESTS=OFF {R}/wt >/dev/null && "
+         f'make -j"$(nproc)" package >/dev/null && cp bennu-*.deb /out/bennu.deb && '
+         f"chown {uid} /out/bennu.deb"],
+        ["docker", "run", "--rm", "-v", f"{T}/out:/out", img, "dpkg-deb", "-f",
+         "/out/bennu.deb", "Version"],
+        ["bash", f"{T}/wt/docker/test/run.sh", "-s", T + "/wt", "build", "smoke", "ctest",
+         "pytest", "gotest"],
+    ]  # fmt: skip
+    nosite = _host(tmp_path)
+    assert site_image(nosite, "golang:1.24") == "golang:1.24" and nosite.calls == []
+
+
+def test_site_image_reuse_and_rebuild(tmp_path):
+    site = full_site(tmp_path)
+    tag = f"burger-site/golang_1.24:{site.tag()}"
+    present = _host(
+        tmp_path, site, {f"docker image inspect {tag}": subprocess.CompletedProcess([], 0)}
+    )
+    assert site_image(present, "golang:1.24") == tag
+    assert not [c for c in present.calls if c[:2] == ["docker", "build"]]
+    missing = _host(tmp_path, site, {"docker image inspect": subprocess.CompletedProcess([], 1)})
+    assert site_image(missing, "golang:1.24") == tag
+    builds = [c for c in missing.calls if c[:2] == ["docker", "build"]]
+    assert len(builds) == 1 and builds[0][builds[0].index("-t") + 1] == tag
+    ctx = Path(builds[0][-1])
+    assert ctx.joinpath("Dockerfile").read_text().splitlines()[0] == "FROM reg.site/golang:1.24"
+    assert ctx.joinpath("burger-site.crt").read_text().startswith("-----BEGIN CERTIFICATE-----")
+    changed = load_site(
+        env=write_site(tmp_path, FULL.format(ca=ca(tmp_path)) + "# v2\n"), home=tmp_path
+    )
+    assert changed.tag() != site.tag()
+
+
+def test_build_dockerfile_with_site(tmp_path):
+    site = full_site(tmp_path)
+    context = tmp_path / "bennu" / "docker" / "test"
+    context.mkdir(parents=True)
+    context.joinpath("Dockerfile").write_text(FIXTURE.read_text())
+    context.joinpath("run.sh").write_text("#!/bin/sh\n")
+    before = {p.name: p.read_bytes() for p in context.iterdir()}
+    host = _host(tmp_path, site)
+    build_dockerfile(host, context, "burger-bennu-build:22.04")
+    (cmd,) = host.calls
+    assert cmd[:2] == ["docker", "build"]
+    assert "HTTPS_PROXY=http://p:8080" in cmd and "https_proxy=http://p:8080" in cmd
+    assert cmd[cmd.index("-t") + 1] == "burger-bennu-build:22.04"
+    ctx = Path(cmd[-1])
+    assert ctx != context
+    assert ctx.joinpath("Dockerfile").read_text().splitlines()[1] == "FROM reg.site/ubuntu:22.04"
+    assert ctx.joinpath("burger-site.crt").is_file() and ctx.joinpath("run.sh").is_file()
+    assert {p.name: p.read_bytes() for p in context.iterdir()} == before
+    nosite = _host(tmp_path)
+    build_dockerfile(nosite, context, "x:1")
+    assert nosite.calls == [["docker", "build", "-t", "x:1", str(context)]]
+
+
+def test_bennu_check_prebuilds_verify_image_with_site(tmp_path):
+    host = _host(tmp_path, full_site(tmp_path))
+    wt = tmp_path / "wt"
+    (wt / "docker" / "test").mkdir(parents=True)
+    (wt / "docker" / "test" / "Dockerfile").write_text("FROM ubuntu:22.04\n")
+    bennu.bennu_check(host, wt)
+    assert host.calls[0][:2] == ["docker", "build"]
+    assert host.calls[0][host.calls[0].index("-t") + 1] == "bennu-verify:22.04-lint"
+    assert host.calls[-1][:2] == ["bash", str(wt / "docker" / "test" / "run.sh")]
