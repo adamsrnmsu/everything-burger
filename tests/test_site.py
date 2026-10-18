@@ -1,7 +1,9 @@
+from pathlib import Path
+
 import pytest
 
 from burger.config import BurgerError
-from burger.site import load_site, redact
+from burger.site import load_site, patch_dockerfile, redact
 
 PEM = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
 
@@ -100,3 +102,70 @@ def test_env_values(tmp_path):
 
 def test_redact():
     assert redact("https://u:p@h/x and http://h2/") == "https://***@h/x and http://h2/"
+
+
+FIXTURE = Path(__file__).parent / "fixtures" / "bennu-test.Dockerfile"
+
+
+def full_site(tmp_path, extra=""):
+    return load_site(env=write_site(tmp_path, FULL.format(ca=ca(tmp_path)) + extra), home=tmp_path)
+
+
+def test_layer_order_and_values(tmp_path):
+    lines = full_site(tmp_path).layer().splitlines()
+    first = {key: next(i for i, ln in enumerate(lines) if ln.startswith(key))
+             for key in ("COPY burger-site.crt", "ENV ", "RUN ")}  # fmt: skip
+    assert first["COPY burger-site.crt"] < first["ENV "] < first["RUN "]
+    text = "\n".join(lines)
+    assert 'Acquire::https::CAInfo "/usr/local/share/ca-certificates/burger-site.crt";' in text
+    assert 'HTTPS_PROXY="http://p:8080"' in text
+    assert "apt.site/ubuntu" in text
+    assert lines[-1] == "RUN true"  # dockerfile_extra last
+    proxy_only = load_site(
+        env=write_site(tmp_path, "proxy: {https: http://p:8080}\n"), home=tmp_path
+    )
+    assert "COPY" not in proxy_only.layer() and "SSL_CERT_FILE" not in proxy_only.layer()
+
+
+def test_patch_bennu_fixture(tmp_path):
+    site = full_site(tmp_path)
+    original = FIXTURE.read_text()
+    patched = patch_dockerfile(original, site)
+    plines = patched.splitlines()
+    assert plines[1] == "FROM reg.site/ubuntu:22.04"  # after the leading comment
+    assert plines[2 : 2 + len(site.layer().splitlines())] == site.layer().splitlines()
+    runs = [ln for ln in original.splitlines() if ln.startswith("RUN ")]
+    tail = plines[2 + len(site.layer().splitlines()) :]
+    assert [ln for ln in tail if ln.startswith("RUN ")] == [
+        r.replace("https://github.com/", "https://m.site/gh/") for r in runs
+    ]
+    assert "https://m.site/gh/zeromq/libzmq/releases" in patched
+    assert "https://raw.githubusercontent.com/golangci" in patched  # not under github.com/
+
+
+def test_patch_multistage_and_flags(tmp_path):
+    site = full_site(tmp_path)
+    text = "FROM --platform=linux/amd64 golang:1.24 AS build\nRUN make\nFROM build\nFROM scratch\n"
+    out = patch_dockerfile(text, site).splitlines()
+    layer = site.layer().splitlines()
+    assert out[0] == "FROM --platform=linux/amd64 reg.site/golang:1.24 AS build"
+    assert out[1 : 1 + len(layer)] == layer
+    assert out[1 + len(layer) :] == ["RUN make", "FROM build", "FROM scratch"]
+
+
+def test_tag_changes_with_site_and_ca(tmp_path):
+    cert = ca(tmp_path)
+    env = write_site(tmp_path, f"ca_certs: [{cert}]\n")
+    t1 = load_site(env=env, home=tmp_path).tag()
+    assert len(t1) == 12 and int(t1, 16) >= 0
+    cert.write_text(PEM.replace("MIIB", "ZZZZ"))
+    t2 = load_site(env=env, home=tmp_path).tag()
+    write_site(tmp_path, f"ca_certs: [{cert}]\nproxy: {{http: x}}\n")
+    t3 = load_site(env=env, home=tmp_path).tag()
+    assert len({t1, t2, t3}) == 3
+
+
+def test_image_name(tmp_path):
+    assert full_site(tmp_path).image_name("ubuntu:22.04") == "reg.site/ubuntu:22.04"
+    plain = load_site(env=write_site(tmp_path, "proxy: {http: x}\n"), home=tmp_path)
+    assert plain.image_name("ubuntu:22.04") == "ubuntu:22.04"

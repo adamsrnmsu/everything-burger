@@ -4,6 +4,8 @@ The site file lives outside git: $BURGER_SITE_CONFIG, else ~/.config/burger/site
 Without one, nothing here changes what burger runs.
 """
 
+import hashlib
+import json
 import os
 import re
 from collections.abc import Mapping
@@ -27,6 +29,9 @@ CA_VARS = (
 )
 _PEM = "-----BEGIN CERTIFICATE-----"
 _USERINFO = re.compile(r"(\w+://)[^/@\s]+@")
+_FROM = re.compile(r"^(\s*FROM\s+)((?:--\S+\s+)*)(\S+)(.*)$", re.IGNORECASE)
+_STAGE = re.compile(r"\bAS\s+(\S+)", re.IGNORECASE)
+_UBUNTU = ("http://archive.ubuntu.com/ubuntu", "http://security.ubuntu.com/ubuntu")
 
 
 def redact(text: str) -> str:
@@ -74,6 +79,71 @@ class Site:
         if m.get("gosumdb"):
             env["GOSUMDB"] = m["gosumdb"]
         return env
+
+    def layer(self) -> str:
+        """Dockerfile lines inserted after a FROM: trust the CA, set proxy and mirrors."""
+        lines = []
+        if self.ca_certs:
+            lines.append(f"COPY burger-site.crt {CA_IN_IMAGE}")
+        env = self.env(CA_IN_IMAGE)
+        if env:
+            lines.append("ENV " + " ".join(f"{k}={json.dumps(v)}" for k, v in env.items()))
+        apt = []
+        if self.ca_certs:
+            apt.append(f'Acquire::https::CAInfo "{CA_IN_IMAGE}";')
+        for key, scheme in (("http", "http"), ("https", "https")):
+            if self.proxy.get(key):
+                apt.append(f'Acquire::{scheme}::Proxy "{self.proxy[key]}";')
+        if apt:
+            conf = "\\n".join(apt)
+            lines.append(f"RUN printf '{conf}\\n' > /etc/apt/apt.conf.d/99burger-site")
+        if self.ca_certs:
+            lines.append(
+                "RUN command -v update-ca-certificates >/dev/null && update-ca-certificates || true"
+            )
+        if self.mirrors.get("apt"):
+            subs = " ".join(f"-e 's#{u}#{self.mirrors['apt']}#g'" for u in _UBUNTU)
+            lines.append(
+                f"RUN if [ -f /etc/apt/sources.list ]; then sed -i {subs} /etc/apt/sources.list; fi"
+            )
+        if self.dockerfile_extra.strip():
+            lines += self.dockerfile_extra.strip().splitlines()
+        return "\n".join(lines)
+
+    def tag(self) -> str:
+        """12 hex of the site file and CA bytes: a site-image tag that changes with either."""
+        h = hashlib.sha256(self.raw)
+        for ca in self.ca_certs:
+            h.update(ca.read_bytes())
+        return h.hexdigest()[:12]
+
+    def image_name(self, image: str) -> str:
+        return (self.mirrors.get("registry") or "") + image
+
+
+def patch_dockerfile(text: str, site: Site) -> str:
+    """Insert the site layer after each FROM of an external image, point it at the
+    registry mirror, and apply mirrors.urls to the original lines."""
+    urls = site.mirrors.get("urls") or {}
+    stages, out = set(), []
+    for line in text.splitlines():
+        for origin, mirror in urls.items():
+            line = line.replace(origin, mirror)
+        m = _FROM.match(line)
+        if not m:
+            out.append(line)
+            continue
+        head, flags, image, rest = m.groups()
+        stage = _STAGE.search(rest)
+        external = image.lower() != "scratch" and image not in stages
+        if stage:
+            stages.add(stage.group(1))
+        if not external:
+            out.append(line)
+            continue
+        out.append(f"{head}{flags}{site.image_name(image)}{rest}")
+        out += site.layer().splitlines()
+    return "\n".join(out) + "\n"
 
 
 def _check_fields(path: Path, where: str, doc: dict, allowed: set[str]) -> None:
