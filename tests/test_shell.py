@@ -51,3 +51,74 @@ def test_fake_host_matches_prefix():
     assert fake.run(["ls"]).returncode == 0
     assert fake.calls == [["git", "-C", "r", "log"], ["ls"]]
     assert fake.api("/x") is None
+
+
+# ---------------------------------------------------------------- site profile (git, gh, redaction)
+
+
+def _site(tmp_path):
+    from burger.site import load_site
+
+    cert = tmp_path / "ca.pem"
+    cert.write_text("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n")
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text(
+        "proxy: {https: 'http://p:8080'}\n"
+        f"ca_certs: [{cert}]\n"
+        "mirrors: {git: {'https://github.com/': 'https://gitlab.site/gh/'}}\n"
+    )
+    return load_site(env={"BURGER_SITE_CONFIG": str(cfg)}, home=tmp_path)
+
+
+def _capture(monkeypatch):
+    seen = []
+
+    def fake_run(cmd, **kw):
+        seen.append((cmd, kw))
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    return seen
+
+
+def test_git_gets_site_options(tmp_path, monkeypatch):
+    seen = _capture(monkeypatch)
+    settings = dataclasses.replace(Settings.from_env(tmp_path), work=tmp_path / "work")
+    Host(settings, _site(tmp_path)).run(["git", "fetch", "x"])
+    ((cmd, kw),) = seen
+    bundle = tmp_path / "work" / "site" / "ca-bundle.pem"
+    assert cmd == ["git", "-c", "url.https://gitlab.site/gh/.insteadOf=https://github.com/",
+                   "-c", f"http.sslCAInfo={bundle}", "-c", "http.proxy=http://p:8080",
+                   "fetch", "x"]  # fmt: skip
+    assert kw["env"]["HTTPS_PROXY"] == "http://p:8080"
+
+
+def test_gh_gets_env_not_args(tmp_path, monkeypatch):
+    seen = _capture(monkeypatch)
+    settings = dataclasses.replace(Settings.from_env(tmp_path), work=tmp_path / "work")
+    Host(settings, _site(tmp_path)).run(["gh", "pr", "list"])
+    ((cmd, kw),) = seen
+    assert cmd == ["gh", "pr", "list"]
+    assert kw["env"]["https_proxy"] == "http://p:8080"
+    assert kw["env"]["SSL_CERT_FILE"].endswith("ca-bundle.pem")
+
+
+def test_no_site_git_unchanged(tmp_path, monkeypatch):
+    seen = _capture(monkeypatch)
+    Host(Settings.from_env(tmp_path)).run(["git", "fetch", "x"])
+    ((cmd, kw),) = seen
+    assert cmd == ["git", "fetch", "x"] and "env" not in kw
+
+
+def test_redacts_credentials_in_logs_and_errors(tmp_path):
+    from loguru import logger
+
+    lines = []
+    sink = logger.add(lines.append, level="DEBUG", format="{message}")
+    try:
+        with pytest.raises(BurgerError) as err:
+            Host(Settings.from_env(tmp_path)).run(["false", "https://u:tok@m.site/x"])
+    finally:
+        logger.remove(sink)
+    assert "tok" not in str(err.value) and "***@m.site" in str(err.value)
+    assert lines and not any("tok" in str(ln) for ln in lines)

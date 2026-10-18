@@ -25,3 +25,10 @@ def topologies():
     if not path:
         pytest.skip("BURGER_TOPOLOGIES is not set")
     return Path(path)
+
+
+@pytest.fixture(autouse=True)
+def no_host_site_file(monkeypatch, tmp_path_factory):
+    """Tests never pick up the machine's real site file (~/.config/burger/site.yaml)."""
+    monkeypatch.delenv("BURGER_SITE_CONFIG", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path_factory.mktemp("home")))

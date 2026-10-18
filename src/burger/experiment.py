@@ -14,6 +14,7 @@ from burger.checks.status import collect_status, evaluate
 from burger.compose import compose
 from burger.config import BurgerError, Settings
 from burger.render import DEBS_STARTUP, MINICCC_STARTUP, render
+from burger.site import site_image
 from burger.switchboard import Resolved
 from burger.vcs import board_dir, load_manifest
 
@@ -46,12 +47,13 @@ def build(res: Resolved, settings: Settings, host) -> None:
         host.run(["git", "-C", rd / "apps", "archive", "HEAD", "src/python"], stdout=f)
 
     # Go mirror app: static binary.
+    go_image = site_image(host, "golang:1.24")
     host.run(
         [
             "docker", "run", "--rm", "-u", uid,
             "-v", f"{rd / 'apps' / 'src' / 'go'}:/src", "-v", f"{out}:/out",
             "-w", "/src", "-e", "CGO_ENABLED=0", "-e", "GOCACHE=/tmp/gocache",
-            "-e", "GOPATH=/tmp/gopath", "-e", "GOFLAGS=-buildvcs=false", "golang:1.24",
+            "-e", "GOPATH=/tmp/gopath", "-e", "GOFLAGS=-buildvcs=false", go_image,
             "go", "build", "-o", "/out/phenix-app-mirror", "./cmd/phenix-app-mirror",
         ]
     )  # fmt: skip
@@ -61,9 +63,10 @@ def build(res: Resolved, settings: Settings, host) -> None:
         # jammy: phēnix's default image release, which bennu.qc2 is built on.
         shutil.rmtree(out / "debs", ignore_errors=True)
         (out / "debs").mkdir()
+        apt_image = site_image(host, "ubuntu:22.04")
         host.run(
             [
-                "docker", "run", "--rm", "-v", f"{out / 'debs'}:/out", "-w", "/out", "ubuntu:22.04",
+                "docker", "run", "--rm", "-v", f"{out / 'debs'}:/out", "-w", "/out", apt_image,
                 "bash", "-ec",
                 f"apt-get update -qq && apt-get download -q {shlex.join(packages)} && "
                 f"chown {uid} /out/*.deb",

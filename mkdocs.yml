@@ -46,6 +46,7 @@ nav:
   - Getting started:
       - Install: install.md
       - Run book: run-book.md
+      - Running behind a proxy: proxy.md
   - Concepts:
       - Switchboards: switchboards.md
       - Items: items.md
