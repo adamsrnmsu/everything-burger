@@ -23,10 +23,9 @@
     re-sends each router's interface addresses over cc (busybox-safe `ip addr
     add`, UUIDs from minimega's `vm info`). Reported as
     [sceptre-phenix-images#42](https://github.com/sandialabs/sceptre-phenix-images/issues/42).
-- `./burger bennu-check` does not work behind a TLS-intercepting proxy: bennu's
-  `run.sh` builds its own unpatched Docker context. Run it on an unproxied host
-  until sceptre-bennu's `docker/test/Dockerfile` can take site CAs; until then
-  the #56/#57 test-suite coverage is outstanding on proxied hosts.
+- Behind a TLS-intercepting proxy, give burger a [site file](proxy.md): it
+  carries the site CA, proxy and mirrors into every docker step, including
+  `bennu-check`.
 - SCORCH templating eats `${...}` in cc commands and validators; keep it out of
   any `cc` component, including the ones in `components/*.yaml`.
 

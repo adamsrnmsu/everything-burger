@@ -9,6 +9,9 @@ import json
 import os
 import re
 import shutil
+import ssl
+import urllib.error
+import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -260,3 +263,19 @@ def build_dockerfile(host, context: Path, tag: str) -> None:
     dockerfile = ctx / "Dockerfile"
     dockerfile.write_text(patch_dockerfile(dockerfile.read_text(), site))
     host.run(["docker", "build", *_build_args(site), "-t", tag, ctx])
+
+
+def probe(url: str, site: Site, bundle: Path | None, timeout: int = 15) -> str | None:
+    """GET url through the site proxy, trusting the site CA. None on any answer below 500."""
+    proxies = {k: v for k, v in site.proxy.items() if k in ("http", "https")}
+    context = ssl.create_default_context(cafile=str(bundle) if bundle else None)
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler(proxies), urllib.request.HTTPSHandler(context=context)
+    )
+    try:
+        with opener.open(url, timeout=timeout):
+            return None
+    except urllib.error.HTTPError as e:
+        return None if e.code < 500 else f"HTTP {e.code}"
+    except (OSError, ValueError) as e:
+        return redact(str(getattr(e, "reason", e)))

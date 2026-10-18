@@ -116,7 +116,7 @@ def test_preflight_api_failure_is_a_row_not_a_crash(monkeypatch, capsys):
         raise urllib.error.URLError("refused")
 
     host.api = refuse
-    monkeypatch.setattr(cli, "Host", lambda _s: host)
+    monkeypatch.setattr(cli, "Host", lambda *_a: host)
     assert main(["preflight", "--linux-only"]) == 1
     assert "REST API" in capsys.readouterr().out
 
@@ -159,7 +159,7 @@ def _fake_run_chain(monkeypatch, board):
     monkeypatch.setattr(experiment, "collect", all_ok)
     monkeypatch.setattr(v, "collect", all_ok)
     monkeypatch.setattr(v, "run_checks", lambda *_a: [])  # no real SCORCH output files
-    monkeypatch.setattr(cli, "Host", lambda _s: host)
+    monkeypatch.setattr(cli, "Host", lambda *_a: host)
     return host
 
 
@@ -201,3 +201,97 @@ def test_banner_draws_the_mascot():
     assert "|____/" in out  # the figlet B
     assert "\x1b[38;2;" in out  # the truecolor art, not plain text
     assert len(ui.MASCOT.plain.splitlines()) == 41
+
+
+# ---------------------------------------------------------------- site profile (preflight, CLI)
+
+SITE = """
+ca_certs: [{ca}]
+mirrors:
+  registry: reg.site/
+  pypi: https://pypi.site/simple
+  apt: https://apt.site/ubuntu
+  go: https://go.site
+  git: {{"https://github.com/": "https://gitlab.site/gh/"}}
+"""
+
+
+def _site_env(tmp_path, monkeypatch, extra=""):
+    cert = tmp_path / "ca.pem"
+    cert.write_text("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n")
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text(SITE.format(ca=cert) + extra)
+    monkeypatch.setenv("BURGER_SITE_CONFIG", str(cfg))
+    return cfg
+
+
+def _preflight_host(monkeypatch, site):
+    host = FakeHost(site=site)
+    host.api = lambda _p: {}
+    monkeypatch.setattr(cli, "Host", lambda *_a: host)
+    return host
+
+
+def test_preflight_site_rows(monkeypatch, tmp_path, capsys):
+    from burger.site import load_site
+
+    cfg = _site_env(tmp_path, monkeypatch)
+    host = _preflight_host(monkeypatch, load_site())
+    probes = {}
+
+    def fake_probe(url, site, bundle, timeout=15):
+        probes[url] = bundle
+        return "connection refused" if "apt.site" in url else None
+
+    monkeypatch.setattr(cli, "probe", fake_probe)
+    main(["--quiet", "preflight", "--linux-only"])
+    out = capsys.readouterr().out
+    assert f"site file {cfg}" in out.replace("\n", "") or "site file" in out
+    assert "CA bundle (1 certs)" in out
+    assert "registry mirror" in out and "pypi mirror" in out and "go mirror" in out
+    assert "apt mirror" in out and "connection refused" in out
+    assert "git mirror" in out
+    assert ["docker", "pull", "reg.site/ubuntu:22.04"] in host.calls
+    assert any(c[0] == "git" and "ls-remote" in c for c in host.calls)
+    assert "https://apt.site/ubuntu/dists/jammy/Release" in probes
+
+
+def test_preflight_gosumdb_off_warns(monkeypatch, tmp_path, capsys):
+    from burger.site import load_site
+
+    _site_env(tmp_path, monkeypatch, '  gosumdb: "off"\n')
+    _preflight_host(monkeypatch, load_site())
+    monkeypatch.setattr(cli, "probe", lambda *_a, **_k: None)
+    main(["--quiet", "preflight", "--linux-only"])
+    out = capsys.readouterr().out
+    assert "GOSUMDB=off" in out and "WARN" in out
+
+
+def test_preflight_no_site_no_rows(monkeypatch, tmp_path, capsys):
+    monkeypatch.delenv("BURGER_SITE_CONFIG", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _preflight_host(monkeypatch, None)
+    main(["--quiet", "preflight", "--linux-only"])
+    assert "site file" not in capsys.readouterr().out
+
+
+def test_bad_site_file_one_line(monkeypatch, tmp_path, capsys):
+    cfg = tmp_path / "site.yaml"
+    cfg.write_text("mirror: {}\n")
+    monkeypatch.setenv("BURGER_SITE_CONFIG", str(cfg))
+    assert main(["--quiet", "list"]) == 1
+    err = capsys.readouterr().err
+    assert "'mirror'" in err and "Traceback" not in err
+
+
+def test_main_passes_the_site_to_host(monkeypatch, tmp_path):
+    _site_env(tmp_path, monkeypatch)
+    seen = {}
+
+    def capture(settings, site=None):
+        seen["site"] = site
+        return FakeHost(site=site)
+
+    monkeypatch.setattr(cli, "Host", capture)
+    main(["--quiet", "list"])
+    assert seen["site"] is not None and seen["site"].mirrors["registry"] == "reg.site/"

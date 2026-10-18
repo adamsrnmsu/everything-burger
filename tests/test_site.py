@@ -275,3 +275,29 @@ def test_bennu_check_prebuilds_verify_image_with_site(tmp_path):
     assert host.calls[0][:2] == ["docker", "build"]
     assert host.calls[0][host.calls[0].index("-t") + 1] == "bennu-verify:22.04-lint"
     assert host.calls[-1][:2] == ["bash", str(wt / "docker" / "test" / "run.sh")]
+
+
+def test_probe_answers_errors_and_5xx(tmp_path):
+    import http.server
+    import threading
+
+    from burger.site import probe
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(503 if self.path == "/down" else 404)
+            self.end_headers()
+
+        def log_message(self, *_a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        site = load_site(env=write_site(tmp_path, "mirrors: {}\n"), home=tmp_path)
+        base = f"http://127.0.0.1:{srv.server_port}"
+        assert probe(f"{base}/simple", site, None) is None  # 404 still answers
+        assert probe(f"{base}/down", site, None) == "HTTP 503"
+    finally:
+        srv.shutdown()
+    assert probe(f"http://127.0.0.1:{srv.server_port}/", site, None, timeout=2)

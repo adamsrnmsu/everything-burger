@@ -15,11 +15,12 @@ from burger import __version__, experiment, vcs, verify
 from burger.bennu import bennu_check
 from burger.checks import Row
 from burger.compose import compose
-from burger.config import BurgerError, Settings
+from burger.config import REPOS, BurgerError, Settings
 from burger.items import all_items, load_item
 from burger.render import render
 from burger.routes import load_route
 from burger.shell import Host
+from burger.site import load_site, probe
 from burger.switchboard import Resolved, all_switchboards, load_switchboard, resolve
 from burger.ui import banner, results_table, setup_logging
 
@@ -167,8 +168,43 @@ def _preflight(args, s, host) -> int:
         free_gb >= 20,
         "switchboards need ~20 GiB of snapshots",
     )
+    if host.site:
+        _site_rows(host, rows, chk)
     out.print(results_table(rows))
     return int(any(r.verdict == "FAIL" for r in rows))
+
+
+def _site_rows(host, rows, chk) -> None:
+    """Preflight for the site file: CA bundle, and each mirror as burger will use it."""
+    site = host.site
+    chk(f"site file {site.path}", True)
+    bundle = site.bundle(host.s.work)
+    if bundle:
+        chk(f"CA bundle ({bundle.read_text().count('BEGIN CERTIFICATE')} certs)", True)
+    m = site.mirrors
+    if m.get("registry"):
+        image = site.image_name("ubuntu:22.04")
+        res = host.run(["docker", "pull", image], check=False, capture=True)
+        registry_host = m["registry"].split("/", 1)[0]
+        chk(
+            f"registry mirror: docker pull {image}",
+            res.returncode == 0,
+            f"the docker daemon pulls images: give it the CA in /etc/docker/certs.d/"
+            f"{registry_host}/ca.crt and the proxy in its systemd http-proxy.conf drop-in",
+        )
+    for key, url in (
+        ("pypi", m.get("pypi")),
+        ("apt", m.get("apt") and m["apt"].rstrip("/") + "/dists/jammy/Release"),
+        ("go", m.get("go")),
+    ):
+        if url:
+            err = probe(url, site, bundle)
+            chk(f"{key} mirror {url}", err is None, err or "")
+    if m.get("git"):
+        res = host.run(["git", "ls-remote", REPOS["apps"], "HEAD"], check=False, capture=True)
+        chk("git mirror (ls-remote sceptre-phenix-apps)", res.returncode == 0, res.stderr.strip())
+    if str(m.get("gosumdb", "")).lower() == "off":
+        rows.append(Row("-", "GOSUMDB=off", "WARN", "Go checksum verification is off", []))
 
 
 def _prs(args, s, host) -> int:
@@ -341,8 +377,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args.quiet and sys.stdout.isatty():
         banner(out)
     s = Settings.from_env()
-    host = Host(s)
     try:
+        host = Host(s, load_site())
         return args.fn(args, s, host)
     except (BurgerError, urllib.error.URLError) as e:
         err.print(f"burger: {e}", style="red", markup=False, highlight=False, soft_wrap=True)
