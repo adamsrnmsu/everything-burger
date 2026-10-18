@@ -39,7 +39,7 @@
 
 - **A CA path that does not exist, or a file with no PEM certificate,** must fail at load with an error naming `ca_certs[i]` and the path, before any docker step. Test: `test_ca_missing_or_not_pem` (Task 1).
 - **A typo in a site field** (`mirror:` for `mirrors:`, `pypy:` under mirrors) must be rejected by name. Test: `test_unknown_fields_rejected` (Task 1).
-- **Dockerfiles with several `FROM` lines, `FROM … AS name`, `FROM --platform=… img`, or a `FROM` of an earlier stage** must get the layer after every `FROM`. The registry prefix applies to external images only, never to a stage name. Test: `test_patch_multistage_and_flags` (Task 2).
+- **Dockerfiles with several `FROM` lines, `FROM … AS name`, `FROM --platform=… img`, or a `FROM` of an earlier stage** must get the layer after every `FROM` of an external image. A `FROM <earlier stage>` and `FROM scratch` get nothing, and the registry prefix never touches a stage name or `scratch`. Test: `test_patch_multistage_and_flags` (Task 2).
 - **A changed site file rebuilds the site image; an unchanged one reuses it.** No rebuild is driven by the `docker image inspect` result alone when the hash differs. Test: `test_site_image_reuse_and_rebuild` (Task 3).
 - **A mirror token in a URL** (`https://user:tok@artifactory/...`) never appears in `burger.log` or an error message. Test: `test_redacts_credentials_in_logs_and_errors` (Task 4).
 
@@ -113,11 +113,11 @@ docs/proxy.md                 "Running behind a proxy" page (+ mkdocs.yml nav, l
     5. `dockerfile_extra` verbatim.
   - `Site.tag() -> str`: 12-hex sha256 of `raw` plus each CA file's bytes.
   - `Site.image_name(image: str) -> str`: `mirrors.registry + image`, or `image` without a registry.
-  - `patch_dockerfile(text: str, site: Site) -> str`: after each `FROM` line insert `layer()`. Rewrite the image reference to `image_name()` unless it names an earlier stage (`AS <name>`) or is `scratch`. Keep `--platform=` flags and `AS name`. Apply `mirrors.urls` (origin → mirror) as plain text replacements on the original lines (not on the inserted layer).
+  - `patch_dockerfile(text: str, site: Site) -> str`: after each `FROM` of an external image, insert `layer()` and rewrite the reference to `image_name()`. A `FROM` naming an earlier stage (defined above with `AS <name>`) or `scratch` is left alone, with nothing inserted. Keep `--platform=` flags and `AS name`. Apply `mirrors.urls` (origin → mirror) as plain text replacements on the original lines (not on the inserted layer).
 - [ ] **Step 1: Write failing tests**:
   - `test_layer_order_and_values`: with a full site, `COPY burger-site.crt` comes before `ENV`, `ENV` comes before the apt `RUN`, `Acquire::https::CAInfo "/usr/local/share/ca-certificates/burger-site.crt";` is present, and `dockerfile_extra` is the last line. Without `ca_certs` there is no `COPY` and no CA variables.
   - `test_patch_bennu_fixture`: on `tests/fixtures/bennu-test.Dockerfile` with `registry: reg.site/`, the first line becomes `FROM reg.site/ubuntu:22.04` followed by the layer, and every `RUN` line of the original appears unchanged after it, in order. With `urls: {"https://github.com/": "https://m.site/gh/"}`, the zeromq `wget` URL starts with `https://m.site/gh/` and `raw.githubusercontent.com` is untouched.
-  - `test_patch_multistage_and_flags`: `FROM --platform=linux/amd64 golang:1.24 AS build` then `FROM build` then `FROM scratch` gives `FROM --platform=linux/amd64 reg.site/golang:1.24 AS build`, `FROM build` and `FROM scratch`, with the layer inserted three times. The layer is a no-op-safe insert after `scratch`, so a test asserts that `scratch` gets only the `ENV` line, not `RUN` or `COPY`. (Builder decides the minimal layer for scratch; it must not contain `RUN`.)
+  - `test_patch_multistage_and_flags`: `FROM --platform=linux/amd64 golang:1.24 AS build` then `FROM build` then `FROM scratch` gives `FROM --platform=linux/amd64 reg.site/golang:1.24 AS build` followed by the layer, then `FROM build` and `FROM scratch` unchanged with nothing inserted after them. The layer appears exactly once.
   - `test_tag_changes_with_site_and_ca(tmp_path)`: the tag changes when the site file bytes change, and when a CA file's bytes change.
 - [ ] **Step 2: Run** `pytest tests/test_site.py -v`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
