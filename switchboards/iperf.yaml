@@ -1,8 +1,10 @@
-# #165 iperf between two waterway RTUs on the ICS network. The bennu items give
-# it the waterway health run, which also waits out VM boot (--settle).
-about: "#165 iperf, rtu-2 to rtu-1"
+# #165 iperf between two waterway RTUs on the ICS network, with #191's cc
+# filter helper, which iperf's kill and delete cleanup goes through. The bennu
+# items give it the waterway health run, which also waits out VM boot
+# (--settle).
+about: "#165 iperf + #191, rtu-2 to rtu-1"
 route: waterway
-apps: {prs: [165]}
+apps: {prs: [165, 191]}
 items:
   iperf: on
   disruption: on

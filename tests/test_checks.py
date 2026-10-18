@@ -121,3 +121,26 @@ def test_check_exception_is_fail_row(settings, tmp_path):
     assert len(rows) == 3
     assert [r.verdict for r in rows[:2]] == ["FAIL", "FAIL"]
     assert any("Error" in r.reason for r in rows[:2])
+
+
+def test_pcap_rtu1_has_no_modbus(settings, tmp_path):
+    from tests.test_pcap import classic, eth, ip_packet
+
+    ctx, loop = make_ctx(settings, tmp_path)
+    spec = {"function": "rtu1_has_no_modbus", "windows": True}
+    assert CHECKS["python"](spec, ctx).reason == "no rtu-1 capture"
+
+    (loop / "rtu-1-0.pcap").write_bytes(classic([eth(ip_packet(dport=80))]))
+    assert CHECKS["python"](spec, ctx).verdict == "ok"
+
+    (loop / "rtu-1-0.pcap").write_bytes(classic([eth(ip_packet(dport=502))]))
+    assert CHECKS["python"](spec, ctx).verdict == "FAIL"
+
+
+def test_status_error_lines_fail_the_metadata_log_check(settings, tmp_path):
+    ctx, loop = make_ctx(settings, tmp_path)
+    spec = {"glob": "*.json", "lacks": r"\] ERROR :"}  # as in switchboards/metadata.yaml
+    (loop / "stop-x.json").write_text(json.dumps({"logs": ["[t] INFO : fine"]}))
+    assert CHECKS["log"](spec, ctx).verdict == "ok"
+    (loop / "stop-x.json").write_text(json.dumps({"logs": ["[t] ERROR : kill failed"]}))
+    assert CHECKS["log"](spec, ctx).verdict == "FAIL"

@@ -225,6 +225,11 @@
                 "vms": [
                   {
                     "hostname": "rtu-1",
+                    "interface": 0,
+                    "filter": "not tcp port 502"
+                  },
+                  {
+                    "hostname": "rtu-2",
                     "interface": 0
                   }
                 ]
@@ -236,11 +241,12 @@
               "metadata": {
                 "vms": [
                   {
-                    "filter": "tcp port 502",
                     "hostname": "rtu-2",
-                    "iface": "any"
+                    "iface": "any",
+                    "filter": "tcp port 502"
                   }
-                ]
+                ],
+                "convertToJSON": true
               },
               "name": "tcpdump",
               "type": "tcpdump"
@@ -249,19 +255,44 @@
               "metadata": {
                 "start": [
                   {
+                    "type": "start_capture",
                     "capture": {
                       "bridge": "phenix",
                       "filename": "burger-bridge.pcap"
-                    },
-                    "type": "start_capture"
+                    }
                   }
                 ],
                 "stop": [
                   {
+                    "type": "stop_capture",
                     "capture": {
-                      "bridge": "phenix"
-                    },
-                    "type": "stop_capture"
+                      "bridge": "phenix",
+                      "convert": true
+                    }
+                  }
+                ],
+                "vms": [
+                  {
+                    "hostname": "simulink-provider",
+                    "start": [
+                      {
+                        "type": "start_capture",
+                        "capture": {
+                          "interface": 0,
+                          "filename": "burger-provider.pcap",
+                          "filter": "not tcp port 502"
+                        }
+                      }
+                    ],
+                    "stop": [
+                      {
+                        "type": "stop_capture",
+                        "capture": {
+                          "interface": 0,
+                          "convert": true
+                        }
+                      }
+                    ]
                   }
                 ]
               },
