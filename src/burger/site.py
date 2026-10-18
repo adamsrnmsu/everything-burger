@@ -118,6 +118,25 @@ class Site:
             h.update(ca.read_bytes())
         return h.hexdigest()[:12]
 
+    def git_args(self, bundle: Path | None) -> list[str]:
+        """git -c options: mirror rewrites, the CA bundle and the proxy, per command."""
+        args = []
+        for origin, mirror in (self.mirrors.get("git") or {}).items():
+            args += ["-c", f"url.{mirror}.insteadOf={origin}"]
+        if bundle:
+            args += ["-c", f"http.sslCAInfo={bundle}"]
+        proxy = self.proxy.get("https") or self.proxy.get("http")
+        if proxy:
+            args += ["-c", f"http.proxy={proxy}"]
+        return args
+
+    def host_env(self, bundle: Path | None) -> dict[str, str]:
+        """Environment for git and gh on the host: the proxy and the CA bundle."""
+        env = {k: v for k, v in self.env("").items() if k.lower().endswith("_proxy")}
+        if bundle:
+            env.update(SSL_CERT_FILE=str(bundle), GIT_SSL_CAINFO=str(bundle))
+        return env
+
     def image_name(self, image: str) -> str:
         return (self.mirrors.get("registry") or "") + image
 

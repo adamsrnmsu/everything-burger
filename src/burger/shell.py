@@ -1,4 +1,5 @@
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -9,6 +10,7 @@ from pathlib import Path
 from loguru import logger
 
 from burger.config import BurgerError, Settings
+from burger.site import redact
 
 
 class Host:
@@ -20,7 +22,12 @@ class Host:
 
     def run(self, cmd, check=True, capture=False, **kw):
         cmd = [str(c) for c in cmd]
-        logger.debug("+ {}", shlex.join(cmd))
+        if self.site and cmd and cmd[0] in ("git", "gh"):
+            bundle = self.site.bundle(self.s.work)
+            if cmd[0] == "git":
+                cmd = ["git", *self.site.git_args(bundle), *cmd[1:]]
+            kw["env"] = {**os.environ, **kw.get("env", {}), **self.site.host_env(bundle)}
+        logger.debug("+ {}", redact(shlex.join(cmd)))
         try:
             res = subprocess.run(cmd, check=False, text=True, capture_output=capture, **kw)
         except FileNotFoundError:
@@ -29,7 +36,9 @@ class Host:
             return subprocess.CompletedProcess(cmd, 127, "", f"{cmd[0]} not found")
         if check and res.returncode != 0:
             detail = f"\n{res.stdout}{res.stderr}" if capture else ""
-            raise BurgerError(f"command failed ({res.returncode}): {shlex.join(cmd)}{detail}")
+            raise BurgerError(
+                redact(f"command failed ({res.returncode}): {shlex.join(cmd)}{detail}")
+            )
         return res
 
     def git(self, repo, *a, **kw):
