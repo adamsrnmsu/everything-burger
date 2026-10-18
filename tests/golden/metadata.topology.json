@@ -25,17 +25,6 @@
         },
         "injections": [
           {
-            "description": "burger: install bennu PR build",
-            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
-            "permissions": "0755",
-            "src": "/phenix/burger/x/00-burger-bennu.sh"
-          },
-          {
-            "description": "burger: bennu PR build",
-            "dst": "/root/burger-bennu.deb",
-            "src": "/phenix/burger/x/bennu.deb"
-          },
-          {
             "description": "burger: miniccc from the minimega container",
             "dst": "/root/burger-miniccc",
             "src": "/phenix/burger/x/burger-miniccc"
@@ -266,17 +255,6 @@
         },
         "injections": [
           {
-            "description": "burger: install bennu PR build",
-            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
-            "permissions": "0755",
-            "src": "/phenix/burger/x/00-burger-bennu.sh"
-          },
-          {
-            "description": "burger: bennu PR build",
-            "dst": "/root/burger-bennu.deb",
-            "src": "/phenix/burger/x/bennu.deb"
-          },
-          {
             "description": "burger: miniccc from the minimega container",
             "dst": "/root/burger-miniccc",
             "src": "/phenix/burger/x/burger-miniccc"
@@ -326,17 +304,6 @@
           "vcpus": 2
         },
         "injections": [
-          {
-            "description": "burger: install bennu PR build",
-            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
-            "permissions": "0755",
-            "src": "/phenix/burger/x/00-burger-bennu.sh"
-          },
-          {
-            "description": "burger: bennu PR build",
-            "dst": "/root/burger-bennu.deb",
-            "src": "/phenix/burger/x/bennu.deb"
-          },
           {
             "description": "burger: miniccc from the minimega container",
             "dst": "/root/burger-miniccc",
