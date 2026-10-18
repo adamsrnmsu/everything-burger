@@ -31,6 +31,8 @@ this.
 | `iperf` | #165, #191 | stock `bennu.qc2` | iperf from rtu-2 to rtu-1 on waterway, after the waterway health checks; burger installs iperf3 into both |
 | `ssh` | #170 | stock `bennu.qc2` | ssh to rtu-1 over `mgmt_tap`, after the waterway health checks; needs `BURGER_VM_PASSWORD` |
 | `cc-empty` | #194 | stock `bennu.qc2` | a cc validator on a command that prints nothing (`cc-empty-output`), after the waterway health checks; crashes on main (#186) |
+| `cc-parse` | #183 | stock `bennu.qc2` | `cc-output-parsing` (stderr before stdout, `/` and `:` in stdout) plus the waterway health checks, all through #183's parser |
+| `cc-header` | #157 | stock `bennu.qc2` | the waterway health checks through #157's header parsing; a real test only on minimega 3.3.0 or later |
 
 Models no route can run are validated offline by `phenix-scorch-validate`
 (items with `routes: []` are validate-only).

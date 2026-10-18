@@ -77,7 +77,7 @@ def test_every_switchboard_resolves(settings, monkeypatch):
     monkeypatch.setenv("BURGER_SITE_TOPOLOGY", str(GOLDEN / "site-topology.yaml"))
     monkeypatch.setenv("BURGER_SITE_SCENARIO", str(GOLDEN / "site-scenario.yaml"))
     names = all_switchboards(settings)
-    assert len(names) == 10
+    assert len(names) == 12
     for name in names:
         resolve(load_switchboard(name, settings), settings)
 

@@ -1,0 +1,12 @@
+# #157 (nblair2): parse minimega's cc response header instead of fixed column
+# indexes, which minimega 3.3.0 broke. Every burger health check goes through
+# this parsing, so the bennu items passing as on baseline is the test; it is
+# only a real one on a rig running minimega 3.3.0 or later. #157 conflicts with
+# #183 (cc-parse) in test_utils.py.
+about: "#157 cc response header parsing (minimega 3.3.0)"
+route: waterway
+apps: {prs: [157]}
+items:
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
