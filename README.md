@@ -30,6 +30,13 @@ python3 -m venv .venv && .venv/bin/pip install -e .      # add '.[dev]' for the 
 venv is missing. Run it from the checkout: `work/` and the item folders are
 found relative to the current directory.
 
+To work on burger itself, install the git hooks once with
+[prek](https://prek.j178.dev) (`uv tool install prek`):
+`prek install --hook-type pre-commit --hook-type commit-msg`. They run ruff,
+vulture, codespell, shellcheck, file hygiene checks and a Conventional Commits
+check on the message; `prek run --all-files` runs them by hand. The tests stay
+out of the hooks (they need `BURGER_TOPOLOGIES`); run `make test` before pushing.
+
 ## Run book
 
 ```bash

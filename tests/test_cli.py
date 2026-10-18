@@ -110,7 +110,6 @@ def test_uncaught_urlerror_is_one_red_line(monkeypatch, capsys):
 
 
 def test_preflight_api_failure_is_a_row_not_a_crash(monkeypatch, capsys):
-
     host = FakeHost()
 
     def refuse(_path):
