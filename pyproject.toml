@@ -11,6 +11,7 @@ dependencies = ["PyYAML", "loguru", "rich", "pyfiglet"]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "vulture"]
+docs = ["mkdocs>=1.6,<2", "mkdocs-material"]
 
 [project.scripts]
 burger = "burger.cli:main"
