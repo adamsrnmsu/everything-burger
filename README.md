@@ -50,6 +50,11 @@ out of the hooks (they need `BURGER_TOPOLOGIES`); run `make test` before pushing
 ./burger run baseline         # sync, build, install, up, scorch, verify, down
 ```
 
+`make` with no target lists shortcuts for the same commands: `make install`,
+`make list`, `make dry-run BOARD=metadata`, `make run BOARD=baseline`, `make docs`,
+`make check` and `make test`. Run them from the checkout. `make dry-run` and
+`make test` read topologies from `work/repos/topologies` when it is checked out.
+
 ## Docs
 
 The site is built from `docs/` with MkDocs Material and published to GitHub

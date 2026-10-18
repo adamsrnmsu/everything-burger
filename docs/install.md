@@ -13,6 +13,11 @@ python3 -m venv .venv && .venv/bin/pip install -e .      # add '.[dev]' for the 
 venv is missing. Run it from the checkout: `work/` and the item folders are
 found relative to the current directory.
 
+`make` with no target lists the shortcuts: `install`, `list`, `dry-run` and `run`
+(both take `BOARD=<switchboard>`, default `baseline`), `docs`, `check`, `test` and
+`format`. When `BURGER_TOPOLOGIES` is unset they use `work/repos/topologies` if
+that clone exists.
+
 To work on burger itself, install the git hooks once with
 [prek](https://prek.j178.dev) (`uv tool install prek`):
 `prek install --hook-type pre-commit --hook-type commit-msg`. They run ruff,
