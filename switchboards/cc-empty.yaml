@@ -1,0 +1,12 @@
+# #194: cc commands that print nothing return "" instead of None, so a
+# validator on one no longer crashes the cc component (#186). The bennu items
+# give the waterway health run, which also waits out VM boot. Run it once with
+# `prs: []` to see the crash on main.
+about: "#194 empty cc output, validator on a silent command"
+route: waterway
+apps: {prs: [194]}
+items:
+  cc-empty-output: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on

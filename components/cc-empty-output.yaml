@@ -1,0 +1,20 @@
+name: cc-empty-output
+kind: scorch
+type: cc
+about: >
+  Runs a command that prints nothing, with a validator that wants no output.
+  On phenix-apps main the cc component crashes before the validator runs
+  ('NoneType' object has no attribute 'encode', #186); with #194 it passes.
+routes: [waterway, soap]
+stages: [start]
+config:
+  vms:
+    - hostname: "{route.rtus[0]}"
+      start:
+        # No ${...} here: SCORCH templating eats it.
+        - type: exec
+          args: "true"
+          wait: true
+          validator: '[ -z "$(cat)" ] || { echo "$1: expected no output" >&2; exit 1; }'
+verify:
+  - status: ok
