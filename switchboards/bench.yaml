@@ -1,0 +1,13 @@
+# Live proof of bennu #55 (batched field-device writes), which is on bennu main.
+# burger only builds bennu from a PR (burger-byo), so #59 (main plus loguru) is the
+# vehicle. The bench fails when one 800-tag cycle takes longer than 2 s. Drop the
+# `bennu:` block to time stock bennu.qc2 instead (the "before" number).
+about: "bennu #59 on soap: field-device write cycle at 800 tags, fails above 2 s"
+route: soap
+apps: {prs: []}
+bennu:
+  pr: 59
+  install: [deb, pybennu]
+  pip: ["loguru>=0.7,<1"]  # #59's new dependency; the VMs have no index
+items:
+  field-device-bench: on

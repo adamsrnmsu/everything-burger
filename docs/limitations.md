@@ -5,6 +5,14 @@
   `requires.keep_nodes`. Without Ignition nothing polls DNP3 on the RTUs, so a
   traffic check on soap would see nothing. soap's `mirror` app goes with
   `netmonitor`.
+- The `bench` switchboard measures the field device binary on a real RTU VM, but
+  its provider is a REP responder inside that VM, not the route's provider: the
+  real ones reject invented tags (PyPower answers ERR, which makes the device
+  retry point by point) and the Simulink provider's FIFO overflows at about 256
+  tag writes per solver step. The number is the field device's write cost, not a
+  provider round trip. It needs `python3` with `zmq` on the RTU (`bennu.qc2` has
+  both). A cycle slower than the window (a pre-#55 build, about 400 s) fails as
+  "fewer than 2 cycles"; to time stock `bennu.qc2`, drop the `bennu:` block.
 - The `ssh` switchboard reaches rtu-1 through `mgmt_tap`'s tap on the host, so it
   only works when the phēnix container shares the host's network.
 
