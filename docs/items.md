@@ -10,6 +10,10 @@ and `verify`. `{route.<key>}` in an item reads the route file (`rtus`,
 `provider`, `ics_port`). A `waterway:`, `soap:` or `site:` block overrides
 `config` or `verify` for that route.
 
+`tests/test_all.py` checks every item and switchboard: each has an `about`, every
+routed item is on in some board, every `python:` function exists, and a typo in a
+check key fails at load.
+
 Every item file in full: [reference](reference/items.md).
 
 ## Adding a test
