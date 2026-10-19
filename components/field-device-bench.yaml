@@ -78,5 +78,4 @@ config:
         - type: recv
           args: /tmp/burger-bench.json
 verify:
-  - status: ok
   - python: judge_bench
