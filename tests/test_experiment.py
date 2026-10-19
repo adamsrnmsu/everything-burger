@@ -7,13 +7,8 @@ import pytest
 from burger import experiment
 from burger.config import BurgerError
 from burger.experiment import down, fix_routers, install, scorch, vm_uuids
-from burger.switchboard import load_switchboard, resolve
-from tests.conftest import MAN
+from tests.conftest import MAN, res
 from tests.fakes import FakeHost
-
-
-def res(settings, name="baseline"):
-    return resolve(load_switchboard(name, settings), settings)
 
 
 def sent(host):

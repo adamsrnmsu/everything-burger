@@ -7,6 +7,4 @@ about: >
   The anchored pattern cannot match the cc shell's own command line.
 routes: [soap, site]
 verify:
-  - vm:
-      host: "{route.provider}"
-      run: "pgrep -f '(^|/)pybennu-power-solver( |$)'"
+  - process: {host: "{route.provider}", name: pybennu-power-solver}

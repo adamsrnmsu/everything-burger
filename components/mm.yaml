@@ -7,5 +7,3 @@ stages: [start, stop]
 config:
   start: [{type: start_capture, capture: {bridge: phenix, filename: burger-bridge.pcap}}]
   stop: [{type: stop_capture, capture: {bridge: phenix}}]
-verify:
-  - status: ok

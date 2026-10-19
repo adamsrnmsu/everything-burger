@@ -20,6 +20,5 @@ overrides:
       vms: [{hostname: monitor, iface: any, filter: "tcp port 502 or ip proto 47"}]
     # The mirror delivers GRE: count it as well as plain Modbus, like the filter.
     verify:
-      - status: ok
       - files: {glob: "*.pcap", min: 1}
       - pcap: {glob: "*.pcap", tcp_port: 502, ip_proto: 47, min_packets: 10, windows: true}

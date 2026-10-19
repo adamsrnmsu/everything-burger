@@ -9,9 +9,8 @@ import pytest
 from burger.bennu import bennu_startup
 from burger.render import render
 from burger.switchboard import all_switchboards, load_switchboard, resolve
-from tests.conftest import MAN
+from tests.conftest import GOLDEN, MAN, ROOT_SETTINGS, res
 
-GOLDEN = Path(__file__).parent / "golden"
 STAGE = "/phenix/burger/x"
 NAMES = [n for n in (p.stem for p in (Path(__file__).parents[1] / "switchboards").glob("*.yaml"))]
 CASES = [
@@ -23,12 +22,7 @@ CASES = [
 WHEEL = "pybennu-6.0.0-py3-none-any.whl"
 
 
-@pytest.fixture(autouse=True)
-def site_env(monkeypatch):
-    monkeypatch.setenv("BURGER_VM_PASSWORD", "lab")
-    monkeypatch.setenv("BURGER_SITE_TOPOLOGY", str(GOLDEN / "site-topology.yaml"))
-    monkeypatch.setenv("BURGER_SITE_SCENARIO", str(GOLDEN / "site-scenario.yaml"))
-    monkeypatch.setenv("BURGER_SITE_PROVIDER", "pp1")
+pytestmark = pytest.mark.usefixtures("site_env")
 
 
 def man_for(board):
@@ -45,11 +39,11 @@ def man_for(board):
 
 
 def build(settings, topologies, name, linux_only, man=None):
-    res = resolve(load_switchboard(name, settings), settings, linux_only=linux_only)
-    where = None if res.route.base else topologies / res.route.topology_dir
-    man = man or man_for(res.board)
-    topo, scen = render(res, copy.deepcopy(man), where, STAGE, settings)
-    return res, man, topo, scen
+    r = res(settings, name, linux_only=linux_only)
+    where = None if r.route.base else topologies / r.route.topology_dir
+    man = man or man_for(r.board)
+    topo, scen = render(r, copy.deepcopy(man), where, STAGE, settings)
+    return r, man, topo, scen
 
 
 def golden(name, linux_only, kind):
@@ -70,13 +64,7 @@ def hostnames(topo):
 
 
 def test_every_switchboard_has_a_golden_case():
-    assert {n for n, _ in CASES} == set(all_switchboards(load_settings_stub()))
-
-
-def load_settings_stub():
-    from burger.config import Settings
-
-    return Settings.from_env(Path(__file__).parents[1])
+    assert {n for n, _ in CASES} == set(all_switchboards(ROOT_SETTINGS))
 
 
 @pytest.mark.parametrize("name,linux_only", CASES)

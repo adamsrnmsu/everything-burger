@@ -1,18 +1,10 @@
 import dataclasses
 import json
 
-from burger.checks import CHECKS, CheckContext, run_checks
+from burger.checks import CHECKS, run_checks
 from burger.checks.status import collect_status, evaluate
 from burger.items import load_item
-from burger.routes import load_route
-
-
-def make_ctx(settings, tmp_path, item=None, **over):
-    item = item or load_item("pcap", settings)
-    item = dataclasses.replace(item, **over)
-    loop = tmp_path / "run-0" / item.name / "loop-0"
-    loop.mkdir(parents=True, exist_ok=True)
-    return CheckContext(item, [loop], load_route("soap", settings), {}, tmp_path), loop
+from tests.conftest import make_ctx
 
 
 def test_evaluate():
@@ -99,7 +91,7 @@ def test_python_hook(settings, tmp_path):
 
 
 def test_advisory_downgrade(settings, tmp_path):
-    verify = [{"status": "ok"}, {"vm": {"run": "true"}}, {"files": {"glob": "*.pcap"}}]
+    verify = [{"vm": {"run": "true"}}, {"files": {"glob": "*.pcap"}}]
     ctx, _ = make_ctx(settings, tmp_path, verify=verify, advisory=True)
     assert [r.verdict for r in run_checks(ctx.item, ctx)] == ["advisory-FAIL"]
     ctx = dataclasses.replace(ctx, item=dataclasses.replace(ctx.item, advisory=False))

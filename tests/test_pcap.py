@@ -1,7 +1,7 @@
 import struct
 
 from burger.checks import pcap
-from burger.checks.base import CheckContext
+from tests.conftest import make_ctx
 
 
 def ip_packet(proto=6, sport=40000, dport=502):
@@ -88,11 +88,7 @@ def test_pcap_truncated_tail(tmp_path):
 
 
 def test_pcap_check_missing_is_fail(tmp_path, settings):
-    from burger.items import load_item
-    from burger.routes import load_route
-
-    route = load_route("soap", settings)
-    ctx = CheckContext(load_item("pcap", settings), [tmp_path], route, {}, tmp_path)
+    ctx, _ = make_ctx(settings, tmp_path)
     r = pcap.pcap({"glob": "*.pcap", "tcp_port": 502}, ctx)
     assert r.verdict == "FAIL"
     assert r.reason.startswith("no output found at")

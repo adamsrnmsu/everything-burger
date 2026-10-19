@@ -1,26 +1,20 @@
 import dataclasses
 import json
-from pathlib import Path
 
 import pytest
 import yaml
 
 from burger.compose import compose, health_component, item_locations
-from burger.config import BurgerError, Settings
+from burger.config import BurgerError
 from burger.switchboard import all_switchboards, load_switchboard, resolve
-from tests.conftest import MAN
+from tests.conftest import GOLDEN, MAN, ROOT_SETTINGS, res
 
-GOLDEN = Path(__file__).parent / "golden"
 STAGES = ("configure", "start", "stop", "cleanup")
 
 
 def golden_scorch(name):
     doc = json.loads((GOLDEN / f"{name}.scenario.json").read_text())
     return next(a for a in doc["spec"]["apps"] if a["name"] == "scorch")["metadata"]
-
-
-def res(settings, name, **kw):
-    return resolve(load_switchboard(name, settings), settings, **kw)
 
 
 def rtu1(health):
@@ -88,9 +82,8 @@ def test_health_waterway_covers_old_checks(settings):
     assert "state established" not in linux
 
 
-def test_explicit_runs_override(settings, monkeypatch):
-    for v, f in (("SITE_TOPOLOGY", "topology"), ("SITE_SCENARIO", "scenario")):
-        monkeypatch.setenv(f"BURGER_{v}", str(GOLDEN / f"site-{f}.yaml"))
+@pytest.mark.usefixtures("site_env")
+def test_explicit_runs_override(settings):
     _, runs = compose(res(settings, "provider"), MAN)
     want = yaml.safe_load((settings.root / "switchboards/provider.yaml").read_text())["runs"]
     assert runs[-len(want) :] == want
@@ -115,15 +108,14 @@ def test_advisory_vm_checks_get_own_health_extras(settings):
     assert run["start"] == ["health-siren"]
 
 
-_ROOT = Settings.from_env(Path(__file__).resolve().parents[1])
-WATERWAY = [b for b in all_switchboards(_ROOT) if load_switchboard(b, _ROOT).route == "waterway"]
+WATERWAY = [
+    b
+    for b in all_switchboards(ROOT_SETTINGS)
+    if load_switchboard(b, ROOT_SETTINGS).route == "waterway"
+]
 
 
-@pytest.fixture(autouse=True)
-def vm_password(monkeypatch):
-    monkeypatch.setenv("BURGER_VM_PASSWORD", "lab")  # ssh's scenario needs it
-
-
+@pytest.mark.usefixtures("vm_password")
 @pytest.mark.parametrize("linux_only", [False, True])
 @pytest.mark.parametrize("name", WATERWAY)
 def test_every_waterway_board_has_rtu_health(settings, name, linux_only):
@@ -135,6 +127,7 @@ def test_every_waterway_board_has_rtu_health(settings, name, linux_only):
     assert ("state established" in args) == (not linux_only)
 
 
+@pytest.mark.usefixtures("vm_password")
 def test_no_deb_waterway_asserts_bennu_installed(settings):
     stock = {**MAN, "bennu": None}
     old = next(c for c in rtu1(golden_scorch("baseline")["components"][0]) if "dpkg" in c["args"])
@@ -150,9 +143,8 @@ def test_provider_health_is_power_solver_only(settings):
     assert [c["args"] for c in vm["start"]] == ["pgrep -f '(^|/)pybennu-power-solver( |$)'"]
 
 
-def test_site_wheel_only_has_no_version_check(settings, monkeypatch):
-    for v, f in (("SITE_TOPOLOGY", "topology"), ("SITE_SCENARIO", "scenario")):
-        monkeypatch.setenv(f"BURGER_{v}", str(GOLDEN / f"site-{f}.yaml"))
+@pytest.mark.usefixtures("site_env")
+def test_site_wheel_only_has_no_version_check(settings):
     man = {**MAN, "bennu": {"pr": 59, "sha": "c" * 40, "wheel": "pybennu-1-py3-none-any.whl"}}
     assert "dpkg-query" not in json.dumps(health_component(res(settings, "rtds"), man))
 

@@ -7,5 +7,3 @@ stages: [start, stop]
 config:
   vms: ["{route.rtus[0]}", "{route.rtus[1]}", "{route.provider}"]
   pollPeriod: 1
-verify:
-  - status: ok

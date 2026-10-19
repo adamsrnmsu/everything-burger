@@ -9,7 +9,6 @@ stages: [start, stop]
 config:
   vms: [{hostname: "{route.rtus[0]}", interface: 0}]
 verify:
-  - status: ok
   - files: {glob: "*.pcap", min: 1}
   # The traffic is SCADA/OPC polling: skipped without the Windows nodes.
   - pcap: {glob: "*.pcap", tcp_port: "{route.ics_port}", min_packets: 10, windows: true}
