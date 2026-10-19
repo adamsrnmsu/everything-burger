@@ -1,5 +1,7 @@
 # burger
 
+<!-- mascot -->
+
 **burger** is a live smoke test for open `sceptre-phenix-apps` and
 `sceptre-bennu` pull requests, run on a real phēnix host. It answers one
 question: *with my PRs merged, do the SCEPTRE topologies still come up, and do
