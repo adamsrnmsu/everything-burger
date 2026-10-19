@@ -14,6 +14,7 @@
 | `BURGER_SITE_PROVIDER` | `power-provider` | provider VM hostname on the `site` route |
 | `BURGER_RTDS_*` | see [the site route](run-book.md#the-site-route-your-own-rig) | `ES_VERIFY`, `ES_SERVER`, `ES_INDEX`, `RSCAD`, `RSCAD_URL`: values the rtds items read |
 | `BURGER_SITE_CONFIG` | `~/.config/burger/site.yaml` if it exists | the [site file](proxy.md): proxy, CA certificates and mirrors for docker steps and git |
+| `BURGER_BENCH_TAGS`, `BURGER_BENCH_CYCLE_MS`, `BURGER_BENCH_SECS`, `BURGER_BENCH_MAX_CYCLE_S` | `800`, `100`, `20`, `2.0` | the `bench` switchboard: output tags, field-device scan cycle (ms), measuring window (s) and the pass limit (s per write cycle) |
 | `BURGER_VM_PASSWORD` | unset | root password of the `bennu.qc2` image, for the `ssh` switchboard only. It ends up in the rendered `scenario.json`, so keep it a lab-only value |
 
 Fixed: upstream repos are `sandialabs/*`, PRs merge onto `main`, and the

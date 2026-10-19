@@ -1,0 +1,82 @@
+name: field-device-bench
+kind: scorch
+type: cc
+about: >
+  Times the C++ field device's write cycle live. On the first RTU a second,
+  throwaway field device runs BURGER_BENCH_TAGS (800) output tags that all
+  change every cycle, writing batched WRITEs to a REP responder on 127.0.0.1
+  (bennu's own throughput mock); the mean gap between writes of one tag over
+  BURGER_BENCH_SECS (20) is the cycle time. Fails above BURGER_BENCH_MAX_CYCLE_S
+  (2.0, bennu CI's limit) and reports the number either way. Needs a bennu
+  build with the batched writes (#55).
+routes: [soap, waterway]
+stages: [start]
+# The tunables are ${VAR:-default} expansions, read when burger loads this file.
+# No other ${...} in here: SCORCH templating eats it in cc commands.
+config:
+  vms:
+    - hostname: "{route.rtus[0]}"
+      start:
+        - type: exec
+          wait: true
+          args: |
+            python3 - <<'PY'
+            import json, os, signal, subprocess, time
+            N = int("${BURGER_BENCH_TAGS:-800}")
+            CYCLE_MS = int("${BURGER_BENCH_CYCLE_MS:-100}")
+            SECS = float("${BURGER_BENCH_SECS:-20}")
+            MAX = float("${BURGER_BENCH_MAX_CYCLE_S:-2.0}")
+            EP, XML, OUT = "tcp://127.0.0.1:5599", "/tmp/burger-bench.xml", "/tmp/burger-bench.json"
+            res = {"tags": N, "window_s": SECS, "max_cycle_s": MAX, "requests": 0,
+                   "tag_writes": 0, "probe_writes": 0, "seconds_per_cycle": None, "error": None}
+            fd = None
+            try:
+                import zmq
+                tags = "".join(f"<external-tag><name>p{i}</name><io>O{i}</io><type>analog</type></external-tag>" for i in range(N))
+                outs = "".join(f"<analog><id>O{i}</id><name>p{i}</name></analog>" for i in range(N))
+                logic = "\n".join(f"p{i} = p{i} + 1" for i in range(N))
+                open(XML, "w").write(f'<?xml version="1.0" encoding="utf-8"?><SCEPTRE><field-device><name>bench-1</name><cycle-time>{CYCLE_MS}</cycle-time><tags>{tags}</tags><output><endpoint>{EP}</endpoint>{outs}</output><logic><![CDATA[\n{logic}\n]]></logic></field-device></SCEPTRE>')
+                rep = zmq.Context().socket(zmq.REP)
+                rep.bind(EP)
+                env = dict(os.environ, BENNU_LOG_LEVEL="INFO")
+                fd = subprocess.Popen(["bennu-field-device", "--file", XML], env=env,
+                                      stdout=open("/tmp/burger-bench-fd.log", "w"), stderr=subprocess.STDOUT)
+                first, stamps, t0 = None, [], time.time()
+                while True:
+                    now = time.time()
+                    if first is None and now - t0 > 60:
+                        res["error"] = "no WRITE reached the responder in 60 s"
+                        break
+                    if first is not None and now - first > SECS:
+                        break
+                    if not rep.poll(500):
+                        continue
+                    op, _, payload = rep.recv().rstrip(b"\0").decode().partition("=")
+                    if op.upper() == "WRITE":
+                        first = first or time.time()
+                        pts = [p.split(":")[0] for p in payload.split(",") if p]
+                        res["requests"] += 1
+                        res["tag_writes"] += len(pts)
+                        if "p0" in pts:
+                            stamps.append(time.time())
+                    rep.send(b"ACK=ok\0")
+                gaps = [b - a for a, b in zip(stamps, stamps[1:])]
+                res["probe_writes"] = len(stamps)
+                res["seconds_per_cycle"] = sum(gaps) / len(gaps) if gaps else None
+            except Exception as e:
+                res["error"] = f"{type(e).__name__}: {e}"
+            finally:
+                if fd:
+                    fd.send_signal(signal.SIGINT)
+                    try:
+                        fd.wait(10)
+                    except subprocess.TimeoutExpired:
+                        fd.kill()
+                json.dump(res, open(OUT, "w"))
+                print(json.dumps(res))
+            PY
+        - type: recv
+          args: /tmp/burger-bench.json
+verify:
+  - status: ok
+  - python: judge_bench
