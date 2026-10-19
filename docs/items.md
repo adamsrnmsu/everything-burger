@@ -16,6 +16,9 @@ check key fails at load.
 
 Every item file in full: [reference](reference/items.md).
 
+A `python` check may return `None` instead of pass/fail; the row is then `WARN`.
+`opendss-batched-write` does this when the VM lacks `opendssdirect`.
+
 ## Adding a test
 
 ```bash

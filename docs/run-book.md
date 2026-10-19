@@ -11,6 +11,7 @@
 ./burger run metadata
 ./burger run harden
 ./burger run bench           # field-device write cycle at 800 tags; see Limitations
+./burger run opendss          # bennu #64 batched OpenDSS write; see Limitations
 ./burger install baseline     # put upstream main back into phēnix when done
 ```
 

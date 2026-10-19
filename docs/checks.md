@@ -15,7 +15,7 @@ Every component's status files are judged without a `verify` entry: an error `re
 | `vm` | a command run inside a VM over cc exits 0 | `- vm: {host: "{route.rtus}", run: "pgrep -f bennu-field-deviced"}` |
 | `process` | shorthand for `vm`: a process named `name` runs on `host` (anchored `pgrep -f '(^\|/)NAME( \|$)'`) | `- process: {host: "{route.provider}", name: pybennu-power-solver}` |
 | `port` | shorthand for `vm`: `port` is listening on `host`, or has an established connection with `state: established` (`ss`) | `- port: {host: "{route.rtus}", port: 502}` |
-| `python` | a function in the item's folder returns pass/fail plus a message | `- python: check_totals` |
+| `python` | a function in the item's folder returns pass/fail (or `None` for WARN) plus a message | `- python: check_totals` |
 
 Every check reports a one-line reason and the paths it read. Items marked `advisory` report `advisory-FAIL` and do not fail the board.
 `process` names may use only `[A-Za-z0-9._-]` and `port` must be an integer, so scenario metadata cannot inject shell. A pattern needing regex such as `bennu-field-deviced?` stays a raw `vm`. Keys a check does not know (`min_packet`) are a load error.

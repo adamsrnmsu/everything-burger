@@ -1,0 +1,11 @@
+# Live proof of bennu #64 (a batched OpenDSS write applies every device). No
+# route runs OpenDSS, so the item drives the solver in-process on soap's provider
+# VM. Drop the `bennu:` block to run it on stock bennu.qc2: it should FAIL there.
+about: "bennu #64 on soap: batched OpenDSS write must change both loads"
+route: soap
+apps: {prs: []}
+bennu:
+  pr: 64
+  install: [pybennu]
+items:
+  opendss-batched-write: on

@@ -1,0 +1,63 @@
+name: opendss-batched-write
+kind: scorch
+type: cc
+about: >
+  Live check for bennu #64 (one OpenDSS write must apply every device in the
+  batch). On the route's provider VM, builds a two-load OpenDSS circuit, makes
+  the pybennu OpenDSS solver in-process (no sockets), sends ONE write() that
+  turns both loads off, then asks OpenDSS itself whether each load is still
+  enabled. Fails naming the load that did not change. On stock bennu main only
+  the last device in the batch is applied, so this FAILS there; it passes with
+  #64. Skipped (WARN) when opendssdirect is not installed on the VM.
+routes: [soap]
+stages: [start]
+config:
+  vms:
+    - hostname: "{route.provider}"
+      start:
+        - type: exec
+          wait: true
+          args: |
+            python3 - <<'PY'
+            import json, os, tempfile
+            OUT = "/tmp/burger-opendss.json"
+            res = {"skipped": None, "error": None, "write": None, "devices": {}}
+            try:
+                try:
+                    import opendssdirect as dss
+                except ImportError:
+                    res["skipped"] = "opendssdirect not installed on bennu.qc2"
+                    raise SystemExit
+                from pybennu.distributed.provider import Provider
+                from pybennu.providers.power.solvers.opendss import OpenDSS
+                Provider.__init__ = lambda self, *a, **k: None  # no zmq sockets
+                path = os.path.join(tempfile.mkdtemp(), "master.dss")
+                open(path, "w").write(
+                    "clear\n"
+                    "new circuit.burger basekv=12.47 phases=3 bus1=src\n"
+                    "new load.a bus1=src phases=3 kv=12.47 kw=100 kvar=10\n"
+                    "new load.b bus1=src phases=3 kv=12.47 kw=200 kvar=10\n"
+                    "set voltagebases=[12.47]\ncalcvoltagebases\nsolve\n"
+                )
+                solver = OpenDSS("", "", path, debug=False, clear_circuit="disabled", jitter="disabled")
+
+                def enabled(n):
+                    dss.Circuit.SetActiveElement("Load." + n)
+                    return bool(dss.CktElement.Enabled())
+
+                before = {n: enabled(n) for n in "ab"}
+                res["write"] = solver.write({"load_a.active": "false", "load_b.active": "false"})
+                # OpenDSS's own state, not pybennu's element objects
+                res["devices"] = {f"load_{n}": {"before": before[n], "after": enabled(n)} for n in "ab"}
+            except SystemExit:
+                pass
+            except Exception as e:
+                res["error"] = f"{type(e).__name__}: {e}"
+            finally:
+                json.dump(res, open(OUT, "w"))
+                print(json.dumps(res))
+            PY
+        - type: recv
+          args: /tmp/burger-opendss.json
+verify:
+  - python: judge_opendss

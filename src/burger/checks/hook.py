@@ -23,4 +23,6 @@ def load(item: Item, function: str) -> Callable[[CheckContext], tuple[bool, str]
 def python(spec, ctx: CheckContext) -> Row:
     function = spec if isinstance(spec, str) else spec["function"]
     ok, message = load(ctx.item, function)(ctx)
+    if ok is None:  # the hook could not run its test: shown as WARN, never a pass
+        return Row(ctx.item.name, "python", "WARN", str(message), [str(d) for d in ctx.dirs])
     return row(ctx, "python", bool(ok), str(message), ctx.dirs)
