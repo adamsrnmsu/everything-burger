@@ -14,13 +14,13 @@ from burger.items import STAGES, load_item
 from tests.fakes import FakeHost
 
 ROOT = Path(__file__).resolve().parents[1]
+pytestmark = pytest.mark.usefixtures("vm_password")
 
 
 @pytest.fixture(autouse=True)
 def at_root(monkeypatch, tmp_path):
     monkeypatch.chdir(ROOT)
     monkeypatch.setenv("BURGER_WORK", str(tmp_path))
-    monkeypatch.setenv("BURGER_VM_PASSWORD", "lab")
 
 
 def test_version(capsys):

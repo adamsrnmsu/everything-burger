@@ -1,12 +1,9 @@
 import dataclasses
-from pathlib import Path
 
 import pytest
 
 from burger.config import BurgerError
 from burger.switchboard import all_switchboards, load_switchboard, resolve
-
-GOLDEN = Path(__file__).parent / "golden"
 
 
 def board(settings, name, **kw):
@@ -53,8 +50,8 @@ def test_linux_only_skips_windows_items(settings):
     assert "modbus-polled" not in [i.name for i in resolve(b, settings, linux_only=True).items]
 
 
-def test_required_app_follows_its_requirer(settings, monkeypatch):
-    monkeypatch.setenv("BURGER_VM_PASSWORD", "lab")
+@pytest.mark.usefixtures("vm_password")
+def test_required_app_follows_its_requirer(settings):
     r = resolve(load_switchboard("ssh", settings), settings)
     assert [i.name for i in r.items][:2] == ["ssh", "mgmt_tap"]
     assert r.requires.env == ["BURGER_VM_PASSWORD"]
@@ -72,10 +69,8 @@ def test_experiment_name_too_long(settings):
         resolve(board(settings, "baseline", exp="ebwes-" + "x" * 10), settings)
 
 
-def test_every_switchboard_resolves(settings, monkeypatch):
-    monkeypatch.setenv("BURGER_VM_PASSWORD", "lab")
-    monkeypatch.setenv("BURGER_SITE_TOPOLOGY", str(GOLDEN / "site-topology.yaml"))
-    monkeypatch.setenv("BURGER_SITE_SCENARIO", str(GOLDEN / "site-scenario.yaml"))
+@pytest.mark.usefixtures("site_env")
+def test_every_switchboard_resolves(settings):
     names = all_switchboards(settings)
     assert len(names) == 9
     for name in names:
