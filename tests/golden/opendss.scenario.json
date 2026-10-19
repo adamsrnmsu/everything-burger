@@ -1,0 +1,336 @@
+{
+  "apiVersion": "phenix.sandia.gov/v2",
+  "kind": "Scenario",
+  "metadata": {
+    "name": "ebwes-opendss",
+    "annotations": {
+      "topology": "ebwes-opendss"
+    }
+  },
+  "spec": {
+    "apps": [
+      {
+        "name": "tap",
+        "metadata": {
+          "taps": [
+            {
+              "bridge": "phenix",
+              "vlan": "MGMT",
+              "ip": "172.16.0.1/16",
+              "externalAccess": {
+                "enabled": true
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "sceptre",
+        "assetDir": "/phenix/topologies/burger-soap",
+        "hosts": [
+          {
+            "hostname": "power-provider",
+            "metadata": {
+              "case": "/phenix/topologies/burger-soap/injects/case300.py",
+              "labels": [
+                "elk"
+              ],
+              "publish_endpoint": "udp://*;239.0.0.1:40000",
+              "simulator": "PyPower",
+              "type": "provider"
+            }
+          },
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "dnp3": [
+                {
+                  "name": "bus-242",
+                  "type": "bus"
+                },
+                {
+                  "name": "generator-1_bus-242",
+                  "type": "generator"
+                },
+                {
+                  "name": "bus-alert",
+                  "type": "bus"
+                }
+              ],
+              "infrastructure": "power-transmission",
+              "labels": [
+                "elk"
+              ],
+              "provider": "power-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "dnp3": [
+                {
+                  "name": "bus-243",
+                  "type": "bus"
+                },
+                {
+                  "name": "load-1_bus-243",
+                  "type": "load"
+                },
+                {
+                  "name": "generator-1_bus-243",
+                  "type": "generator"
+                }
+              ],
+              "infrastructure": "power-transmission",
+              "labels": [
+                "elk"
+              ],
+              "provider": "power-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-3",
+            "metadata": {
+              "dnp3": [
+                {
+                  "name": "bus-244",
+                  "type": "bus"
+                },
+                {
+                  "name": "branch-1_243-244",
+                  "type": "branch"
+                }
+              ],
+              "infrastructure": "power-transmission",
+              "labels": [
+                "elk"
+              ],
+              "provider": "power-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-4",
+            "metadata": {
+              "dnp3": [
+                {
+                  "name": "bus-245",
+                  "type": "bus"
+                },
+                {
+                  "name": "load-1_bus-245",
+                  "type": "load"
+                },
+                {
+                  "name": "branch-1_242-245",
+                  "type": "branch"
+                },
+                {
+                  "name": "branch-1_243-245",
+                  "type": "branch"
+                }
+              ],
+              "infrastructure": "power-transmission",
+              "labels": [
+                "elk"
+              ],
+              "provider": "power-provider",
+              "type": "fd-server"
+            }
+          }
+        ]
+      },
+      {
+        "name": "scorch",
+        "metadata": {
+          "components": [
+            {
+              "name": "health",
+              "type": "cc",
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "power-provider",
+                    "start": [
+                      {
+                        "type": "exec",
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "wait": true,
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "wait": true,
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "wait": true,
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }"
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "type": "exec",
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "wait": true,
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "wait": true,
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "wait": true,
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }"
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-2",
+                    "start": [
+                      {
+                        "type": "exec",
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "wait": true,
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "wait": true,
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "wait": true,
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }"
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-3",
+                    "start": [
+                      {
+                        "type": "exec",
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "wait": true,
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "wait": true,
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "wait": true,
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }"
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-4",
+                    "start": [
+                      {
+                        "type": "exec",
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "wait": true,
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "wait": true,
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "wait": true,
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }"
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "siren",
+                    "start": [
+                      {
+                        "type": "exec",
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "wait": true,
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "wait": true,
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "wait": true,
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "opendss-batched-write",
+              "type": "cc",
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "power-provider",
+                    "start": [
+                      {
+                        "type": "exec",
+                        "wait": true,
+                        "args": "python3 - <<'PY'\nimport json, os, tempfile\nOUT = \"/tmp/burger-opendss.json\"\nres = {\"skipped\": None, \"error\": None, \"write\": None, \"devices\": {}}\ntry:\n    try:\n        import opendssdirect as dss\n    except ImportError:\n        res[\"skipped\"] = \"opendssdirect not installed on bennu.qc2\"\n        raise SystemExit\n    from pybennu.distributed.provider import Provider\n    from pybennu.providers.power.solvers.opendss import OpenDSS\n    Provider.__init__ = lambda self, *a, **k: None  # no zmq sockets\n    path = os.path.join(tempfile.mkdtemp(), \"master.dss\")\n    open(path, \"w\").write(\n        \"clear\\n\"\n        \"new circuit.burger basekv=12.47 phases=3 bus1=src\\n\"\n        \"new load.a bus1=src phases=3 kv=12.47 kw=100 kvar=10\\n\"\n        \"new load.b bus1=src phases=3 kv=12.47 kw=200 kvar=10\\n\"\n        \"set voltagebases=[12.47]\\ncalcvoltagebases\\nsolve\\n\"\n    )\n    solver = OpenDSS(\"\", \"\", path, debug=False, clear_circuit=\"disabled\", jitter=\"disabled\")\n\n    def enabled(n):\n        dss.Circuit.SetActiveElement(\"Load.\" + n)\n        return bool(dss.CktElement.Enabled())\n\n    before = {n: enabled(n) for n in \"ab\"}\n    res[\"write\"] = solver.write({\"load_a.active\": \"false\", \"load_b.active\": \"false\"})\n    # OpenDSS's own state, not pybennu's element objects\n    res[\"devices\"] = {f\"load_{n}\": {\"before\": before[n], \"after\": enabled(n)} for n in \"ab\"}\nexcept SystemExit:\n    pass\nexcept Exception as e:\n    res[\"error\"] = f\"{type(e).__name__}: {e}\"\nfinally:\n    json.dump(res, open(OUT, \"w\"))\n    print(json.dumps(res))\nPY\n"
+                      },
+                      {
+                        "type": "recv",
+                        "args": "/tmp/burger-opendss.json"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          "runs": [
+            {
+              "name": "health",
+              "start": [
+                "health"
+              ]
+            },
+            {
+              "name": "opendss",
+              "start": [
+                "opendss-batched-write"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

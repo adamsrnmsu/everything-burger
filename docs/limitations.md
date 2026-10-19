@@ -5,6 +5,13 @@
   `requires.keep_nodes`. Without Ignition nothing polls DNP3 on the RTUs, so a
   traffic check on soap would see nothing. soap's `mirror` app goes with
   `netmonitor`.
+- The `opendss` switchboard does not run OpenDSS through the apps or the provider:
+  the apps' `Simulator` enum has no OpenDSS and soap runs PyPower. The
+  `opendss-batched-write` item builds the solver in-process on the provider VM
+  with its sockets stubbed out, so the provider REP socket is not exercised. It
+  needs `opendssdirect` on the VM; the pybennu wheel installs with `--no-deps`, so
+  without it the row is WARN, not pass. To see the bug, drop the `bennu:` block
+  (stock `bennu.qc2`): the row FAILs naming the load that did not change.
 - The `ssh` switchboard reaches rtu-1 through `mgmt_tap`'s tap on the host, so it
   only works when the phēnix container shares the host's network.
 

@@ -10,6 +10,7 @@
 ./burger run pybennu
 ./burger run metadata
 ./burger run harden
+./burger run opendss          # bennu #64 batched OpenDSS write; see Limitations
 ./burger install baseline     # put upstream main back into phēnix when done
 ```
 
