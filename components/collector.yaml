@@ -7,5 +7,3 @@ stages: [stop]
 config: {}
 requires:
   apps_prs: [169]
-verify:
-  - status: ok

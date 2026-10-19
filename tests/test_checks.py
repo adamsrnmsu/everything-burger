@@ -99,7 +99,7 @@ def test_python_hook(settings, tmp_path):
 
 
 def test_advisory_downgrade(settings, tmp_path):
-    verify = [{"status": "ok"}, {"vm": {"run": "true"}}, {"files": {"glob": "*.pcap"}}]
+    verify = [{"vm": {"run": "true"}}, {"files": {"glob": "*.pcap"}}]
     ctx, _ = make_ctx(settings, tmp_path, verify=verify, advisory=True)
     assert [r.verdict for r in run_checks(ctx.item, ctx)] == ["advisory-FAIL"]
     ctx = dataclasses.replace(ctx, item=dataclasses.replace(ctx.item, advisory=False))

@@ -11,5 +11,4 @@ advisory: false         # true: failures are reported but do not fail the board
 config: {}
 requires: {}            # env: [], cc_nodes: [], keep_nodes: []
 verify:
-  - status: ok
   # - vm: {host: "{route.provider}", run: "pgrep -f __NAME__"}   # exit 0 = pass; must print something

@@ -8,5 +8,3 @@ routes: [waterway, soap, site]
 stages: [start, stop]
 background: true
 config: {pollPeriod: 5}
-verify:
-  - status: ok

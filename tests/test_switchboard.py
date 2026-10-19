@@ -104,4 +104,4 @@ def test_harden_tcpdump_counts_gre(settings):
     tcpdump = next(i for i in res.items if i.name == "tcpdump")
     spec = next(v["pcap"] for v in tcpdump.verify if "pcap" in v)
     assert spec["tcp_port"] == 502 and spec["ip_proto"] == 47
-    assert [next(iter(v)) for v in tcpdump.verify] == ["status", "files", "pcap"]
+    assert [next(iter(v)) for v in tcpdump.verify] == ["files", "pcap"]

@@ -10,8 +10,6 @@ stages: [configure, start, stop, cleanup]
 config: {hostname: "{route.provider}"}
 requires:
   apps_prs: [166]
-verify:
-  - status: ok
 soap:
   config: {export_config: false, export_logs: true}
 site:

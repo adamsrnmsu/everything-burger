@@ -18,5 +18,3 @@ requires:
     packages: [iperf3, libiperf0, libsctp1]
     nodes: "{route.rtus}"
   apps_prs: [165]
-verify:
-  - status: ok

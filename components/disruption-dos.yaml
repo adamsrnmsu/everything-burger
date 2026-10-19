@@ -15,5 +15,3 @@ config:
     start_delay: 10
     attacker: {hostname: kali, script_path: /root/dos.py, results_path: /root/results}
     targets: [{hostname: rtu-1}]
-verify:
-  - status: ok

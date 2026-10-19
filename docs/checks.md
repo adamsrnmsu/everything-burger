@@ -3,10 +3,10 @@
 `verify` is a list of checks, each reading the SCORCH output copied back to
 `work/<switchboard>/results/run-N/<component>/`. A check whose input is
 missing fails with "no output found at …"; it never passes.
+Every component's status files are judged without a `verify` entry: an error `return` fails, and a background component's `stop` entry carries the verdict ([sceptre-phenix#457](https://github.com/sandialabs/sceptre-phenix/issues/457)). Writing `status:` in `verify` is a load error.
 
 | Check | Passes when | Example |
 |---|---|---|
-| `status` | the component's status files have no error `return`; the background `stop` entry carries the verdict ([sceptre-phenix#457](https://github.com/sandialabs/sceptre-phenix/issues/457)) | `- status: ok` |
 | `files` | a glob matches at least `min` files, each at least `min_bytes` | `- files: {glob: "*.pcap", min: 1}` |
 | `pcap` | pcap/pcapng files parse and hold at least `min_packets` matching a TCP/UDP port (or protocol) | `- pcap: {glob: "*.pcap", tcp_port: 502, min_packets: 10}` |
 | `json` | a JSON file's field exists, equals or matches | `- json: {glob: "*.json", field: "status", equals: "ok"}` |

@@ -11,5 +11,4 @@ config: {}              # scenario app metadata
 hosts: []               # [{hostname: monitor, metadata: {interface: mirror}}]
 requires: {}            # monitor: true, mgmt_vlan: "mgmt", env: [], apps_prs: []
 verify:
-  - status: ok
   # - vm: {host: monitor, run: "timeout 30 tcpdump -nn -i any -c 3 'tcp port 502'"}

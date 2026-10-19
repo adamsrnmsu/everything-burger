@@ -15,9 +15,8 @@ KINDS = ("scorch", "app", "bennu")
 STAGES = ("configure", "start", "stop", "cleanup")
 _ROUTE_BLOCKS = ("waterway", "soap", "site")
 _TOKEN = re.compile(r"\{route\.(\w+)(?:\[(\d+)\])?\}")
-# Each verify entry is one check type -> the spec keys it needs (checks.CHECKS + status, vm).
+# Each verify entry is one check type -> the spec keys it needs (checks.CHECKS + vm).
 CHECK_KEYS = {
-    "status": (),
     "vm": ("host", "run"),
     "files": ("glob",),
     "pcap": ("glob",),
@@ -56,6 +55,10 @@ def _check_fields(path: Path, doc: dict, where: str = "") -> None:
         if not isinstance(entry, dict) or len(entry) != 1:
             raise BurgerError(f"{path}: {field} must be one check, like `- files: {{glob: ...}}`")
         ((name, spec),) = entry.items()
+        if name == "status":
+            raise BurgerError(
+                f"{path}: {field}: 'status' is checked for every component; delete it"
+            )
         if name not in CHECK_KEYS:
             raise BurgerError(
                 f"{path}: {field}: unknown check '{name}' (known: {', '.join(CHECK_KEYS)})"

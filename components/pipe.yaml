@@ -5,5 +5,3 @@ about: Writes a line into a minimega pipe at start.
 routes: [waterway, soap, site]
 stages: [start, cleanup]
 config: {pipe: burger, data: hello-from-burger}
-verify:
-  - status: ok

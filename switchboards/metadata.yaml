@@ -36,7 +36,6 @@ overrides:
         - {hostname: rtu-1, interface: 0, filter: "not tcp port 502"}
         - {hostname: rtu-2, interface: 0}
     verify:
-      - status: ok
       - log: {glob: "*.json", lacks: "\\] ERROR :"}
       - files: {glob: "rtu-*.pcap", min: 2}
       # rtu-1's own filter applied, and did not carry over to rtu-2
@@ -47,7 +46,6 @@ overrides:
       vms: [{hostname: rtu-2, iface: any, filter: "tcp port 502"}]
       convertToJSON: true
     verify:
-      - status: ok
       # a failed kill or conversion is logged as an error and the stage carries on
       - log: {glob: "*.json", lacks: "\\] ERROR :"}
       - files: {glob: "*.pcap", min: 1}
@@ -64,7 +62,6 @@ overrides:
               capture: {interface: 0, filename: burger-provider.pcap, filter: "not tcp port 502"}
           stop: [{type: stop_capture, capture: {interface: 0, convert: true}}]
     verify:
-      - status: ok
       - log: {glob: "*.json", lacks: "\\] ERROR :"}
       - files: {glob: "burger-*.pcap", min: 2}
       - files: {glob: "*.jsonl", min: 2}

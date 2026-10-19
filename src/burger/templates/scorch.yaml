@@ -15,7 +15,6 @@ config:                 # SCORCH metadata exactly as phenix-apps expects
   vms: [{hostname: "{route.rtus[0]}", interface: 0}]   # {route.<key>} comes from routes/*.yaml
 requires: {}            # debs: {packages: [], nodes: []}, apps: [], apps_prs: [], env: [], monitor: true
 verify:
-  - status: ok          # no error return in the component's status files
   # - files: {glob: "*.pcap", min: 1}
   # - log: {glob: "*.log", lacks: "ERROR"}
 # waterway: {}          # per-route overrides of config/verify

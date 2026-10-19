@@ -13,7 +13,7 @@ CHECKS: dict[str, Callable[[dict, CheckContext], Row]] = {
     "pcap": pcap.pcap,
     "python": hook.python,
 }
-HANDLED_BY_VERIFY = ("status", "vm")
+HANDLED_BY_VERIFY = ("vm",)
 
 
 def run_checks(item: Item, ctx: CheckContext) -> list[Row]:

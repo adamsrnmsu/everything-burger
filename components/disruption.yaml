@@ -8,5 +8,3 @@ routes: [waterway, soap, site]
 stages: [configure, start, cleanup]
 holds: true
 config: {current_disruption: baseline, run_duration: 30}
-verify:
-  - status: ok

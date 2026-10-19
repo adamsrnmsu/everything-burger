@@ -86,11 +86,12 @@ HEAD = "name: x\nkind: scorch\ntype: x\n"
     [
         ("verify:\n  - pcaps: {glob: '*.pcap'}\n", "verify[0]: unknown check 'pcaps'"),
         ("verify:\n  - vm: {hosts: rtu-1, run: 'true'}\n", "verify[0].vm needs 'host'"),
-        ("verify:\n  - status: ok\n  - vm: {host: rtu-1}\n", "verify[1].vm needs 'run'"),
+        ("verify:\n  - vm: {host: rtu-1}\n", "verify[0].vm needs 'run'"),
+        ("verify:\n  - status: ok\n", "verify[0]: 'status' is checked for every component"),
         ("verify:\n  - log: {path: '*.log'}\n", "verify[0].log needs 'glob'"),
         ("verify:\n  - json: {glob: '*.json'}\n", "verify[0].json needs 'field'"),
         ("verify:\n  - python: {}\n", "verify[0].python needs 'function'"),
-        ("verify:\n  - {status: ok, files: {glob: x}}\n", "verify[0] must be one check"),
+        ("verify:\n  - {vm: {host: a, run: b}, files: {glob: x}}\n", "verify[0] must be one check"),
         ("requires: {app_prs: [170]}\n", "requires.app_prs is not a requirement"),
         ("soap:\n  verify:\n    - pcap: {tcp_port: 1}\n", "soap.verify[0].pcap needs 'glob'"),
     ],
@@ -128,4 +129,4 @@ def test_template_examples_load_uncommented(settings, tmp_path, kind):
     (d / "zz.yaml").write_text(text)
     ref = "zz" if kind == "scorch" else f"{d.name}/zz"
     item = load_item(ref, dataclasses.replace(settings, root=tmp_path))
-    assert len(item.verify) >= 2
+    assert item.verify
