@@ -6,12 +6,11 @@ about: >
   provider.
 routes: [waterway, soap]
 verify:
-  - vm:
-      host: "{route.rtus}"
-      run: "ss -Hltn '( sport = :502 )' | grep -q ."
+  - port: {host: "{route.rtus}", port: 502}
   - vm:
       host: "{route.rtus}"
       # Anchored: bennu-watcherd's argv contains bennu-field-deviced.firmware.
+      # Raw vm: the trailing d? alternation is not a process-name shorthand.
       run: "pgrep -f '(^|/)bennu-field-deviced?( |$)'"
   - vm:
       host: "{route.rtus}"

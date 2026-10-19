@@ -7,6 +7,4 @@ about: >
 routes: [waterway]
 requires: {windows: true}
 verify:
-  - vm:
-      host: "{route.rtus}"
-      run: "ss -Htn state established '( sport = :502 )' | grep -q ."
+  - port: {host: "{route.rtus}", port: 502, state: established}

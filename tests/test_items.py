@@ -114,7 +114,41 @@ def test_check_keys_cover_every_check():
     from burger.checks import CHECKS, HANDLED_BY_VERIFY
     from burger.items import CHECK_KEYS
 
-    assert set(CHECK_KEYS) == {*CHECKS, *HANDLED_BY_VERIFY}
+    assert set(CHECK_KEYS) == {*CHECKS, *HANDLED_BY_VERIFY, "process", "port"}
+
+
+@pytest.mark.parametrize(
+    "check, run",
+    [
+        ({"process": {"host": "h", "name": "bennu-x"}}, "pgrep -f '(^|/)bennu-x( |$)'"),
+        ({"port": {"host": "h", "port": 502}}, "ss -Hltn '( sport = :502 )' | grep -q ."),
+        (
+            {"port": {"host": "h", "port": "502", "state": "established"}},
+            "ss -Htn state established '( sport = :502 )' | grep -q .",
+        ),
+    ],
+)
+def test_process_and_port_expand_to_vm(settings, check, run):
+    item = dataclasses.replace(
+        load_item("pcap", settings), verify=[{k: {**v, "windows": True} for k, v in check.items()}]
+    )
+    out = resolve_item(item, load_route("soap", settings), None)
+    assert out.verify == [{"vm": {"host": "h", "run": run, "windows": True}}]
+
+
+@pytest.mark.parametrize(
+    "check, why",
+    [
+        ({"process": {"host": "h", "name": "x; reboot"}}, "must match"),
+        ({"process": {"host": "h", "name": "x'y"}}, "must match"),
+        ({"port": {"host": "h", "port": "502; reboot"}}, "must be an integer"),
+        ({"port": {"host": "h", "port": 22, "state": "closed"}}, "must be listening or"),
+    ],
+)
+def test_process_and_port_reject_unsafe_values(settings, check, why):
+    item = dataclasses.replace(load_item("pcap", settings), verify=[check])
+    with pytest.raises(BurgerError, match=why):
+        resolve_item(item, load_route("soap", settings), None)
 
 
 @pytest.mark.parametrize("kind", ["scorch", "app", "bennu"])

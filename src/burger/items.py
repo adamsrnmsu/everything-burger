@@ -18,6 +18,8 @@ _TOKEN = re.compile(r"\{route\.(\w+)(?:\[(\d+)\])?\}")
 # Each verify entry is one check type -> the spec keys it needs (checks.CHECKS + vm).
 CHECK_KEYS = {
     "vm": ("host", "run"),
+    "process": ("host", "name"),  # shorthands for vm, expanded by resolve_item
+    "port": ("host", "port"),
     "files": ("glob",),
     "pcap": ("glob",),
     "csv": ("glob",),
@@ -25,6 +27,19 @@ CHECK_KEYS = {
     "json": ("glob", "field"),
     "python": ("function",),
 }
+# Keys a check accepts besides CHECK_KEYS; any check also takes `windows`.
+OPTIONAL_KEYS = {
+    "vm": ("expect",),
+    "process": ("expect",),
+    "port": ("state", "expect"),
+    "files": ("min", "min_bytes"),
+    "pcap": ("tcp_port", "udp_port", "ip_proto", "min_packets"),
+    "csv": ("min_rows", "columns"),
+    "log": ("contains", "lacks"),
+    "json": ("equals", "matches", "exists"),
+}
+_NAME = re.compile(r"[A-Za-z0-9._-]+")
+_SS = {"listening": "-Hltn", "established": "-Htn state established"}
 REQUIRES = set("debs apps apps_prs env monitor mgmt_vlan cc_nodes keep_nodes windows".split())
 
 
@@ -69,6 +84,12 @@ def _check_fields(path: Path, doc: dict, where: str = "") -> None:
         lacking = [k for k in need if not isinstance(spec, dict) or k not in spec]
         if lacking:
             raise BurgerError(f"{path}: {field}.{name} needs '{lacking[0]}'")
+        known = {*need, *OPTIONAL_KEYS.get(name, ()), "windows"}
+        if unknown := sorted(set(spec) - known):
+            raise BurgerError(
+                f"{path}: {field}.{name}: unknown key '{unknown[0]}' "
+                f"(known: {', '.join(sorted(known))})"
+            )
     requires = doc.get("requires") or {}
     bad = sorted(requires if not isinstance(requires, dict) else set(requires) - REQUIRES)
     if bad:
@@ -165,6 +186,26 @@ def _vm_runs(item: Item):
             yield str(check["vm"].get("run", ""))
 
 
+def _expand(entry: dict, path: Path) -> dict:
+    """process and port become the vm check they stand for; other checks pass through."""
+    ((name, spec),) = entry.items()
+    if name not in ("process", "port"):
+        return entry
+    if name == "process":
+        if not _NAME.fullmatch(str(spec["name"])):
+            raise BurgerError(f"{path}: process name {spec['name']!r} must match [A-Za-z0-9._-]+")
+        run = f"pgrep -f '(^|/){spec['name']}( |$)'"
+    else:
+        state = spec.get("state", "listening")
+        if state not in _SS:
+            raise BurgerError(f"{path}: port state {state!r} must be {' or '.join(_SS)}")
+        if not re.fullmatch(r"\d+", str(spec["port"])):
+            raise BurgerError(f"{path}: port {spec['port']!r} must be an integer")
+        run = f"ss {_SS[state]} '( sport = :{spec['port']} )' | grep -q ."
+    rest = {k: v for k, v in spec.items() if k not in ("host", "name", "port", "state")}
+    return {"vm": {"host": spec["host"], "run": run, **rest}}
+
+
 def resolve_item(item: Item, route: Route, override: dict | None) -> Item:
     d = asdict(item)
     overrides = d.pop("overrides")
@@ -172,6 +213,7 @@ def resolve_item(item: Item, route: Route, override: dict | None) -> Item:
     d = _subst(_merge(d, override or {}), route)
     out = Item(**d, overrides=overrides)
     _check_fields(out.path, d)  # the switchboard's override may bring its own verify
+    out.verify = [_expand(e, out.path) for e in out.verify]
     for run in _vm_runs(out):
         if "${" in run:
             raise BurgerError(f"{out.path}: vm check must not contain '${{': {run}")

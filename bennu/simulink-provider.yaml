@@ -6,7 +6,6 @@ routes: [waterway]
 verify:
   - vm:
       host: "{route.provider}"
+      # Raw vm: the optional (-helics) alternation is not a process-name shorthand.
       run: "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'"
-  - vm:
-      host: "{route.provider}"
-      run: "pgrep -f '(^|/)simulinksolver( |$)'"
+  - process: {host: "{route.provider}", name: simulinksolver}
