@@ -19,6 +19,14 @@ Every item file in full: [reference](reference/items.md).
 A `python` check may return `None` instead of pass/fail; the row is then `WARN`.
 `opendss-batched-write` does this when the VM lacks `opendssdirect`.
 
+`fifo` (`components/fifo.yaml` and `.py`) is a live check for bennu #66: a `cc`
+component on the first RTU sends the simulink provider one batched `WRITE` of
+`BURGER_FIFO_TAGS` (default 1000, keep it between 257 and 4096) made-up tags
+with `bennu-probe` (its `--tag` takes the whole comma-separated batch), and a
+python check passes only if the provider ACKs. A vm check also fails on a FIFO
+error in `/etc/sceptre/log/provider.log`. Stock bennu's 64 KiB pipe fills at
+the 257th record, so this item is meant to FAIL there.
+
 ## Adding a test
 
 ```bash

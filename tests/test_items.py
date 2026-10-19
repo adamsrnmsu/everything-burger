@@ -164,3 +164,9 @@ def test_template_examples_load_uncommented(settings, tmp_path, kind):
     ref = "zz" if kind == "scorch" else f"{d.name}/zz"
     item = load_item(ref, dataclasses.replace(settings, root=tmp_path))
     assert item.verify
+
+
+def test_fifo_sends_the_tunable_tag_count(settings, monkeypatch):
+    assert "N=1000\n" in load_item("fifo", settings).config["vms"][0]["start"][0]["args"]
+    monkeypatch.setenv("BURGER_FIFO_TAGS", "300")
+    assert "N=300\n" in load_item("fifo", settings).config["vms"][0]["start"][0]["args"]

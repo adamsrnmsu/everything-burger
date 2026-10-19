@@ -44,6 +44,11 @@
 - SCORCH templating eats `${...}` in cc commands and validators; keep it out of
   any `cc` component, including the ones in `components/*.yaml`.
 
+- The `fifo` board only means something on waterway's C++ simulink provider,
+  and it is meant to fail on stock bennu. The sender needs `bennu-probe` on
+  the RTU (it ships in the bennu deb). The reply text is whatever the probe
+  prints: the pass/fail comes from its exit code (0 only on `ACK`). The solver
+  silently skips unknown tag names unless built with DEBUG.
 - Written against phēnix and minimega source; the first live run is its real test.
 - `--linux-only` drops SCADA, OPC, HMI and historian, so nothing polls the RTUs
   and the Modbus and mirror checks are skipped.

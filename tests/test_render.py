@@ -178,3 +178,10 @@ def test_site_route_render(settings, monkeypatch, tmp_path):
     assert sc["components"][0]["name"] == "health" and sc["runs"][0]["name"] == "health"
     assert next(c for c in sc["components"] if c["type"] == "rtds")["metadata"]["hostname"] == "pp1"
     assert "pip3 install" in bennu_startup(man) and "dpkg" not in bennu_startup(man)
+
+
+def test_fifo_renders_one_cc_component(settings, topologies):
+    res, _, _, scen = build(settings, topologies, "fifo", False)
+    names = [c["name"] for c in scorch_of(scen)["components"] if not c["name"].startswith("health")]
+    assert names == ["fifo"]
+    assert res.board.bennu["pr"] == 66

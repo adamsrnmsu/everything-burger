@@ -32,6 +32,7 @@ this.
 | `bench` | upstream `main` | #59 deb and pybennu wheel (carries #55) | soap: `field-device-bench` times a throwaway 800-tag field device on rtu-1 and fails above 2 s per write cycle; the report row shows the measured time |
 | `opendss` | bennu #64 | #64 pybennu wheel | soap: `opendss-batched-write` runs the OpenDSS solver in-process on the provider VM and sends one write for two loads; fails if either is still enabled in OpenDSS. Fails on stock main (only the last device is applied); WARN when `opendssdirect` is missing |
 | `ssh` | #170 | stock `bennu.qc2` | ssh to rtu-1 over `mgmt_tap`, after the waterway health checks; needs `BURGER_VM_PASSWORD` |
+| `fifo` | upstream `main` | #66 deb | one 1000-tag batched WRITE from rtu-1 to waterway's simulink provider must ACK, and `provider.log` must show no FIFO error. **Fails on stock bennu** by design (drop the `bennu:` block to see it) |
 
 Models no route can run are validated offline by `phenix-scorch-validate`
 (items with `routes: []` are validate-only).

@@ -1,0 +1,50 @@
+name: fifo
+kind: scorch
+type: cc
+about: >
+  Sends the simulink provider one batched WRITE of BURGER_FIFO_TAGS (1000)
+  tags from the first RTU and checks it ACKs. Stock bennu sizes the updates
+  FIFO at 64 KiB (256 records), so it replies "ERR=Problem writing tag in
+  simulink provider" and this FAILS; bennu #66 sizes it at 1 MiB (4096
+  records) and it passes. A vm check also fails on a FIFO error in
+  provider.log. The tag names are made up (burgerfifo1..N): the provider
+  does not validate them and the solver skips parameters it cannot find.
+  The sender is bennu-probe, which ships in the bennu deb: its --tag takes
+  the whole comma-separated batch, so one probe call is one WRITE.
+routes: [waterway]
+stages: [start]
+# BURGER_FIFO_TAGS is read when burger loads this file; keep it between 257 and
+# 4096. No other ${...} in here: SCORCH templating eats it in cc commands.
+config:
+  vms:
+    - hostname: "{route.rtus[0]}"
+      start:
+        - type: exec
+          wait: true
+          args: |
+            N=${BURGER_FIFO_TAGS:-1000}
+            OUT_FILE=/tmp/burger-fifo.json
+            EP=$(sed -n 's#.*<endpoint>\(tcp://[^<]*\)</endpoint>.*#\1#p' /etc/sceptre/config.xml | tail -1)
+            if [ -z "$EP" ]; then
+              RC=2; OUT='no provider endpoint in /etc/sceptre/config.xml'
+            else
+              TAG=$(seq 1 $N | sed 's/^/burgerfifo/;s/$/:0/' | paste -sd, - | sed 's/:0$//')
+              # the probe appends ":0" to the last tag; retry while the provider is not up yet
+              for TRY in 1 2 3 4 5 6; do
+                OUT=$(timeout 60 bennu-probe --endpoint "$EP" --command write --tag "$TAG" --value 0 2>&1); RC=$?
+                [ $RC -eq 0 ] && break
+                case "$OUT" in *offline*) sleep 10 ;; *) break ;; esac
+              done
+            fi
+            ESC=$(printf '%s' "$OUT" | tr '\n\t' '  ' | sed 's/\\/\\\\/g; s/"/\\"/g')
+            printf '{"tags": %s, "rc": %s, "reply": "%s"}\n' "$N" "$RC" "$ESC" > $OUT_FILE
+            cat $OUT_FILE
+        - type: recv
+          args: /tmp/burger-fifo.json
+verify:
+  - python: judge_fifo
+  - vm:
+      host: "{route.provider}"
+      run: >-
+        [ -f /etc/sceptre/log/provider.log ] &&
+        ! grep -E 'FIFO full|Problem sending update|Fatal: Unable to size' /etc/sceptre/log/provider.log
