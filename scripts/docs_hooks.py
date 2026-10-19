@@ -1,17 +1,21 @@
 """MkDocs hook: generate the reference pages from the repo, so they cannot drift.
 
 reference/items.md and reference/switchboards.md embed every YAML file verbatim;
-reference/cli.md is the argparse help of every burger command.
+reference/cli.md is the argparse help of every burger command. The home page's
+<!-- mascot --> marker becomes the truecolor banner art from src/burger/assets/mascot.ans.
 """
 
 import argparse
+import html
 import os
+import re
 from pathlib import Path
 
 import yaml
 from mkdocs.structure.files import File
 
 ROOT = Path(__file__).resolve().parents[1]
+MASCOT = ROOT / "src" / "burger" / "assets" / "mascot.ans"
 KINDS = (("components", "SCORCH components"), ("apps", "phēnix apps"), ("bennu", "bennu"))
 
 
@@ -70,6 +74,22 @@ def _cli() -> str:
         out.append(f"## `{name}`\n")
         out.append(f"```text\n{cmd.format_help().rstrip()}\n```\n")
     return "\n".join(out)
+
+
+def _mascot() -> str:
+    def cell(m: re.Match) -> str:
+        r, g, b, ch = m.groups()
+        return f'<span style="color:rgb({r},{g},{b})">{html.escape(ch)}</span>'
+
+    art = re.sub(r"\x1b\[38;2;(\d+);(\d+);(\d+)m(.)", cell, MASCOT.read_text())
+    art = art.replace("\x1b[0m", "")
+    return f'<pre class="mascot" aria-label="burger sceptre mascot">{art.rstrip()}</pre>'
+
+
+def on_page_markdown(markdown, page, config, files):
+    if page.file.src_uri == "index.md":
+        return markdown.replace("<!-- mascot -->", _mascot())
+    return markdown
 
 
 def on_files(files, config):

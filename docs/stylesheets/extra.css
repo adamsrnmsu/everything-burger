@@ -1,0 +1,21 @@
+/* Warm the slate scheme from blue-gray toward toasted bun. */
+[data-md-color-scheme="slate"] {
+  --md-hue: 20;
+}
+
+/* Banner art from src/burger/assets/mascot.ans, rendered by scripts/docs_hooks.py. */
+.md-typeset pre.mascot {
+  float: right;
+  margin: 0 0 1em 1.5em;
+  background: none;
+  font-size: 0.42rem;
+  line-height: 1.05;
+}
+
+@media screen and (max-width: 44.9375em) {
+  .md-typeset pre.mascot {
+    float: none;
+    margin: 0 auto 1em;
+    width: max-content;
+  }
+}
