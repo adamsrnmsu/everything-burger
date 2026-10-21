@@ -23,6 +23,23 @@ def test_evaluate():
     assert rows == {("poll", "start"): "ok", ("poll", "stop"): "FAIL"}
 
 
+def test_evaluate_expect_error():
+    spec_ = {"name": "r", "start": ["es"]}
+    want = {"es": "no cluster info"}
+    boom = {("es", "start"): [{"return": "Error occurred: Elasticsearch returned no cluster info"}]}
+    rows = evaluate(spec_, boom, expect=want)
+    assert [(r[2], r[3]) for r in rows] == [("start", "ok")]
+    assert rows[0][4].startswith("failed as expected")
+    # another error, a clean pass, and a sys.exit (no status file) all fail
+    other = {("es", "start"): [{"return": "Error occurred: connection refused"}]}
+    assert evaluate(spec_, other, expect=want)[0][3] == "FAIL"
+    clean = {("es", "start"): [{"return": ""}]}
+    rows = evaluate(spec_, clean, expect=want)
+    assert [(r[2], r[3]) for r in rows] == [("start", "ok"), ("expect_error", "FAIL")]
+    gone = evaluate(spec_, {}, expect=want)
+    assert [(r[2], r[3]) for r in gone] == [("start", "FAIL"), ("expect_error", "FAIL")]
+
+
 def test_collect_skips_non_status_json(tmp_path):
     loop = tmp_path / "erspan" / "loop-0-count-0"
     loop.mkdir(parents=True)

@@ -275,6 +275,7 @@ def scorch(
         raise BurgerError(f"switchboard '{name}' was brought up with a different --linux-only")
     components, runs = compose(res, load_manifest(settings, name))
     background = {c["name"] for c in components if c.get("background")}
+    expect = {i.name: i.expect_error for i in res.items if i.expect_error}
     if run is not None and not 0 <= run < len(runs):
         raise BurgerError(f"switchboard '{name}' has runs 0-{len(runs) - 1}")
     for i in range(len(runs)) if run is None else [run]:
@@ -308,7 +309,7 @@ def scorch(
                 clock.sleep(30)
                 continue
             results = collect(res, settings, host, i, since)
-            failed = [r for r in evaluate(runs[i], results, background) if r[3] == "FAIL"]
+            failed = [r for r in evaluate(runs[i], results, background, expect) if r[3] == "FAIL"]
             if not failed:
                 break
             if deadline is None:

@@ -114,11 +114,12 @@ def verify(res: Resolved, settings, host) -> list[Row]:
     components, runs = compose(res, man)
     background = {c["name"] for c in components if c.get("background")}
     advisory_items = {i.name for i in res.items if i.advisory}
+    expect = {i.name: i.expect_error for i in res.items if i.expect_error}
     status, errors = {}, {}
     for n, run in enumerate(runs):
         results = collect(res, settings, host, n)
         extras = str(run.get("name", "")).startswith("extras")
-        for _, comp, stage, verdict, detail in evaluate(run, results, background):
+        for _, comp, stage, verdict, detail in evaluate(run, results, background, expect):
             status[(comp, stage)] = verdict
             where = rd / "results" / f"run-{n}" / comp
             advisory = extras or comp in advisory_items
