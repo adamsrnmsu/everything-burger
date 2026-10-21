@@ -30,6 +30,13 @@ containers, and the waterway images in `/phenix/images`: `bennu.qc2`,
 python3 -m venv .venv && .venv/bin/pip install -e .      # add '.[dev]' for the tests
 ```
 
+`bennu.qc2` and `minirouter.qc2` are published by
+[sceptre-phenix-images](https://github.com/sandialabs/sceptre-phenix-images);
+pull them into `/phenix/images` with
+`oras pull ghcr.io/sandialabs/sceptre-phenix-images/bennu.qc2:latest` (the same
+for `minirouter.qc2`). The Windows images are not public: without them, pass
+`--linux-only` to `preflight`, `run` and the step commands.
+
 `./burger` is a shim that runs `.venv/bin/burger`, and says what to do when the
 venv is missing. Run it from the checkout: `work/` and the item folders are
 found relative to the current directory.
@@ -48,6 +55,7 @@ out of the hooks (they need `BURGER_TOPOLOGIES`); run `make test` before pushing
 ./burger list                 # switchboards and items
 ./burger check metadata       # resolve and render offline; no phēnix needed
 ./burger run baseline         # sync, build, install, up, scorch, verify, down
+./burger run baseline --linux-only   # the same without the Windows images
 ```
 
 `make` with no target lists shortcuts for the same commands: `make install`,

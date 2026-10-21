@@ -29,6 +29,7 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 ./burger preflight          # can this host run burger?
 ./burger list               # switchboards and items
 ./burger run baseline       # the control: if this fails, the rig is broken, not a PR
+                            # add --linux-only to both without the licensed Windows images
 ```
 
 Then see the [run book](run-book.md), or [add a test](items.md#adding-a-test).

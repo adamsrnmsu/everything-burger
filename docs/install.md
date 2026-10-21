@@ -9,6 +9,13 @@ containers, and the waterway images in `/phenix/images`: `bennu.qc2`,
 python3 -m venv .venv && .venv/bin/pip install -e .      # add '.[dev]' for the tests
 ```
 
+`bennu.qc2` and `minirouter.qc2` are published by
+[sceptre-phenix-images](https://github.com/sandialabs/sceptre-phenix-images);
+pull them into `/phenix/images` with
+`oras pull ghcr.io/sandialabs/sceptre-phenix-images/bennu.qc2:latest` (the same
+for `minirouter.qc2`). The Windows images are not public: without them, pass
+`--linux-only` to `preflight`, `run` and the step commands.
+
 `./burger` is a shim that runs `.venv/bin/burger`, and says what to do when the
 venv is missing. Run it from the checkout: `work/` and the item folders are
 found relative to the current directory.
