@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install prek
+      - run: prek run --all-files --show-diff-on-failure
+
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e '.[dev]'
+      # The render tests read the upstream topologies; without them they skip.
+      - run: git clone --depth 1 https://github.com/sandialabs/sceptre-phenix-topologies.git "$RUNNER_TEMP/topologies"
+      - run: python -m pytest
+        env:
+          BURGER_TOPOLOGIES: ${{ runner.temp }}/topologies

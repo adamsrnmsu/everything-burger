@@ -1,11 +1,12 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "burger"
 version = "0.1.0"
 description = "Switchboards, item files and checks for sceptre-phenix test rounds"
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = ["PyYAML", "loguru", "rich", "pyfiglet"]
 

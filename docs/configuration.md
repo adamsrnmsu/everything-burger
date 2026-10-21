@@ -5,7 +5,7 @@
 | `BURGER_PHENIX_CONTAINER` | `phenix` | container running phēnix; empty for a native install |
 | `BURGER_API` | `http://localhost:3000/api/v1` | phēnix REST API |
 | `BURGER_TOKEN` | unset | JWT, when phēnix auth is on |
-| `BURGER_WORK` | `work/` in the current directory | clones, worktrees, builds, results |
+| `BURGER_WORK` | `work/` in the checkout | clones, worktrees, builds, results |
 | `BURGER_APPS_REPO`, `BURGER_BENNU_REPO`, `BURGER_TOPOLOGIES_REPO` | `work/repos/*` | use an existing clone; burger only adds `refs/burger/*` and worktrees |
 | `BURGER_TOPOLOGIES` | unset | topologies clone for `check` and the tests, so they need no `sync` |
 | `BURGER_MINIMEGA_CONTAINER` | `minimega` | container burger copies `miniccc` from and sends router cc commands through; empty disables both |

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from burger import cli, experiment
+from burger import cli, config, experiment
 from burger import verify as v
 from burger.cli import main
 from burger.compose import compose
@@ -19,7 +19,6 @@ pytestmark = pytest.mark.usefixtures("vm_password")
 
 @pytest.fixture(autouse=True)
 def at_root(monkeypatch, tmp_path):
-    monkeypatch.chdir(ROOT)
     monkeypatch.setenv("BURGER_WORK", str(tmp_path))
 
 
@@ -38,7 +37,7 @@ def test_list_shows_boards_and_items(capsys):
 
 @pytest.mark.parametrize("kind", ["scorch", "app", "bennu"])
 def test_new_template_loads(tmp_path, monkeypatch, kind):
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(config, "_checkout", lambda: tmp_path)
     assert main(["new", kind, "thing"]) == 0
     path = tmp_path / cli.KIND_DIR[kind] / "thing.yaml"
     item = load_item(
@@ -50,14 +49,14 @@ def test_new_template_loads(tmp_path, monkeypatch, kind):
 
 
 def test_new_refuses_overwrite(tmp_path, monkeypatch, capsys):
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(config, "_checkout", lambda: tmp_path)
     assert main(["new", "scorch", "thing"]) == 0
     assert main(["new", "scorch", "thing"]) == 1
     assert "already exists" in capsys.readouterr().err
 
 
 def test_new_rejects_path_names(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(config, "_checkout", lambda: tmp_path)
     assert main(["new", "app", "../evil"]) == 1
     assert not (tmp_path.parent / "evil.yaml").exists()
 

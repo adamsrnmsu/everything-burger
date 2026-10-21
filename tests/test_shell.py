@@ -19,6 +19,14 @@ def test_settings_from_env_defaults(monkeypatch, tmp_path):
     assert s.work == tmp_path.resolve() / "work"
 
 
+def test_settings_root_is_the_checkout_from_any_directory(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("BURGER_WORK", raising=False)
+    s = Settings.from_env()
+    assert (s.root / "switchboards" / "baseline.yaml").is_file()
+    assert s.work == s.root / "work"
+
+
 def test_settings_empty_container_means_native(monkeypatch, tmp_path):
     monkeypatch.setenv("BURGER_PHENIX_CONTAINER", "")
     assert Settings.from_env(tmp_path).ctr == ""

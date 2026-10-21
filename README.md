@@ -38,8 +38,8 @@ for `minirouter.qc2`). The Windows images are not public: without them, pass
 `--linux-only` to `preflight`, `run` and the step commands.
 
 `./burger` is a shim that runs `.venv/bin/burger`, and says what to do when the
-venv is missing. Run it from the checkout: `work/` and the item folders are
-found relative to the current directory.
+venv is missing. It works from any directory: `work/` and the item folders are
+found in the checkout burger was installed from.
 
 To work on burger itself, install the git hooks once with
 [prek](https://prek.j178.dev) (`uv tool install prek`):

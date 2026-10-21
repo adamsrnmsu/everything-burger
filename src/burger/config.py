@@ -19,6 +19,12 @@ MAX_EXP_NAME = 15  # phēnix bridge-name limit (api/experiment/experiment.go)
 GIT_ID = ["-c", "user.name=burger", "-c", "user.email=burger@localhost"]
 
 
+def _checkout() -> Path:
+    """The checkout an editable install points at, else the current directory."""
+    here = Path(__file__).resolve().parents[2]
+    return here if (here / "switchboards").is_dir() else Path.cwd()
+
+
 @dataclass(frozen=True)
 class Settings:
     root: Path
@@ -31,7 +37,7 @@ class Settings:
 
     @classmethod
     def from_env(cls, root: Path | None = None) -> "Settings":
-        root = (root or Path.cwd()).resolve()
+        root = (root or _checkout()).resolve()
         env = os.environ.get
         return cls(
             root=root,
