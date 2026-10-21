@@ -253,6 +253,25 @@
               },
               "name": "cc-empty-output",
               "type": "cc"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "args": "echo 'warn: x' >&2; echo 'tcp 0 0 0.0.0.0:22 0.0.0.0:* LISTEN 812/sshd'",
+                        "type": "exec",
+                        "validator": "out=$(cat); grep -Fxq 'tcp 0 0 0.0.0.0:22 0.0.0.0:* LISTEN 812/sshd' <<<\"$out\" || { echo \"$1: cc stdout came back as: $out\" >&2; exit 1; }",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "cc-output-parsing",
+              "type": "cc"
             }
           ],
           "runs": [
@@ -265,7 +284,8 @@
             {
               "name": "cc-empty",
               "start": [
-                "cc-empty-output"
+                "cc-empty-output",
+                "cc-output-parsing"
               ]
             }
           ]

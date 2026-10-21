@@ -16,5 +16,3 @@ config:
           args: "true"
           wait: true
           validator: '[ -z "$(cat)" ] || { echo "$1: expected no output" >&2; exit 1; }'
-verify:
-  - status: ok

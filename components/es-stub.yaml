@@ -1,0 +1,41 @@
+name: es-stub
+kind: scorch
+type: cc
+about: >
+  Starts a fake Elasticsearch on the provider VM, port 9200. It answers every
+  GET with `{}` and the X-Elastic-Product header, so the client accepts the
+  server and `es.info()` comes back empty: the one reply that reaches the line
+  #192 changed in connect_elastic. A refused or unreachable server raises
+  inside the client with or without #192, so it would test nothing.
+routes: [soap]
+stages: [start]
+config:
+  vms:
+    - hostname: "{route.provider}"
+      start:
+        # No ${...} here: SCORCH templating eats it.
+        - type: exec
+          wait: true
+          args: |
+            cat > /tmp/burger-es-stub.py <<'PY'
+            import http.server
+            class H(http.server.BaseHTTPRequestHandler):
+                def do_GET(self):
+                    body = b"{}"
+                    self.send_response(200)
+                    self.send_header("X-Elastic-Product", "Elasticsearch")
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                def log_message(self, *a):
+                    pass
+            http.server.HTTPServer(("0.0.0.0", 9200), H).serve_forever()
+            PY
+            setsid nohup python3 /tmp/burger-es-stub.py </dev/null >/tmp/burger-es-stub.log 2>&1 &
+            for i in 1 2 3 4 5; do
+              ss -ltn | grep -q ':9200 ' && exit 0
+              sleep 1
+            done
+            echo 'es stub is not listening on 9200' >&2
+            exit 1

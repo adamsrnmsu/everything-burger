@@ -64,6 +64,17 @@ def test_sync_merges_prs_and_writes_manifest(settings, apps_origin, topologies, 
     assert json.loads((settings.work / "baseline" / "manifest.json").read_text()) == man
 
 
+def test_sync_carrying_a_merged_pr_is_a_no_op(settings, apps_origin, topologies, monkeypatch):
+    # #190 merged upstream while boards still listed it: its head is already in main
+    make_origin(apps_origin, {1: "one\n"})
+    git(apps_origin, "merge", "-q", "--no-ff", "-m", "merge pr 1", "pr1")
+    monkeypatch.setitem(config.REPOS, "topologies", str(topologies))
+    monkeypatch.setenv("BURGER_TOPOLOGIES_REPO", str(topologies))
+    man = sync(board_with_prs(settings, [1]), settings, Host(settings))
+    assert man["apps"]["head"] == man["apps"]["base"]  # nothing left to merge
+    assert (settings.work / "baseline" / "apps" / "a.txt").read_text() == "one\n"
+
+
 def test_prs_flags_stale_boards(settings, monkeypatch):
     board = load_switchboard("pybennu", settings)
     assert board.bennu

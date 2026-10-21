@@ -19,5 +19,3 @@ config:
           validator: >-
             out=$(cat); grep -Fxq 'tcp 0 0 0.0.0.0:22 0.0.0.0:* LISTEN 812/sshd' <<<"$out"
             || { echo "$1: cc stdout came back as: $out" >&2; exit 1; }
-verify:
-  - status: ok

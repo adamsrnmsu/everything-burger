@@ -1,0 +1,14 @@
+name: helics
+kind: app
+type: helics
+about: >
+  The helics app with its root broker on the first RTU, named hostname|iface.
+  #195's app lookups (extract_node_ip, require_node, extract_node_hostname_for_ip)
+  turn that into the broker start script injected into the RTU. helics_broker
+  itself is not in bennu.qc2, so only the script is checked, not a running broker.
+routes: [waterway]
+config: {broker: {root: "{route.rtus[0]}|IF0"}}
+verify:
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "grep -q -e '--name {route.rtus[0]}' /etc/phenix/startup/90-helics-broker.sh"

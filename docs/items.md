@@ -5,7 +5,7 @@ apps added to the scenario) or `bennu/` (in-VM checks and bennu config). The
 fields, with comments, are in the template `burger new` copies. The ones
 that matter: `about` (what it does and what a pass means), `routes` (where it
 runs), `stages`, `holds`, `background`, `advisory` (failures do not fail the
-board), `config` (SCORCH metadata exactly as phenix-apps expects), `requires`
+board), `expect_error` (a regex the component's failure must match: that is the pass; any other outcome, `sys.exit` included, fails), `config` (SCORCH metadata exactly as phenix-apps expects), `requires`
 and `verify`. `{route.<key>}` in an item reads the route file (`rtus`,
 `provider`, `ics_port`). A `waterway:`, `soap:` or `site:` block overrides
 `config` or `verify` for that route.

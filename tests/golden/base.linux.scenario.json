@@ -3,10 +3,10 @@
   "kind": "Scenario",
   "metadata": {
     "annotations": {
-      "topology": "ebwes-cc-header"
+      "topology": "ebwes-base"
     },
     "created": "",
-    "name": "ebwes-cc-header",
+    "name": "ebwes-base",
     "updated": ""
   },
   "spec": {
@@ -110,6 +110,36 @@
       },
       {
         "metadata": {
+          "subnet": "172.16.0.0/16",
+          "vlan": "MGMT"
+        },
+        "name": "mgmt_tap"
+      },
+      {
+        "hosts": [
+          {
+            "hostname": "monitor",
+            "metadata": {
+              "interface": "mirror",
+              "vlans": [
+                "SCADA",
+                "ICS"
+              ]
+            }
+          }
+        ],
+        "name": "mirror"
+      },
+      {
+        "metadata": {
+          "broker": {
+            "root": "rtu-1|IF0"
+          }
+        },
+        "name": "helics"
+      },
+      {
+        "metadata": {
           "components": [
             {
               "metadata": {
@@ -121,6 +151,11 @@
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
                         "type": "exec",
                         "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q -e '--name rtu-1' /etc/phenix/startup/90-helics-broker.sh",
+                        "type": "exec",
                         "wait": true
                       },
                       {
@@ -191,6 +226,78 @@
               },
               "name": "health",
               "type": "cc"
+            },
+            {
+              "metadata": {
+                "current_disruption": "baseline",
+                "run_duration": 30
+              },
+              "name": "disruption",
+              "type": "disruption"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "interface": 0
+                  }
+                ]
+              },
+              "name": "pcap",
+              "type": "pcap"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "filter": "tcp port 502",
+                    "hostname": "rtu-2",
+                    "iface": "any"
+                  }
+                ]
+              },
+              "name": "tcpdump",
+              "type": "tcpdump"
+            },
+            {
+              "metadata": {
+                "start": [
+                  {
+                    "capture": {
+                      "bridge": "phenix",
+                      "filename": "burger-bridge.pcap"
+                    },
+                    "type": "start_capture"
+                  }
+                ],
+                "stop": [
+                  {
+                    "capture": {
+                      "bridge": "phenix"
+                    },
+                    "type": "stop_capture"
+                  }
+                ]
+              },
+              "name": "mm",
+              "type": "mm"
+            },
+            {
+              "metadata": {
+                "pollPeriod": 1,
+                "vms": []
+              },
+              "name": "vmstats",
+              "type": "vmstats"
+            },
+            {
+              "background": true,
+              "metadata": {
+                "pollPeriod": 5
+              },
+              "name": "hoststats",
+              "type": "hoststats"
             }
           ],
           "runs": [
@@ -198,6 +305,30 @@
               "name": "health",
               "start": [
                 "health"
+              ]
+            },
+            {
+              "cleanup": [
+                "disruption"
+              ],
+              "configure": [
+                "disruption"
+              ],
+              "name": "base",
+              "start": [
+                "pcap",
+                "tcpdump",
+                "mm",
+                "vmstats",
+                "hoststats",
+                "disruption"
+              ],
+              "stop": [
+                "pcap",
+                "tcpdump",
+                "mm",
+                "vmstats",
+                "hoststats"
               ]
             }
           ]

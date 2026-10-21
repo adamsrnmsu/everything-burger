@@ -3,10 +3,10 @@
   "kind": "Scenario",
   "metadata": {
     "annotations": {
-      "topology": "ebwes-cc-parse"
+      "topology": "ebwes-base"
     },
     "created": "",
-    "name": "ebwes-cc-parse",
+    "name": "ebwes-base",
     "updated": ""
   },
   "spec": {
@@ -14,6 +14,18 @@
       {
         "assetDir": "/phenix/topologies/burger-waterway",
         "hosts": [
+          {
+            "hostname": "historian",
+            "metadata": {
+              "type": "historian"
+            }
+          },
+          {
+            "hostname": "hmi",
+            "metadata": {
+              "type": "hmi"
+            }
+          },
           {
             "hostname": "simulink-provider",
             "metadata": {
@@ -27,6 +39,27 @@
               "simulator": "Simulink",
               "solver": "/phenix/topologies/burger-waterway/injects/simulinksolver",
               "type": "provider"
+            }
+          },
+          {
+            "hostname": "opc",
+            "metadata": {
+              "connected_rtus": [
+                "rtu-1",
+                "rtu-2"
+              ],
+              "type": "opc"
+            }
+          },
+          {
+            "hostname": "scada-server",
+            "metadata": {
+              "automation": "/phenix/topologies/burger-waterway/injects/myscada.exe",
+              "labels": [
+                "elk"
+              ],
+              "project": "/phenix/topologies/burger-waterway/injects/waterway.mep",
+              "type": "scada-server"
             }
           },
           {
@@ -110,6 +143,36 @@
       },
       {
         "metadata": {
+          "subnet": "172.16.0.0/16",
+          "vlan": "MGMT"
+        },
+        "name": "mgmt_tap"
+      },
+      {
+        "hosts": [
+          {
+            "hostname": "monitor",
+            "metadata": {
+              "interface": "mirror",
+              "vlans": [
+                "SCADA",
+                "ICS"
+              ]
+            }
+          }
+        ],
+        "name": "mirror"
+      },
+      {
+        "metadata": {
+          "broker": {
+            "root": "rtu-1|IF0"
+          }
+        },
+        "name": "helics"
+      },
+      {
+        "metadata": {
           "components": [
             {
               "metadata": {
@@ -124,6 +187,11 @@
                         "wait": true
                       },
                       {
+                        "args": "grep -q -e '--name rtu-1' /etc/phenix/startup/90-helics-broker.sh",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
                         "type": "exec",
                         "wait": true
@@ -135,6 +203,11 @@
                       },
                       {
                         "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
                         "type": "exec",
                         "wait": true
                       }
@@ -163,6 +236,11 @@
                         "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
                         "type": "exec",
                         "wait": true
+                      },
+                      {
+                        "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
                       }
                     ]
                   },
@@ -186,6 +264,16 @@
                         "wait": true
                       }
                     ]
+                  },
+                  {
+                    "hostname": "monitor",
+                    "start": [
+                      {
+                        "args": "timeout 30 tcpdump -nn -i any -c 3 'tcp port 502 or ip proto 47'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
                   }
                 ]
               },
@@ -194,22 +282,75 @@
             },
             {
               "metadata": {
+                "current_disruption": "baseline",
+                "run_duration": 30
+              },
+              "name": "disruption",
+              "type": "disruption"
+            },
+            {
+              "metadata": {
                 "vms": [
                   {
                     "hostname": "rtu-1",
-                    "start": [
-                      {
-                        "args": "echo 'warn: x' >&2; echo 'tcp 0 0 0.0.0.0:22 0.0.0.0:* LISTEN 812/sshd'",
-                        "type": "exec",
-                        "validator": "out=$(cat); grep -Fxq 'tcp 0 0 0.0.0.0:22 0.0.0.0:* LISTEN 812/sshd' <<<\"$out\" || { echo \"$1: cc stdout came back as: $out\" >&2; exit 1; }",
-                        "wait": true
-                      }
-                    ]
+                    "interface": 0
                   }
                 ]
               },
-              "name": "cc-output-parsing",
-              "type": "cc"
+              "name": "pcap",
+              "type": "pcap"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "filter": "tcp port 502",
+                    "hostname": "rtu-2",
+                    "iface": "any"
+                  }
+                ]
+              },
+              "name": "tcpdump",
+              "type": "tcpdump"
+            },
+            {
+              "metadata": {
+                "start": [
+                  {
+                    "capture": {
+                      "bridge": "phenix",
+                      "filename": "burger-bridge.pcap"
+                    },
+                    "type": "start_capture"
+                  }
+                ],
+                "stop": [
+                  {
+                    "capture": {
+                      "bridge": "phenix"
+                    },
+                    "type": "stop_capture"
+                  }
+                ]
+              },
+              "name": "mm",
+              "type": "mm"
+            },
+            {
+              "metadata": {
+                "pollPeriod": 1,
+                "vms": []
+              },
+              "name": "vmstats",
+              "type": "vmstats"
+            },
+            {
+              "background": true,
+              "metadata": {
+                "pollPeriod": 5
+              },
+              "name": "hoststats",
+              "type": "hoststats"
             }
           ],
           "runs": [
@@ -220,9 +361,27 @@
               ]
             },
             {
-              "name": "cc-parse",
+              "cleanup": [
+                "disruption"
+              ],
+              "configure": [
+                "disruption"
+              ],
+              "name": "base",
               "start": [
-                "cc-output-parsing"
+                "pcap",
+                "tcpdump",
+                "mm",
+                "vmstats",
+                "hoststats",
+                "disruption"
+              ],
+              "stop": [
+                "pcap",
+                "tcpdump",
+                "mm",
+                "vmstats",
+                "hoststats"
               ]
             }
           ]

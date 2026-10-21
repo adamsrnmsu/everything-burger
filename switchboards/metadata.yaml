@@ -1,8 +1,9 @@
-# #160 metadata models: the shared base #190, #164-#177 on it, and #191's cc
-# filter helper, plus #158, on stock bennu. Models no route can run
+# #160 metadata models #164-#177 and #191's cc filter helper, plus #158, on
+# stock bennu. Their shared base #190 merged upstream on 2026-10-20 and is on
+# main. Models no route can run
 # (disruption-dos) are checked offline by phenix-scorch-validate; the rtds,
 # providerdata, collector, iperf and ssh models are validated on their own
-# boards.
+# boards. pcap-alias does the same for pcap's deprecated convertToJSON key.
 #
 # The capture overrides test round 2 of review. pcap filters rtu-1 to
 # non-Modbus traffic, then resets minimega's namespace-wide filter. mm's bridge
@@ -10,12 +11,13 @@
 # Modbus. mm also captures one VM interface with a filter, stops only that
 # interface and converts it. tcpdump converts to JSON. Any logger.error line in
 # a status file fails the item, since these paths log and carry on.
-about: "#158 + #190 + #164-#177 metadata models + #191"
+about: "#158 + #164-#177 metadata models + #191"
 route: waterway
-apps: {prs: [158, 190, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 191]}
+apps: {prs: [158, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 191]}
 items:
   disruption: on
   disruption-dos: on
+  pcap-alias: on
   pcap: on
   tcpdump: on
   mm: on
@@ -34,9 +36,13 @@ overrides:
       vms:
         - {hostname: rtu-1, interface: 0, filter: "not tcp port 502"}
         - {hostname: rtu-2, interface: 0}
+      # #167 renamed convertToJSON to convert_to_json; the old name still works
+      # as a deprecated alias, which pcap-alias checks through the model.
+      convert_to_json: true
     verify:
       - log: {glob: "*.json", lacks: "\\] ERROR :"}
       - files: {glob: "rtu-*.pcap", min: 2}
+      - files: {glob: "*.jsonl", min: 1}
       # rtu-1's own filter applied, and did not carry over to rtu-2
       - python: {function: rtu1_has_no_modbus, windows: true}
       - pcap: {glob: "rtu-2-*.pcap", tcp_port: 502, min_packets: 10, windows: true}

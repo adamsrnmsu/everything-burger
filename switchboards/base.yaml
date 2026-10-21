@@ -1,0 +1,42 @@
+# #195 ExperimentBase: topology lookups and the minimega connection move out of
+# AppBase and ComponentBase into one shared class, and the apps and components
+# switch to its extract_node_ip, require_node and extract_node_os_type. The
+# changed paths are the ones every run uses:
+#   - each cc health exec reads the node's os_type (extract_node_os_type), the
+#     Windows nodes and the router included;
+#   - vmstats with no `vms` walks every node's os_type and logs the Windows
+#     and router nodes as skipped;
+#   - pcap, tcpdump, mm, hoststats and disruption get minimega through the
+#     shared mm property;
+#   - mgmt_tap and mirror are AppBase apps (add_* on the shared lookups);
+#   - helics resolves its root broker with extract_node_ip and the reverse
+#     extract_node_hostname_for_ip (new item).
+# #195 conflicts with #164, #165, #175 and #191 (disruption.py, iperf.py,
+# vmstats README, test_utils.py), and with #192 and #194 in test_utils.py, so
+# the models those PRs add are not on this board and iperf runs on `iperf`
+# without it. The error paths (a missing helics broker, null networks) stop the
+# experiment before SCORCH runs; #195's own tests cover them.
+about: "#195 ExperimentBase lookups in apps and components"
+route: waterway
+apps: {prs: [195]}
+items:
+  disruption: on
+  pcap: on
+  tcpdump: on
+  mm: on
+  vmstats: on
+  hoststats: on
+  apps/mgmt_tap: on
+  apps/mirror: on
+  apps/helics: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+overrides:
+  vmstats:
+    # no vms: the component picks every Linux node itself
+    config: {vms: []}
+    verify:
+      - files: {glob: "vm_stats.jsonl", min: 1}
+      # the Windows nodes are skipped by os_type, not looked up by name
+      - log: {glob: "*.json", contains: "incompatible os_type 'windows'", windows: true}
