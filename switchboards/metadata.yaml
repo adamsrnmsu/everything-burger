@@ -1,5 +1,5 @@
 # #160 metadata models: the shared base #190, #164-#177 on it, and #191's cc
-# filter helper, plus #158, on the bennu stack. Models no route can run
+# filter helper, plus #158, on stock bennu. Models no route can run
 # (disruption-dos) are checked offline by phenix-scorch-validate; the rtds,
 # providerdata, collector, iperf and ssh models are validated on their own
 # boards.
@@ -10,10 +10,9 @@
 # Modbus. mm also captures one VM interface with a filter, stops only that
 # interface and converts it. tcpdump converts to JSON. Any logger.error line in
 # a status file fails the item, since these paths log and carry on.
-about: "#158 + #190 + #164-#177 metadata models + #191 + bennu #58"
+about: "#158 + #190 + #164-#177 metadata models + #191"
 route: waterway
 apps: {prs: [158, 190, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 191]}
-bennu: {pr: 58}
 items:
   disruption: on
   disruption-dos: on

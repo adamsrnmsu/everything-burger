@@ -1,0 +1,23 @@
+name: cc-output-parsing
+kind: scorch
+type: cc
+about: >
+  Runs a command that writes a line to stderr, then a stdout line holding ':'
+  and '/', with a validator that wants that exact stdout line. phenix-apps main
+  splits cc responses on '/' and ':', so stdout is lost or cut short; #183
+  splits on whole response header lines instead.
+routes: [waterway, soap]
+stages: [start]
+config:
+  vms:
+    - hostname: "{route.rtus[0]}"
+      start:
+        # The two failure shapes from #183: stderr before stdout, and a '/' in stdout.
+        - type: exec
+          args: "echo 'warn: x' >&2; echo 'tcp 0 0 0.0.0.0:22 0.0.0.0:* LISTEN 812/sshd'"
+          wait: true
+          validator: >-
+            out=$(cat); grep -Fxq 'tcp 0 0 0.0.0.0:22 0.0.0.0:* LISTEN 812/sshd' <<<"$out"
+            || { echo "$1: cc stdout came back as: $out" >&2; exit 1; }
+verify:
+  - status: ok
