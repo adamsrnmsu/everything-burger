@@ -55,6 +55,7 @@ out of the hooks (they need `BURGER_TOPOLOGIES`); run `make test` before pushing
 ./burger list                 # switchboards and items
 ./burger check metadata       # resolve and render offline; no phēnix needed
 ./burger run baseline         # sync, build, install, up, scorch, verify, down
+./burger update --dry-run     # bring a stale host up to main (burger, containers, apps, bennu.qc2)
 ./burger run baseline --linux-only   # the same without the Windows images
 ```
 

@@ -49,6 +49,47 @@ switchboard built, and (with the Windows nodes) that something is polling
 Modbus on each RTU. In `harden` it also checks that the monitor VM sees
 mirrored Modbus traffic.
 
+## Bring a stale host up to main
+
+```bash
+./burger update --dry-run     # every command, nothing changed (probes still run)
+./burger update               # all four layers
+./burger update --only apps,bennu
+```
+
+Layers run in this order; `--only` takes a comma list. Each prints what it
+found before and after, and the run ends with a table.
+
+1. **burger**: refuses a dirty checkout or a branch other than `main`, then
+   `git pull --ff-only` and `pip install -e .`. If HEAD moved it re-executes
+   `./burger update --only <the rest>` so the new code runs the remaining layers.
+2. **containers**: the phēnix and minimego containers, through the compose labels
+   on each (`docker compose pull <service>`, then `up -d <service>`), then waits for
+   `phenix version` and `phenix mm version`. A container compose did not create gets
+   the commands to run by hand and is skipped; a service built from a local context
+   is reported, not rebuilt. Image ids are printed before and after.
+3. **apps**: upstream phenix-apps `main` through the normal sync, build and install,
+   using a built-in board named `main`. It runs after the containers because the phēnix
+   entrypoint reinstalls upstream on every boot.
+4. **bennu**: builds `bennu.deb` and the pybennu wheel from bennu `main`, then runs
+   what the `bennu` target of [sceptre-phenix-images](https://github.com/sandialabs/sceptre-phenix-images)
+   runs, through the phēnix container: `phenix image delete bennu` if the config
+   exists, `image create` with a copy of `scripts/bennu.sh` that installs those two
+   files from an extra overlay (`overlays/burger-bennu`) instead of downloading
+   them, `image build`, and `miniccc` injection. helics and libzmq are not built
+   by burger, so they still come from the latest sceptre-bennu release.
+   The result is `/phenix/images/bennu-main-<sha7>.qc2`; a real `bennu.qc2` is first
+   moved to `bennu-<YYYYMMDD>.qc2`, then `bennu.qc2` becomes a symlink to the new
+   file. The printed rollback is one `ln -sfn` that points it back.
+   The images checkout lives in `/phenix/burger/images` (`BURGER_IMAGES_DIR`); create
+   that directory first on a path the container sees identically, burger clones
+   into it. Burger refuses to run if `bennu.qc2` or `bennu.tar` is already in that
+   directory (a failed earlier build); it never deletes them for you.
+
+The containers and bennu layers refuse while any phēnix experiment is running;
+`--force` skips that check. Existing experiments hold their disks on the old
+`bennu.qc2`, so stop them first.
+
 ## The site route (your own rig)
 
 The `rtds` switchboard runs on your RTDS setup instead of waterway: the

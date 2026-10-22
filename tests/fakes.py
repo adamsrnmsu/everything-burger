@@ -20,7 +20,7 @@ class FakeHost(Host):
         super().__init__(settings or Settings.from_env(), site)
         self.responses = responses or {}
         self.calls: list[list[str]] = []
-        self.api_responses: dict[str, dict | None] = {}
+        self.api_responses: dict[str, dict | None] = {"/experiments": {"experiments": []}}
 
     def run(self, cmd, check=True, capture=False, **kw):
         cmd = [str(c) for c in cmd]

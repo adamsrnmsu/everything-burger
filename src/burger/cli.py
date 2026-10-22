@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from burger import __version__, experiment, invalid, vcs, verify
+from burger import __version__, experiment, invalid, update, vcs, verify
 from burger.bennu import bennu_check
 from burger.checks import Row
 from burger.compose import compose
@@ -78,7 +78,7 @@ def _one(args, s, host, name: str) -> int:
         experiment.down(res, host)
     elif cmd == "bennu-check":
         if not vcs.load_manifest(s, name)["bennu"]:
-            raise BurgerError(f"switchboard '{name}' has no bennu PR")
+            raise BurgerError(f"switchboard '{name}' has no bennu build")
         bennu_check(host, vcs.board_dir(s, name) / "bennu")
     return 0
 
@@ -224,6 +224,17 @@ def _prs(args, s, host) -> int:
     return 0
 
 
+def _say(line: str) -> None:
+    out.print(line, markup=False, highlight=False)
+
+
+def _update(args, s, host) -> int:
+    only = args.only.split(",") if args.only else list(update.LAYERS)
+    rows = update.update(s, host, only, args.dry_run, args.force, _say)
+    out.print(update.summary_table(rows))
+    return 0
+
+
 def _ref(path: Path) -> str:
     return path.stem if path.parent.name == "components" else f"{path.parent.name}/{path.stem}"
 
@@ -232,7 +243,11 @@ def _list(args, s, host) -> int:
     boards = Table("switchboard", "route", "PRs", "about")
     for name in all_switchboards(s):
         b = load_switchboard(name, s)
-        prs = [str(n) for n in b.apps_prs] + ([f"bennu {b.bennu['pr']}"] if b.bennu else [])
+        prs = [str(n) for n in b.apps_prs]
+        if b.apps_branch:
+            prs = [f"{b.apps_branch['branch']} ({', '.join(prs) or 'no PRs'})"]
+        if b.bennu:
+            prs.append(f"bennu {b.bennu.get('pr') or b.bennu['branch']}")
         boards.add_row(name, b.route, ", ".join(prs), Text(b.about), end_section=False)
     items = Table("item", "kind", "routes", "about")
     for i in all_items(s):
@@ -263,8 +278,11 @@ def _synthetic_manifest(board) -> dict:
         "topologies": "d" * 40,
         "bennu": None,
     }
+    if br := board.apps_branch:
+        man["apps"] = {**br, "head": "a" * 40, "sha": "a" * 40, "prs": {}}
     if b := board.bennu:
-        man["bennu"] = {"pr": b["pr"], "sha": "c" * 40, "deb_version": "offline"}
+        src = {k: b[k] for k in ("pr", "branch", "remote") if k in b}
+        man["bennu"] = {**src, "sha": "c" * 40, "deb_version": "offline"}
         if "pybennu" in b.get("install", ["deb"]):
             man["bennu"]["wheel"] = "pybennu-offline-py3-none-any.whl"
         if b.get("pip"):
@@ -361,6 +379,15 @@ def _parser() -> argparse.ArgumentParser:
     add("prs", "my open PRs, the boards that carry them, stale syncs",
         ("--author", {"default": "@me"}), fn=_prs, board=None)  # fmt: skip
     add("list", "switchboards and items", fn=_list, board=None)
+    add(
+        "update",
+        "bring burger, the phēnix containers, the apps and bennu.qc2 up to main",
+        ("--only", {"help": f"comma list of {', '.join(update.LAYERS)} (default: all)"}),
+        ("--dry-run", {"action": "store_true", "help": "print the commands, change nothing"}),
+        ("--force", {"action": "store_true", "help": "update even while an experiment runs"}),
+        fn=_update,
+        board=None,
+    )
     sp = add("new", "copy a commented item template", fn=_new, board=None)
     sp.add_argument("kind", choices=list(KIND_DIR))
     sp.add_argument("name")

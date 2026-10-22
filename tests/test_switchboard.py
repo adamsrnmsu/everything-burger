@@ -73,7 +73,7 @@ def test_experiment_name_too_long(settings):
 @pytest.mark.usefixtures("site_env")
 def test_every_switchboard_resolves(settings):
     names = all_switchboards(settings)
-    assert len(names) == 17
+    assert len(names) == 18
     for name in names:
         resolve(load_switchboard(name, settings), settings)
 
@@ -117,3 +117,82 @@ def test_pcap_alias_is_validated_but_not_run(settings):
     assert "pcap-alias" not in [i.name for i in r.items]
     new = next(i for i in r.items if i.name == "pcap")
     assert new.config["convert_to_json"] is True and "convertToJSON" not in new.config
+
+
+def write_board(settings, tmp_path, body):
+    (tmp_path / "switchboards").mkdir(exist_ok=True)
+    (tmp_path / "switchboards" / "t.yaml").write_text(f"route: waterway\n{body}")
+    return dataclasses.replace(settings, root=tmp_path)
+
+
+def test_apps_branch_defaults_to_fork_and_records_contains(settings, tmp_path):
+    s = write_board(settings, tmp_path, "apps: {branch: integration, contains: [159, 161]}\n")
+    b = load_switchboard("t", s)
+    assert b.apps_branch == {"branch": "integration", "remote": "fork"}
+    assert b.apps_prs == [159, 161]
+
+
+def test_bennu_branch_defaults_to_upstream(settings, tmp_path):
+    s = write_board(settings, tmp_path, "bennu: {branch: main, install: [deb]}\n")
+    assert load_switchboard("t", s).bennu == {
+        "branch": "main",
+        "remote": "upstream",
+        "install": ["deb"],
+    }
+
+
+@pytest.mark.parametrize(
+    "body, msg",
+    [
+        ("apps: {prs: [1], branch: x}\n", "'prs' or 'branch'"),
+        ("bennu: {pr: 1, branch: x}\n", "'pr' or 'branch'"),
+        ("apps: {prs: [1], remote: fork}\n", "apps.remote needs 'branch'"),
+        ("apps: {prs: [1], contains: [2]}\n", "apps.contains needs 'branch'"),
+        ("apps: {branch: x, remote: origin}\n", "fork or upstream"),
+        ("apps: {prs: [one]}\n", "apps.prs must be a list of integers"),
+        ("apps: {prs: 5}\n", "apps.prs must be a list of integers"),
+        ("apps: {branch: x, contains: ['1']}\n", "apps.contains must be a list of integers"),
+        ("bennu: {pr: '58'}\n", "bennu.pr must be an integer"),
+        ("bennu: {pr: true}\n", "bennu.pr must be an integer"),
+        ("apps: {pr: [1]}\n", "unknown apps field 'pr'"),
+        ("bennu: {prs: 1}\n", "unknown bennu field 'prs'"),
+        ("bennu: {install: [deb]}\n", "needs 'pr' or 'branch'"),
+        ("apps: {branch: 5}\n", "branch must be a branch name"),
+        ("bennu: {remote: fork, pr: 1}\n", "bennu.remote needs 'branch'"),
+        ("bennu: {contains: [1], pr: 1}\n", "unknown bennu field 'contains'"),
+        ("bennu: {pr: 1, contains: [2]}\n", "unknown bennu field 'contains'"),
+        ("bennu: [main]\n", "bennu must be a mapping"),
+        ("bennu: {branch: main, remote: origin}\n", "fork or upstream"),
+        ("bennu: {branch: 'a b'}\n", "branch must be a branch name"),
+        ("apps: {branch: 'a:b'}\n", "branch must be a branch name"),
+        ("apps: {branch: 'a..b'}\n", "branch must be a branch name"),
+        ("apps: {branch: '-x'}\n", "branch must be a branch name"),
+        ("apps: {branch: 'a/'}\n", "branch must be a branch name"),
+        ("apps: {branch: 'x.lock'}\n", "branch must be a branch name"),
+    ],
+)
+def test_bad_sources_are_burger_errors(settings, tmp_path, body, msg):
+    with pytest.raises(BurgerError, match=msg):
+        load_switchboard("t", write_board(settings, tmp_path, body))
+
+
+def test_requires_apps_prs_resolve_against_contains(settings):
+    ok = board(
+        settings, "iperf", apps_prs=[165, 191], apps_branch={"branch": "b", "remote": "fork"}
+    )
+    assert resolve(ok, settings).board.apps_branch
+    with pytest.raises(BurgerError, match="#165"):
+        resolve(board(settings, "iperf", apps_prs=[], apps_branch=ok.apps_branch), settings)
+
+
+def test_branch_names_with_slashes_and_dots_are_fine(settings, tmp_path):
+    s = write_board(settings, tmp_path, "apps: {branch: feat/x-1.2_a}\n")
+    assert load_switchboard("t", s).apps_branch["branch"] == "feat/x-1.2_a"
+
+
+def test_requires_message_names_prs_or_contains(settings):
+    with pytest.raises(BurgerError, match=r"apps prs$"):
+        resolve(board(settings, "iperf", apps_prs=[]), settings)
+    b = board(settings, "iperf", apps_prs=[], apps_branch={"branch": "b", "remote": "fork"})
+    with pytest.raises(BurgerError, match="apps contains"):
+        resolve(b, settings)

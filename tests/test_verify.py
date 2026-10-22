@@ -147,3 +147,20 @@ def test_windows_checks_run_with_windows(settings, monkeypatch):
     rows = v.verify(res, settings, host)
     assert not [r for r in rows if r.reason == "needs the Windows nodes"]
     assert next(r for r in rows if r.item == "tcpdump" and r.check == "pcap").verdict == "FAIL"
+
+
+def test_report_names_a_branch_source():
+    res = type("R", (), {"board": type("B", (), {"name": "n", "exp": "e"})()})()
+    man = {
+        **MAN,
+        "apps": {
+            "branch": "integration",
+            "remote": "fork",
+            "sha": "a" * 40,
+            "head": "a" * 40,
+            "prs": {},
+        },
+        "bennu": {"branch": "main", "remote": "upstream", "sha": "c" * 40},
+    }
+    text = v.render_report(res, man, {"linux_only": False}, [])
+    assert "branch fork/integration" in text and "upstream/main" in text

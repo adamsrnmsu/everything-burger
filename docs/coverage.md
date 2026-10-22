@@ -46,3 +46,10 @@ against the **old** heads, where all four append to `test_utils.py` and
 conflict, so they keep one board each until the branches are pushed; after that
 one board carrying #191 #192 #194 #195 together (plus #169 and #177 for soap)
 will sync. #195 still conflicts with #164, #165 and #175.
+
+The `integrate` board is the pre-merge check for order A: the `integration`
+branch (upstream `main` plus all twenty PRs, conflicts resolved once; see
+`integration-notes.md`) running the items of `metadata`, `harden`, `iperf`,
+`base` and `cc-empty` on waterway. It does not replace the per-PR boards, which
+say which PR a failure belongs to. The board is named `integrate` because
+`ebwes-integration` is over phenix's 15-character experiment name limit.
