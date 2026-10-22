@@ -1,0 +1,106 @@
+# Named `integrate`, not `integration`: ebwes-integration is 17 characters, over
+# phenix's 15-character experiment name limit.
+# The tree main will hold once the open phenix-apps PRs merge in order A:
+# adamsrnmsu/sceptre-phenix-apps `integration` = upstream main plus the merge
+# commits of #159 #161 #192 #191 #194 #155 #164 #165 #166 #167 #168 #169 #170
+# #171 #172 #174 #175 #176 #177 #195, in that order, each conflict resolved once
+# (docs/integration-notes.md records every resolution). This is the pre-merge
+# check for order A: if it passes, merging the PRs in that order gives this tree.
+#
+# The branch goes stale when a PR head moves or upstream main advances: rebuild
+# it, push it, and run `./burger sync integration` again. `burger prs` flags a
+# new branch head since sync, but cannot see that a PR moved.
+#
+# Items are the union of the metadata, harden, iperf, base and cc-empty boards
+# on waterway (soap-only items such as provider's are left out: one route per
+# board). One run holds them all; iperf's 20 s run fits inside disruption's
+# 30 s hold, so the default layout works without iperf's own `runs`. Where the
+# boards override the same item differently, metadata's override wins, plus
+# harden's tcpdump capture on the monitor VM and its quoted mm bridge filter:
+#   - tcpdump: harden's monitor VM and "tcp port 502 or ip proto 47" filter, with
+#     metadata's convert_to_json and JSON checks, and harden's GRE packet check;
+#   - mm: metadata's bridge + per-VM captures, the bridge one filtered to
+#     "tcp port 502" (harden's quoted filter). The provider VM capture and the
+#     pcap component's filter reset still run before it;
+#   - vmstats: metadata's explicit VM list. base's `vms: []` (the component
+#     picks every Linux node and skips Windows by os_type) cannot run in the
+#     same component, so that default-list path is covered on `base` only.
+# No two items share a component name, so nothing else had to be chosen.
+#
+# bennu is stock: no included item needs a bennu PR.
+about: "order A: all open phenix-apps PRs merged on the integration branch"
+route: waterway
+apps:
+  branch: integration
+  contains: [159, 161, 192, 191, 194, 155, 164, 165, 166, 167, 168, 169, 170, 171, 172, 174, 175, 176, 177, 195]
+items:
+  disruption: on
+  disruption-dos: on
+  pcap-alias: on
+  tcpdump-alias: on
+  pcap: on
+  tcpdump: on
+  mm: on
+  pipe: on
+  pipe-bad-name: on
+  hoststats: on
+  vmstats: on
+  qos: on
+  vmstats-bad-name: on
+  qos-bad-rate: on
+  erspan: on
+  iperf: on
+  cc-empty-output: on
+  cc-output-parsing: on
+  apps/mgmt-vlan-alias: on
+  apps/mirror: on
+  apps/mgmt_tap: on
+  apps/helics: on
+  apps/helics-no-broker: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+overrides:
+  pcap:
+    config:
+      vms:
+        - {hostname: rtu-1, interface: 0, filter: "not tcp port 502"}
+        - {hostname: rtu-2, interface: 0}
+      convert_to_json: true
+    verify:
+      - log: {glob: "*.json", lacks: "\\] ERROR :"}
+      - files: {glob: "rtu-*.pcap", min: 2}
+      - files: {glob: "*.jsonl", min: 1}
+      # rtu-1's own filter applied, and did not carry over to rtu-2
+      - python: {function: rtu1_has_no_modbus, windows: true}
+      - pcap: {glob: "rtu-2-*.pcap", tcp_port: 502, min_packets: 10, windows: true}
+  tcpdump:
+    config:
+      vms: [{hostname: monitor, iface: any, filter: "tcp port 502 or ip proto 47"}]
+      convert_to_json: true
+    verify:
+      # a failed kill or conversion is logged as an error and the stage carries on
+      - log: {glob: "*.json", lacks: "\\] ERROR :"}
+      - files: {glob: "*.pcap", min: 1}
+      - files: {glob: "*.jsonl", min: 1}
+      # the mirror delivers GRE: count it as well as plain Modbus, like the filter
+      - pcap: {glob: "*.pcap", tcp_port: 502, ip_proto: 47, min_packets: 10, windows: true}
+  mm:
+    config:
+      start:
+        - type: start_capture
+          capture: {bridge: phenix, filename: burger-bridge.pcap, filter: "tcp port 502"}
+      stop: [{type: stop_capture, capture: {bridge: phenix, convert: true}}]
+      vms:
+        - hostname: simulink-provider
+          start:
+            - type: start_capture
+              capture: {interface: 0, filename: burger-provider.pcap, filter: "not tcp port 502"}
+          stop: [{type: stop_capture, capture: {interface: 0, convert: true}}]
+    verify:
+      - log: {glob: "*.json", lacks: "\\] ERROR :"}
+      - files: {glob: "burger-*.pcap", min: 2}
+      - files: {glob: "*.jsonl", min: 2}
+      - pcap: {glob: "burger-bridge.pcap", tcp_port: 502, min_packets: 10, windows: true}
+  vmstats: {config: {vms: [rtu-1, rtu-2, simulink-provider]}}
+  qos: {config: {vms: [{hostname: rtu-2, interface: 0, delay: 20}]}}
