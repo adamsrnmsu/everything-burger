@@ -264,8 +264,53 @@ def collect(res: Resolved, settings: Settings, host, i: int, since: str = "") ->
     return collect_status(dst, since)
 
 
+def cc_registered(host, exp: str) -> set:
+    """UUIDs of the cc clients registered in the experiment's namespace."""
+    out = host.mm(exp, ".csv true .headers false .annotate false .columns uuid cc clients").stdout
+    return {ln.strip() for ln in out.splitlines() if ln.strip()}
+
+
+def wait_for_cc(host, settings: Settings, exp: str, timeout: int = 300, clock=time) -> None:
+    """Block until every VM of the run has registered with cc, or the timeout passes.
+    A cc command sent to a client that has not registered yet can be lost (once
+    commands are not re-delivered), so health must not start before this."""
+    if not settings.mm_ctr:
+        return
+    vms = (host.api(f"/experiments/{exp}/vms") or {}).get("vms") or []
+    want = {v["name"] for v in vms if v.get("name") and not v.get("dnb")}
+    if not want:
+        return
+    deadline = clock.time() + timeout
+    while True:
+        uuids = vm_uuids(host, exp, want, timeout=-1)  # one look, no retry of its own
+        registered = cc_registered(host, exp)
+        missing = sorted(n for n in want if uuids.get(n) not in registered)
+        if not missing:
+            return
+        if clock.time() > deadline:
+            logger.warning("cc clients not registered after {} s: {}", timeout, ", ".join(missing))
+            return
+        clock.sleep(5)
+
+
+def _kill_scorch(host) -> None:
+    """The timed-out docker exec leaves the scorch run going in the container."""
+    host.ctr("pkill", "-f", "experiment scorch", check=False)
+    host.ctr("pkill", "-f", "phenix-scorch-component-", check=False)
+
+
+def _text(x) -> str:
+    return x.decode(errors="replace") if isinstance(x, bytes) else x or ""
+
+
 def scorch(
-    res: Resolved, settings: Settings, host, run: int | None, settle: int, clock=time
+    res: Resolved,
+    settings: Settings,
+    host,
+    run: int | None,
+    settle: int,
+    clock=time,
+    first_cap: int = 600,
 ) -> None:
     name, exp = res.board.name, res.board.exp
     state_path = board_dir(settings, name) / "state.json"
@@ -278,54 +323,90 @@ def scorch(
     expect = {i.name: i.expect_error for i in res.items if i.expect_error}
     if run is not None and not 0 <= run < len(runs):
         raise BurgerError(f"switchboard '{name}' has runs 0-{len(runs) - 1}")
+    results_dir = board_dir(settings, name) / "results"
     for i in range(len(runs)) if run is None else [run]:
         # Health waits on sceptre startup (field devices sleep 60 s, Windows
         # boots slowly), so retry it; every other run gets one shot.
         health = runs[i].get("name") == "health"
         deadline = None  # set when the first attempt ends: VM boot time is not billed to --settle
         if health:
+            wait_for_cc(host, settings, exp, clock=clock)
             logger.info(
-                "run {} (health): retrying until healthy, for at most {} s "
-                "after the first attempt (--settle)",
+                "run {} (health): retrying until healthy, for at most {} s after the first "
+                "attempt (--settle); the first attempt is capped at {} s",
                 i,
                 settle,
+                first_cap,
             )
-        busy = 0
+        busy = attempt = 0
         while True:
             since = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             began = clock.time()
-            res_run = host.phenix(
-                "experiment", "scorch", exp, "-r", str(i), check=False, stderr=subprocess.PIPE
-            )
-            if res_run.stderr:
-                logger.info(res_run.stderr.rstrip())
+            # The first health attempt has no settle clock yet, so it gets its own cap.
+            capped = health and deadline is None
+            timed_out = False
+            try:
+                res_run = host.phenix(
+                    "experiment", "scorch", exp, "-r", str(i), check=False, capture=True,
+                    **({"timeout": first_cap} if capped else {}),
+                )  # fmt: skip
+                output = _text(res_run.stdout) + _text(res_run.stderr)
+                stderr = _text(res_run.stderr)
+            except subprocess.TimeoutExpired as e:
+                timed_out = True
+                output = _text(e.stdout) + _text(e.stderr)
+                stderr = ""
+                logger.warning(
+                    "run {} (health): first attempt still going after {} s; killing SCORCH",
+                    i,
+                    first_cap,
+                )
+                _kill_scorch(host)
             # A crashed attempt can still be winding down phēnix-side: wait it
             # out without spending the attempt (or the deadline) on it.
-            if "already running" in (res_run.stderr or ""):
+            if "already running" in stderr:
                 busy += 1
                 if busy > 20:
                     raise BurgerError(f"SCORCH on {exp} still busy after 10 min")
                 logger.info("SCORCH is still finishing a previous run; retrying in 30 s")
                 clock.sleep(30)
                 continue
-            results = collect(res, settings, host, i, since)
-            failed = [r for r in evaluate(runs[i], results, background, expect) if r[3] == "FAIL"]
+            attempt += 1
+            log = results_dir / f"run-{i}-attempt-{attempt}.log"
+            log.parent.mkdir(parents=True, exist_ok=True)
+            log.write_text(output)
+            if timed_out:
+                failed = [("", "", "", "FAIL", f"first attempt exceeded {first_cap} s")]
+            else:
+                results = collect(res, settings, host, i, since)
+                rows = evaluate(runs[i], results, background, expect)
+                failed = [r for r in rows if r[3] == "FAIL"]
             if not failed:
+                logger.success("run {} ({}) passed on attempt {}", i, runs[i].get("name"), attempt)
                 break
             if deadline is None:
                 deadline = clock.time() + (settle if health else 0)
             # Hard cap: retry only if another attempt like this one ends before the deadline.
-            if clock.time() + 60 + (clock.time() - began) > deadline:
+            now = clock.time()
+            length = now - began
+            if now + 60 + length > deadline:
                 if health:
                     logger.warning(
                         "run {} (health) still failing at the --settle cap: {}", i, failed[0][4]
                     )
+                logger.warning("run {} attempt {} failed; SCORCH output:\n{}", i, attempt, output)
                 break
+            left = max(0, deadline - now)
             logger.info(
-                "run {} ({}) not healthy yet: {}; retrying in 60 s",
+                "run {} ({}) attempt {} not healthy yet: {}; settle {} s left, ~{} more "
+                "attempt(s) fit; retrying in 60 s (output: {})",
                 i,
                 runs[i].get("name"),
+                attempt,
                 failed[0][4],
+                int(left),
+                int(left // (60 + length)),
+                log,
             )
             clock.sleep(60)
-    logger.info("scorch done; next: burger verify {}", name)
+    logger.success("scorch done; next: burger verify {}", name)
