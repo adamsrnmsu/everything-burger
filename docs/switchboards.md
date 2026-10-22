@@ -7,8 +7,9 @@ characters):
 |---|---|
 | `about` | one line for `burger list` |
 | `route` | `waterway`, `soap` or `site`: the topology the items run on |
-| `apps.prs` | sceptre-phenix-apps PRs merged in order; `sync` fails and names the files when one conflicts with those before it |
-| `bennu` | `pr`, optionally `install: [deb, pybennu]` and `pip` (dependencies the PR adds that `bennu.qc2` lacks: `build` turns them into wheels with `pip wheel --no-deps` and the VMs install them with pybennu, since they have no package index) |
+| `apps.prs` | sceptre-phenix-apps PRs merged in order; `sync` fails and names the files when one conflicts with those before it. Integers only |
+| `apps.branch` | instead of `prs`: use this branch as the apps tree, with no merges. `remote: fork` (default; the `gh` user's fork, from `gh api user`) or `upstream`. `contains: [159, 161]` lists the PRs the branch holds, in merge order; items' `requires.apps_prs` are checked against it, and `burger prs` shows the board as carrying them. `sync` fetches the branch into `refs/burger/branch/<remote>/<branch>` and records its sha in the manifest. `burger prs` marks the board stale when the branch has a new head since sync; it cannot tell whether the branch still holds its PRs' current heads, so rebuild it when a PR moves |
+| `bennu` | `pr`, or `branch` (+ `remote: upstream` by default, or `fork`) to build bennu from a branch such as `main` without a PR; one of the two, optionally `install: [deb, pybennu]` and `pip` (dependencies the PR adds that `bennu.qc2` lacks: `build` turns them into wheels with `pip wheel --no-deps` and the VMs install them with pybennu, since they have no package index) |
 | `items` | `<item>: on` switches an item on (`apps/x`, `bennu/x` for the other kinds) |
 | `overrides` | per-item changes to `config` or `verify` |
 | `linux_only` | same as `--linux-only` |

@@ -78,7 +78,7 @@ def _one(args, s, host, name: str) -> int:
         experiment.down(res, host)
     elif cmd == "bennu-check":
         if not vcs.load_manifest(s, name)["bennu"]:
-            raise BurgerError(f"switchboard '{name}' has no bennu PR")
+            raise BurgerError(f"switchboard '{name}' has no bennu build")
         bennu_check(host, vcs.board_dir(s, name) / "bennu")
     return 0
 
@@ -232,7 +232,11 @@ def _list(args, s, host) -> int:
     boards = Table("switchboard", "route", "PRs", "about")
     for name in all_switchboards(s):
         b = load_switchboard(name, s)
-        prs = [str(n) for n in b.apps_prs] + ([f"bennu {b.bennu['pr']}"] if b.bennu else [])
+        prs = [str(n) for n in b.apps_prs]
+        if b.apps_branch:
+            prs = [f"{b.apps_branch['branch']} ({', '.join(prs) or 'no PRs'})"]
+        if b.bennu:
+            prs.append(f"bennu {b.bennu.get('pr') or b.bennu['branch']}")
         boards.add_row(name, b.route, ", ".join(prs), Text(b.about), end_section=False)
     items = Table("item", "kind", "routes", "about")
     for i in all_items(s):
@@ -263,8 +267,11 @@ def _synthetic_manifest(board) -> dict:
         "topologies": "d" * 40,
         "bennu": None,
     }
+    if br := board.apps_branch:
+        man["apps"] = {**br, "head": "a" * 40, "sha": "a" * 40, "prs": {}}
     if b := board.bennu:
-        man["bennu"] = {"pr": b["pr"], "sha": "c" * 40, "deb_version": "offline"}
+        src = {k: b[k] for k in ("pr", "branch", "remote") if k in b}
+        man["bennu"] = {**src, "sha": "c" * 40, "deb_version": "offline"}
         if "pybennu" in b.get("install", ["deb"]):
             man["bennu"]["wheel"] = "pybennu-offline-py3-none-any.whl"
         if b.get("pip"):

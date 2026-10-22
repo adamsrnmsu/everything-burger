@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import subprocess
 import urllib.error
@@ -11,6 +12,7 @@ from burger.cli import main
 from burger.compose import compose
 from burger.config import Settings
 from burger.items import STAGES, load_item
+from burger.switchboard import load_switchboard
 from tests.fakes import FakeHost
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +35,31 @@ def test_list_shows_boards_and_items(capsys):
     assert "metadata" in text
     assert "bennu/field-device" in text
     assert "validate-only" in text
+
+
+def test_list_shows_branch_boards(capsys, monkeypatch):
+    b = dataclasses.replace(
+        load_switchboard("baseline", Settings.from_env()),
+        apps_prs=[159, 161],
+        apps_branch={"branch": "integration", "remote": "fork"},
+        bennu={"branch": "main", "remote": "upstream"},
+    )
+    monkeypatch.setattr(cli, "all_switchboards", lambda s: ["x"])
+    monkeypatch.setattr(cli, "load_switchboard", lambda n, s: b)
+    assert main(["list"]) == 0
+    text = " ".join(capsys.readouterr().out.split())
+    assert "integration (159, 161)" in text and "bennu main" in text
+
+
+def test_synthetic_manifest_names_the_branch_source():
+    b = dataclasses.replace(
+        load_switchboard("baseline", Settings.from_env()),
+        apps_branch={"branch": "integration", "remote": "fork"},
+        bennu={"branch": "main", "remote": "upstream"},
+    )
+    man = cli._synthetic_manifest(b)
+    assert man["apps"]["branch"] == "integration" and man["apps"]["remote"] == "fork"
+    assert man["bennu"]["branch"] == "main" and "pr" not in man["bennu"]
 
 
 @pytest.mark.parametrize("kind", ["scorch", "app", "bennu"])

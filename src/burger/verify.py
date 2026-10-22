@@ -9,7 +9,7 @@ from burger.compose import compose, health_checks, item_locations
 from burger.experiment import collect, not_running
 from burger.invalid import app_rows, expected, judge
 from burger.switchboard import Resolved
-from burger.vcs import board_dir, load_manifest
+from burger.vcs import bennu_label, board_dir, load_manifest
 
 NO_VALIDATOR = "command -v phenix-scorch-validate"
 
@@ -158,16 +158,22 @@ def verify(res: Resolved, settings, host) -> list[Row]:
 
 def render_report(res: Resolved, man: dict, state: dict, rows: list[Row]) -> str:
     b = man.get("bennu")
-    prs = ", ".join(f"#{n} `{s[:8]}`" for n, s in man["apps"]["prs"].items()) or "no PRs"
+    a = man["apps"]
+    prs = ", ".join(f"#{n} `{s[:8]}`" for n, s in a["prs"].items()) or "no PRs"
+    apps = (
+        f"`{a['head'][:10]}` = branch {a['remote']}/{a['branch']}"
+        if "branch" in a
+        else f"`{a['head'][:10]}` = main `{a['base'][:10]}` + {prs}"
+    )
     bennu = (
-        f"#{b['pr']} `{b['sha'][:10]}` deb `{b.get('deb_version')}` wheel `{b.get('wheel')}`"
+        f"{bennu_label(b)} `{b['sha'][:10]}` deb `{b.get('deb_version')}` wheel `{b.get('wheel')}`"
         if b
         else "stock bennu.qc2"
     )
     lines = [
         f"# everything-burger switchboard `{res.board.name}` ({res.board.exp})",
         "",
-        f"- apps: `{man['apps']['head'][:10]}` = main `{man['apps']['base'][:10]}` + {prs}",
+        f"- apps: {apps}",
         f"- bennu: {bennu}",
         f"- topologies: `{(man.get('topologies') or 'site route')[:10]}`"
         + (" (linux-only)" if state["linux_only"] else ""),

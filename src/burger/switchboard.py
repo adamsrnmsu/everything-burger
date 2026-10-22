@@ -1,4 +1,5 @@
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -8,7 +9,12 @@ from burger.loader import load_yaml
 from burger.routes import Route, load_route
 
 _FIELDS = {"about", "route", "apps", "bennu", "items", "overrides", "runs", "linux_only"}
-_BENNU_KEYS = {"pr", "install", "pip"}
+_BENNU_KEYS = {"pr", "branch", "remote", "install", "pip"}
+_APPS_KEYS = {"prs", "branch", "remote", "contains"}
+REMOTES = ("fork", "upstream")
+# A conservative subset of git ref names: no spaces, `:`, `..`, `//`, a leading `-` or `.`,
+# a trailing `/`, `.` or `.lock`.
+_BRANCH = re.compile(r"(?!.*(\.\.|//|\.lock(/|$)|/\.|\.$|/$))\w[\w./-]*")
 
 
 @dataclass
@@ -16,7 +22,9 @@ class Switchboard:
     name: str
     about: str
     route: str
-    apps_prs: list[int]
+    apps_prs: list[
+        int
+    ]  # PRs the apps tree holds: merged from `prs`, or `contains` on a branch board
     bennu: dict | None
     items: dict[str, bool]
     overrides: dict[str, dict]
@@ -24,6 +32,7 @@ class Switchboard:
     linux_only: bool
     exp: str
     unset: list[str] = field(default_factory=list)
+    apps_branch: dict | None = None  # {"branch", "remote"}; then apps_prs is only the record
 
 
 @dataclass
@@ -55,6 +64,39 @@ def all_switchboards(settings: Settings) -> list[str]:
     return sorted(p.stem for p in _dir(settings).glob("*.yaml"))
 
 
+def _is_int(n) -> bool:
+    return isinstance(n, int) and not isinstance(n, bool)
+
+
+def _int_list(path: Path, key: str, val) -> list[int]:
+    if not (isinstance(val, list) and all(_is_int(n) for n in val)):
+        raise BurgerError(f"{path}: {key} must be a list of integers, not {val!r}")
+    return val
+
+
+def _source(path: Path, key: str, spec: dict, allowed: set[str], default_remote: str) -> dict:
+    """Check the keys common to apps and bennu; fill in the branch remote."""
+    bad = sorted(set(spec) - allowed)
+    if bad:
+        raise BurgerError(
+            f"{path}: unknown {key} field '{bad[0]}' (allowed: {', '.join(sorted(allowed))})"
+        )
+    pr = "prs" if key == "apps" else "pr"
+    if pr in spec and "branch" in spec:
+        raise BurgerError(f"{path}: {key} takes '{pr}' or 'branch', not both")
+    if "branch" not in spec:
+        for k in ("remote", "contains"):
+            if k in spec:
+                raise BurgerError(f"{path}: {key}.{k} needs 'branch'")
+        return spec
+    if not isinstance(spec["branch"], str) or not _BRANCH.fullmatch(spec["branch"]):
+        raise BurgerError(f"{path}: {key}.branch must be a branch name, not {spec['branch']!r}")
+    spec = {"remote": default_remote, **spec}
+    if spec["remote"] not in REMOTES:
+        raise BurgerError(f"{path}: {key}.remote must be fork or upstream, not {spec['remote']!r}")
+    return spec
+
+
 def load_switchboard(name: str, settings: Settings) -> Switchboard:
     path = _dir(settings) / f"{name}.yaml"
     if not path.is_file():
@@ -70,17 +112,21 @@ def load_switchboard(name: str, settings: Settings) -> Switchboard:
         raise BurgerError(f"{path}: route: {e}") from None
     bennu = doc.get("bennu")
     if bennu is not None:
-        bad = sorted(set(bennu) - _BENNU_KEYS)
-        if bad:
-            raise BurgerError(
-                f"{path}: unknown bennu field '{bad[0]}' "
-                f"(allowed: {', '.join(sorted(_BENNU_KEYS))})"
-            )
-        if "pr" not in bennu:
-            raise BurgerError(f"{path}: bennu needs 'pr'")
+        if not isinstance(bennu, dict):
+            raise BurgerError(f"{path}: bennu must be a mapping, not {bennu!r}")
+        bennu = _source(path, "bennu", bennu, _BENNU_KEYS, "upstream")
+        if "pr" in bennu:
+            if not _is_int(bennu["pr"]):
+                raise BurgerError(f"{path}: bennu.pr must be an integer, not {bennu['pr']!r}")
+        elif "branch" not in bennu:
+            raise BurgerError(f"{path}: bennu needs 'pr' or 'branch'")
     for key in ("items", "apps", "overrides"):
         if not isinstance(doc.get(key) or {}, dict):
             raise BurgerError(f"{path}: {key} must be a mapping, not {doc[key]!r}")
+    apps = _source(path, "apps", doc.get("apps") or {}, _APPS_KEYS, "fork")
+    prs = _int_list(path, "apps.prs", apps.get("prs") or [])
+    contains = _int_list(path, "apps.contains", apps.get("contains") or [])
+    branch = {k: apps[k] for k in ("branch", "remote")} if "branch" in apps else None
     items = doc.get("items") or {}
     for ref, on in items.items():
         if not isinstance(on, bool):
@@ -89,7 +135,7 @@ def load_switchboard(name: str, settings: Settings) -> Switchboard:
         name=name,
         about=(doc.get("about") or "").strip(),
         route=doc["route"],
-        apps_prs=list((doc.get("apps") or {}).get("prs") or []),
+        apps_prs=contains if branch else prs,
         bennu=bennu,
         items=items,
         overrides=doc.get("overrides") or {},
@@ -97,6 +143,7 @@ def load_switchboard(name: str, settings: Settings) -> Switchboard:
         linux_only=bool(doc.get("linux_only")),
         exp=f"ebwes-{name}",
         unset=unset,
+        apps_branch=branch,
     )
 
 
@@ -139,7 +186,10 @@ def resolve(board: Switchboard, settings: Settings, linux_only: bool = False) ->
         unset += [*item.unset, *(e for e in item.requires.get("env", []) if e not in os.environ)]
         for need in item.requires.get("apps_prs", []):
             if need not in board.apps_prs:
-                problems.append(f"item '{ref}' needs apps PR #{need}, not in the board's apps prs")
+                where = "contains" if board.apps_branch else "prs"
+                problems.append(
+                    f"item '{ref}' needs apps PR #{need}, not in the board's apps {where}"
+                )
         for app in item.requires.get("apps", []):
             if app not in refs:
                 refs.insert(i, app)
