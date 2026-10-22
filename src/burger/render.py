@@ -99,6 +99,18 @@ def debs_injections(stage_dir):
     ]
 
 
+def iperf_injections(stage_dir, version):
+    name = f"iperf3-{version}"
+    return [
+        {
+            "src": f"{stage_dir}/{name}",
+            "dst": f"/usr/local/bin/{name}",
+            "description": f"burger: static iperf3 {version}",
+            "permissions": "0755",
+        }
+    ]
+
+
 def _load(path) -> dict:
     try:
         return yaml.safe_load(Path(path).read_text())
@@ -150,6 +162,7 @@ def render(
         ("bennu_nodes", bennu_nodes),
         ("cc_nodes", req.cc_nodes),
         ("debs nodes", req.debs_nodes),
+        ("iperf_static nodes", req.iperf_nodes),
     ):
         missing = [h for h in want if h not in hosts]
         if missing:
@@ -167,6 +180,8 @@ def render(
     for n in nodes:
         if n["general"]["hostname"] in req.debs_nodes:
             n.setdefault("injections", []).extend(debs_injections(stage_dir))
+        if req.iperf_static and n["general"]["hostname"] in req.iperf_nodes:
+            n.setdefault("injections", []).extend(iperf_injections(stage_dir, req.iperf_static))
 
     components, runs = compose(res, man)
     extra = []

@@ -185,3 +185,18 @@ def test_fifo_renders_one_cc_component(settings, topologies):
     names = [c["name"] for c in scorch_of(scen)["components"] if not c["name"].startswith("health")]
     assert names == ["fifo"]
     assert res.board.bennu["pr"] == 66
+
+
+def test_iperf_322_injects_static_binary(settings, topologies):
+    _, _, topo, _ = build(settings, topologies, "iperf-322", False)
+    want = {
+        "src": f"{STAGE}/iperf3-3.22",
+        "dst": "/usr/local/bin/iperf3-3.22",
+        "description": "burger: static iperf3 3.22",
+        "permissions": "0755",
+    }
+    for n in topo["spec"]["nodes"]:
+        inj = n.get("injections", [])
+        has = [i for i in inj if i["dst"] == want["dst"]]
+        assert has == ([want] if n["general"]["hostname"] in ("rtu-1", "rtu-2") else [])
+        assert not any("burger-debs" in i["dst"] for i in inj)

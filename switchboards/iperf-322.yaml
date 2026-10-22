@@ -1,0 +1,20 @@
+# #165 iperf 3.22 (a static binary burger builds and injects) between two
+# waterway RTUs on the ICS network, with #191's cc filter helper. Same route and
+# items as `iperf`, which keeps the jammy 3.9 debs.
+about: "#165 iperf 3.22 + #191, rtu-2 to rtu-1"
+route: waterway
+apps: {prs: [165, 191]}
+items:
+  iperf-322: on
+  disruption: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+runs:
+  - name: iperf-322
+    configure: [iperf-322]
+    # iperf start returns once the clients launch; disruption keeps the stage
+    # open past their 20 s run before stop collects the results.
+    start: [iperf-322, disruption]
+    stop: [iperf-322]
+    cleanup: [iperf-322]

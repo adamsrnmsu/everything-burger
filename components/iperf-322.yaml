@@ -1,0 +1,21 @@
+name: iperf-322
+kind: scorch
+type: iperf
+about: >
+  iperf 3.22 between two RTUs on the ICS network. The jammy debs carry 3.9, so
+  burger builds a static 3.22 (esnet/iperf tag 3.22) once and injects it into
+  both VMs as /usr/local/bin/iperf3-3.22 (#165 claims support for 3.15-3.22).
+routes: [waterway]
+stages: [configure, start, stop, cleanup]
+config:
+  run_duration: 20
+  add_client_args: "--omit 2"
+  iperf_version: "3.22"
+  iperf_paths: {linux: /usr/local/bin/iperf3-3.22}
+  servers:
+    - hostname: "{route.rtus[0]}"
+      port_range_start: 5201
+      clients: [{hostname: "{route.rtus[1]}"}]
+requires:
+  iperf_static: {version: "3.22", nodes: "{route.rtus}"}
+  apps_prs: [165]

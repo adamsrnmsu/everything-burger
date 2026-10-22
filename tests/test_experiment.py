@@ -129,3 +129,27 @@ def test_down_stops_then_deletes(settings):
     down(res(settings), host)
     verbs = [" ".join(c).split("phenix phenix ")[1].split()[:2] for c in host.calls]
     assert verbs == [["experiment", "stop"], ["experiment", "delete"], ["config", "delete"]]
+
+
+def test_build_iperf_builds_once_and_caches(settings):
+    from burger.iperf import build_iperf
+
+    out = settings.work / "out"
+    out.mkdir()
+    host = FakeHost(settings=settings)
+    real = host.run
+
+    def run(cmd, **kw):
+        if cmd[:2] == ["docker", "run"]:
+            (settings.work / "cache" / "iperf3-3.22").write_text("ELF")
+        return real(cmd, **kw)
+
+    host.run = run
+    build_iperf(host, settings, "3.22", out, "1:2")
+    build_iperf(host, settings, "3.22", out, "1:2")
+    runs = [c for c in host.calls if c[:2] == ["docker", "run"]]
+    assert len(runs) == 1
+    assert "--enable-static-bin" in runs[0][-1]
+    assert "esnet/iperf/archive/refs/tags/3.22.tar.gz" in runs[0][-1]
+    assert (out / "iperf3-3.22").read_text() == "ELF"
+    assert (settings.work / "cache" / "iperf3-3.22").stat().st_mode & 0o111
