@@ -1,0 +1,349 @@
+{
+  "apiVersion": "phenix.sandia.gov/v2",
+  "kind": "Scenario",
+  "metadata": {
+    "annotations": {
+      "topology": "ebwes-mtu"
+    },
+    "name": "ebwes-mtu"
+  },
+  "spec": {
+    "apps": [
+      {
+        "metadata": {
+          "taps": [
+            {
+              "bridge": "phenix",
+              "externalAccess": {
+                "enabled": true
+              },
+              "ip": "172.16.0.1/16",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "name": "tap"
+      },
+      {
+        "assetDir": "/phenix/topologies/burger-soap",
+        "hosts": [
+          {
+            "hostname": "power-provider",
+            "metadata": {
+              "case": "/phenix/topologies/burger-soap/injects/case300.py",
+              "labels": [
+                "elk"
+              ],
+              "publish_endpoint": "udp://*;239.0.0.1:40000",
+              "simulator": "PyPower",
+              "type": "provider"
+            }
+          },
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "dnp3": [
+                {
+                  "name": "bus-242",
+                  "type": "bus"
+                },
+                {
+                  "name": "generator-1_bus-242",
+                  "type": "generator"
+                },
+                {
+                  "name": "bus-alert",
+                  "type": "bus"
+                }
+              ],
+              "infrastructure": "power-transmission",
+              "labels": [
+                "elk"
+              ],
+              "provider": "power-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "dnp3": [
+                {
+                  "name": "bus-243",
+                  "type": "bus"
+                },
+                {
+                  "name": "load-1_bus-243",
+                  "type": "load"
+                },
+                {
+                  "name": "generator-1_bus-243",
+                  "type": "generator"
+                }
+              ],
+              "infrastructure": "power-transmission",
+              "labels": [
+                "elk"
+              ],
+              "provider": "power-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-3",
+            "metadata": {
+              "dnp3": [
+                {
+                  "name": "bus-244",
+                  "type": "bus"
+                },
+                {
+                  "name": "branch-1_243-244",
+                  "type": "branch"
+                }
+              ],
+              "infrastructure": "power-transmission",
+              "labels": [
+                "elk"
+              ],
+              "provider": "power-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-4",
+            "metadata": {
+              "dnp3": [
+                {
+                  "name": "bus-245",
+                  "type": "bus"
+                },
+                {
+                  "name": "load-1_bus-245",
+                  "type": "load"
+                },
+                {
+                  "name": "branch-1_242-245",
+                  "type": "branch"
+                },
+                {
+                  "name": "branch-1_243-245",
+                  "type": "branch"
+                }
+              ],
+              "infrastructure": "power-transmission",
+              "labels": [
+                "elk"
+              ],
+              "provider": "power-provider",
+              "type": "fd-server"
+            }
+          }
+        ],
+        "name": "sceptre"
+      },
+      {
+        "metadata": {
+          "components": [
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "power-provider",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)pybennu-power-solver( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-2",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-3",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-4",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "siren",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Successfully installed.* pybennu-' <<<\"$log\" || { echo \"$1: pip install of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "health",
+              "type": "cc"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "power-provider",
+                    "interface": 0
+                  }
+                ]
+              },
+              "name": "publish-fragments",
+              "type": "pcap"
+            },
+            {
+              "metadata": {
+                "current_disruption": "baseline",
+                "run_duration": 60
+              },
+              "name": "disruption",
+              "type": "disruption"
+            }
+          ],
+          "runs": [
+            {
+              "name": "health",
+              "start": [
+                "health"
+              ]
+            },
+            {
+              "cleanup": [
+                "disruption"
+              ],
+              "configure": [
+                "disruption"
+              ],
+              "name": "mtu",
+              "start": [
+                "publish-fragments",
+                "disruption"
+              ],
+              "stop": [
+                "publish-fragments"
+              ]
+            }
+          ]
+        },
+        "name": "scorch"
+      }
+    ]
+  }
+}
