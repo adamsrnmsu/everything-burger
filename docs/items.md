@@ -45,7 +45,7 @@ it prints `skipped` when the tree is not synced or `uv` is missing, and exits 1
 on a FAIL. `./burger verify` judges the scorch ones from the validator inside
 phēnix it already runs (its models.yaml carries them, and a rejection they were
 expected to get no longer fails the board) and the app ones with `uv`, as `check`
-does. Examples: `vmstats-bad-name`, `qos-bad-rate`, `helics-no-broker`.
+does. Examples: `vmstats-bad-name`, `qos-bad-rate`, `helics-no-broker`, `pipe-bad-name`.
 
 ## Adding a test
 

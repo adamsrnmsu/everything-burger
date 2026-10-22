@@ -1,6 +1,7 @@
 # #155 security hardening on stock bennu: tcpdump, pcap and mm
-# captures, mgmt_tap, and the mirror app feeding a monitor VM.
-about: "#155, mirror + mgmt_tap"
+# captures, pipe, mgmt_tap, and the mirror app feeding a monitor VM. Offline,
+# pipe-bad-name checks the Token allowlist rejects a name main accepts.
+about: "#155, pipe, mirror + mgmt_tap"
 route: waterway
 apps: {prs: [155]}
 items:
@@ -8,6 +9,8 @@ items:
   tcpdump: on
   mm: on
   disruption: on
+  pipe: on
+  pipe-bad-name: on
   apps/mirror: on
   apps/mgmt_tap: on
   bennu/field-device: on

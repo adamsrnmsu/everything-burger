@@ -290,6 +290,14 @@
               },
               "name": "wait",
               "type": "disruption"
+            },
+            {
+              "name": "pipe",
+              "type": "pipe",
+              "metadata": {
+                "pipe": "burger",
+                "data": "hello-from-burger"
+              }
             }
           ],
           "runs": [

@@ -7,7 +7,7 @@ the rendered scenario, no VMs.
 | PR | Covered by | Not covered |
 |---|---|---|
 | #132 | none; to be closed | |
-| #155 | `harden`: cc validators, pcap, tcpdump, mm, mgmt_tap, mirror; mm's bridge capture filter `tcp port 502` (one quoted minimega argument: the start stage fails without the quoting, and the capture must hold Modbus) | kafka (no broker); art, ssh; the `Token`/`Args`/`FilterExpr` allowlists, `extract_run_name` and the filter/VM-name rejections (unit tests only: they stop the stage, not the experiment, so no board can pass on them) |
+| #155 | `harden`: cc validators, pcap, tcpdump, mm, pipe, mgmt_tap, mirror; mm's bridge capture filter `tcp port 502` (one quoted minimega argument: the start stage fails without the quoting, and the capture must hold Modbus); `pipe-bad-name` (`expect_invalid`, offline): the `Token` allowlist rejects `burger;id`, which main accepts | kafka (no broker); art, ssh; pipe `via` refused under `PHENIX_SCORCH_HOST_VALIDATORS=0` (a phenix host setting); the `Args`/`FilterExpr` allowlists, `extract_run_name` and the filter/VM-name rejections (unit tests only) |
 | #159, #161, #163, #179 | CI and docs only; nothing to run | |
 | #164 disruption | `metadata` (baseline); dos model offline | dos and physical live (no Kali, no OPC script) |
 | #165 iperf | `iperf` switchboard (with #191; burger installs iperf3; the client runs with `add_client_args: "--omit 2"`); model offline in `metadata` | Windows client; the PID files, kill-by-PID and `iperf_version` matching of the local head (3904686 is not pushed); rejected `add_*_args` (a rejection cannot be a pass) |

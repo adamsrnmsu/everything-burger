@@ -1,0 +1,14 @@
+name: pipe-bad-name
+kind: scorch
+type: pipe
+about: >
+  pipe named 'burger;id'. Main's Token type only refuses whitespace, quotes,
+  '#' and backslash, so it accepts the ';'. #155 makes Token an allowlist and
+  rejects it before the name reaches a minimega command. Validate-only: it
+  passes when phenix-scorch-validate rejects the pipe field.
+routes: []
+stages: [start, cleanup]
+expect_invalid: "pipe"
+config: {pipe: "burger;id", data: hello-from-burger}
+requires:
+  apps_prs: [155]

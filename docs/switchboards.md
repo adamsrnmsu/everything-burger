@@ -25,7 +25,7 @@ this.
 | `bennu` | upstream `main` | #59 (main with #54–#58, plus loguru) deb and pybennu wheel | health checks on the PR build of bennu |
 | `pybennu` | upstream `main` | #59 deb and pybennu wheel | soap without Ignition: `pybennu-power-solver` runs and logs through loguru, each C++ RTU queries it; siren's log file (advisory) |
 | `metadata` | #164–#172, #174–#177, #191 | stock `bennu.qc2` | disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos (+ advisory erspan); lowercase mgmt VLAN (#158, merged); offline: deprecated-key aliases and the configs that must be rejected (`vmstats-bad-name`, `qos-bad-rate`) |
-| `harden` | #155 | stock `bennu.qc2` | cc validators, pcap, tcpdump, mm (bridge capture with a spaced filter), mgmt_tap, mirror app into a `monitor` VM |
+| `harden` | #155 | stock `bennu.qc2` | cc validators, pcap, tcpdump, mm (bridge capture with a spaced filter), pipe, mgmt_tap, mirror app into a `monitor` VM; offline: `pipe-bad-name` must be rejected |
 | `rtds` | #164, #166, #169, #177 | #59 pybennu wheel | rtds, providerdata, collector and a baseline disruption on **your rig's** topology (`site` route), not waterway |
 | `provider` | #164, #166, #169, #177 | stock `bennu.qc2` | providerdata, rtds (lifecycle only) and collector with a baseline disruption, on **soap**'s pybennu PyPower provider; health: the solver runs |
 | `iperf` | #165, #191 | stock `bennu.qc2` | iperf from rtu-2 to rtu-1 on waterway, after the waterway health checks; burger installs iperf3 into both |
