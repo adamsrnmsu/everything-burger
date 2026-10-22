@@ -13,6 +13,7 @@ from burger.bennu import bennu_startup, build_bennu
 from burger.checks.status import collect_status, evaluate
 from burger.compose import compose
 from burger.config import BurgerError, Settings
+from burger.iperf import build_iperf
 from burger.render import DEBS_STARTUP, MINICCC_STARTUP, render
 from burger.site import site_image
 from burger.switchboard import Resolved
@@ -72,6 +73,9 @@ def build(res: Resolved, settings: Settings, host) -> None:
                 f"chown {uid} /out/*.deb",
             ]
         )  # fmt: skip
+
+    if res.requires.iperf_static:
+        build_iperf(host, settings, res.requires.iperf_static, out, uid)
 
     if man["bennu"]:
         spec = res.board.bennu or {}

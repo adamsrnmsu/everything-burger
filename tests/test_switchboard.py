@@ -73,7 +73,7 @@ def test_experiment_name_too_long(settings):
 @pytest.mark.usefixtures("site_env")
 def test_every_switchboard_resolves(settings):
     names = all_switchboards(settings)
-    assert len(names) == 18
+    assert len(names) == 19
     for name in names:
         resolve(load_switchboard(name, settings), settings)
 
@@ -196,3 +196,14 @@ def test_requires_message_names_prs_or_contains(settings):
     b = board(settings, "iperf", apps_prs=[], apps_branch={"branch": "b", "remote": "fork"})
     with pytest.raises(BurgerError, match="apps contains"):
         resolve(b, settings)
+
+
+def test_iperf_322_requires_and_config(settings):
+    r = resolve(load_switchboard("iperf-322", settings), settings)
+    assert r.requires.iperf_static == "3.22"
+    assert r.requires.iperf_nodes == ["rtu-1", "rtu-2"]
+    assert r.requires.debs_packages == []
+    cfg = next(i for i in r.items if i.name == "iperf-322").config
+    assert cfg["iperf_version"] == "3.22"
+    assert cfg["iperf_paths"] == {"linux": "/usr/local/bin/iperf3-3.22"}
+    assert resolve(load_switchboard("iperf", settings), settings).requires.iperf_static is None

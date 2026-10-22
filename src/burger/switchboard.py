@@ -44,6 +44,8 @@ class Requires:
     mgmt_vlan: str | None
     cc_nodes: list[str]
     keep_nodes: list[str]
+    iperf_static: str | None = None  # version of the static iperf3 to inject
+    iperf_nodes: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -217,5 +219,7 @@ def resolve(board: Switchboard, settings: Settings, linux_only: bool = False) ->
         mgmt_vlan=next((r["mgmt_vlan"] for r in req if r.get("mgmt_vlan")), None),
         cc_nodes=_unique(n for r in req for n in r.get("cc_nodes", [])),
         keep_nodes=_unique(n for r in req for n in r.get("keep_nodes", [])),
+        iperf_static=next((s["version"] for r in req if (s := r.get("iperf_static"))), None),
+        iperf_nodes=_unique(n for r in req for n in r.get("iperf_static", {}).get("nodes", [])),
     )
     return Resolved(board, route, items, validate_only, requires, linux_only)

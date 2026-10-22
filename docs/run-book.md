@@ -124,3 +124,9 @@ image rows for this switchboard.
 
 After you push to a PR, `./burger prs` marks the switchboards that carry it
 STALE; re-run `sync` and the rest.
+
+## Boards with no live evidence yet
+
+`scripts/run-pending.sh` runs `opendss`, `mtu` and `ssh` (add `--iperf-322` for the
+fourth). It runs `preflight` first, prompts for `BURGER_VM_PASSWORD` if unset, brings a
+failed board down and continues, then prints pass/fail and each `work/<board>/report.md`.

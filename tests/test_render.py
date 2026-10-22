@@ -212,3 +212,18 @@ def test_integrate_names_the_mgmt_vlan_as_the_topology_does(settings):
     r = resolve(load_switchboard("integrate", settings), settings)
     tap = next(i for i in r.items if i.name == "mgmt_tap")
     assert tap.config["vlan"] == "mgmt"
+
+
+def test_iperf_322_injects_static_binary(settings, topologies):
+    _, _, topo, _ = build(settings, topologies, "iperf-322", False)
+    want = {
+        "src": f"{STAGE}/iperf3-3.22",
+        "dst": "/usr/local/bin/iperf3-3.22",
+        "description": "burger: static iperf3 3.22",
+        "permissions": "0755",
+    }
+    for n in topo["spec"]["nodes"]:
+        inj = n.get("injections", [])
+        has = [i for i in inj if i["dst"] == want["dst"]]
+        assert has == ([want] if n["general"]["hostname"] in ("rtu-1", "rtu-2") else [])
+        assert not any("burger-debs" in i["dst"] for i in inj)
