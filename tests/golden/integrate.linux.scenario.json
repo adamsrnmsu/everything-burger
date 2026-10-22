@@ -126,7 +126,7 @@
       {
         "metadata": {
           "subnet": "172.16.0.0/16",
-          "vlan": "MGMT"
+          "vlan": "mgmt"
         },
         "name": "mgmt_tap"
       },

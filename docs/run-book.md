@@ -25,6 +25,16 @@ boot time is not billed to it. The cap is hard: a retry starts only if an
 attempt as long as the last one would end in time. Other runs get one attempt,
 so no `--settle` value rescues a hung component.
 
+The settle clock starts only after the first attempt, so the first health
+attempt has its own cap, `--first-cap` (default 600 s). When it expires burger
+kills the SCORCH run (`pkill -f 'experiment scorch'` and any leftover
+`phenix-scorch-component-*` processes in the phēnix container), counts it as a
+failed attempt and the retry loop takes over. Before the health run, burger
+waits for every VM's cc client to register, so a command is not lost to a
+client that is still booting. Each attempt's SCORCH output goes to
+`work/<switchboard>/results/run-<i>-attempt-<n>.log`; the console shows it
+only when the run finally fails.
+
 `run` stops at the first failing step and leaves the experiment up for
 debugging; after `verify` it deletes the experiment unless you pass `--keep`.
 To debug, run the steps by hand:

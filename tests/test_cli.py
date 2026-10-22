@@ -341,3 +341,9 @@ def test_preflight_redacts_mirror_tokens(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "probe", lambda *_a, **_k: None)
     main(["--quiet", "preflight", "--linux-only"])
     assert "tok" not in capsys.readouterr().out
+
+
+def test_first_cap_flag_defaults_to_600():
+    p = cli._parser()
+    assert p.parse_args(["scorch", "baseline"]).first_cap == 600
+    assert p.parse_args(["run", "baseline", "--first-cap", "5"]).first_cap == 5

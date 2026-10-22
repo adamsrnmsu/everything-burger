@@ -71,7 +71,7 @@ def _one(args, s, host, name: str) -> int:
     elif cmd == "up":
         experiment.up(res, s, host, args.timeout)
     elif cmd == "scorch":
-        experiment.scorch(res, s, host, args.run, args.settle)
+        experiment.scorch(res, s, host, args.run, args.settle, first_cap=args.first_cap)
     elif cmd == "verify":
         return _verify(res, s, host)
     elif cmd == "down":
@@ -356,6 +356,10 @@ def _parser() -> argparse.ArgumentParser:
     lo = ("--linux-only", {"action": "store_true", "help": "drop the Windows nodes"})
     to = ("--timeout", {"type": int, "default": 900, "help": "seconds to wait for VMs"})
     se = ("--settle", {"type": int, "default": 900, "help": "cap on seconds retrying health"})
+    fc = (
+        "--first-cap",
+        {"type": int, "default": 600, "help": "cap on seconds for the first health attempt"},
+    )
     keep = ("--keep", {"action": "store_true", "help": "leave the experiment running"})
     add(
         "run",
@@ -363,6 +367,7 @@ def _parser() -> argparse.ArgumentParser:
         lo,
         to,
         se,
+        fc,
         keep,
         fn=_run,
         aliases=["round"],
@@ -371,7 +376,7 @@ def _parser() -> argparse.ArgumentParser:
     add("build", "build the apps tarball, mirror binary and bennu", lo)
     add("install", "install the apps into phēnix", lo)
     add("up", "render and start the experiment", lo, to)
-    add("scorch", "run the SCORCH runs", ("--run", {"type": int}), se)
+    add("scorch", "run the SCORCH runs", ("--run", {"type": int}), se, fc)
     add("verify", "check install, experiment, models and SCORCH results")
     add("down", "delete the experiment and configs")
     add("bennu-check", "run bennu's docker test harness on the board's bennu PR")

@@ -41,7 +41,10 @@ def _fetch(host, repo: Path, url: str, refs) -> None:
 
 
 def fork_owner(host) -> str:
-    """The gh user: the identity `burger prs` means by @me. Asked once per host object."""
+    """The fork's owner: BURGER_FORK_OWNER if set (a public fork needs no gh), else the
+    gh user, the identity `burger prs` means by @me. Asked once per host object."""
+    if env := os.environ.get("BURGER_FORK_OWNER"):
+        return env
     if not hasattr(host, "_fork_owner"):
         try:
             owner = host.run(["gh", "api", "user", "--jq", ".login"], capture=True).stdout.strip()

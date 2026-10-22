@@ -129,3 +129,146 @@ def test_down_stops_then_deletes(settings):
     down(res(settings), host)
     verbs = [" ".join(c).split("phenix phenix ")[1].split()[:2] for c in host.calls]
     assert verbs == [["experiment", "stop"], ["experiment", "delete"], ["config", "delete"]]
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def time(self):
+        return self.now
+
+    def sleep(self, n):
+        self.now += n
+
+
+def _up(settings, monkeypatch, verdicts):
+    """A switchboard that is up with one health run; evaluate() answers `verdicts` in turn."""
+    (settings.work / "baseline").mkdir()
+    (settings.work / "baseline" / "state.json").write_text(json.dumps({"linux_only": False}))
+    (settings.work / "baseline" / "manifest.json").write_text(json.dumps(MAN))
+    runs = [{"name": "health", "start": ["health"]}]
+    monkeypatch.setattr(experiment, "compose", lambda res, man: ([], runs))
+    monkeypatch.setattr(experiment, "collect", lambda *a: {})
+    answers = iter(verdicts)
+    monkeypatch.setattr(
+        experiment,
+        "evaluate",
+        lambda *a: [("c", "s", "x", "FAIL" if next(answers) else "ok", "no sceptre yet")],
+    )
+
+
+@pytest.fixture
+def messages():
+    from loguru import logger
+
+    got = []
+    hid = logger.add(lambda m: got.append((m.record["level"].name, m.record["message"])), level=0)
+    yield got
+    logger.remove(hid)
+
+
+NS = "docker exec minimega minimega -e namespace e "
+
+
+def test_wait_for_cc_blocks_until_every_vm_registered(settings):
+    clock = FakeClock()
+    clients = iter(["u1\n", "u1\n", "u1\nu2\n"])
+
+    class H(FakeHost):
+        def run(self, cmd, **kw):
+            if "columns uuid cc clients" in " ".join(map(str, cmd)):
+                return subprocess.CompletedProcess(cmd, 0, next(clients), "")
+            return super().run(cmd, **kw)
+
+    listing = subprocess.CompletedProcess([], 0, "a,u1\nb,u2\n", "")
+    host = H({NS + ".csv true .headers false .annotate false .columns name": listing}, settings)
+    host.api_responses["/experiments/e/vms"] = {
+        "vms": [{"name": "a"}, {"name": "b"}, {"name": "skipped", "dnb": True}]
+    }
+    experiment.wait_for_cc(host, settings, "e", clock=clock)
+    assert clock.now == 10  # two polls found b missing, the third saw both
+
+
+def test_wait_for_cc_gives_up_with_a_warning(settings, messages):
+    clock = FakeClock()
+    host = FakeHost(settings=settings)
+    host.api_responses["/experiments/e/vms"] = {"vms": [{"name": "a"}]}
+    experiment.wait_for_cc(host, settings, "e", timeout=20, clock=clock)
+    assert clock.now > 20
+    assert any(lvl == "WARNING" and "not registered" in m for lvl, m in messages)
+
+
+def test_wait_for_cc_skipped_without_minimega(settings):
+    host = FakeHost(settings=dataclasses.replace(settings, mm_ctr=""))
+    experiment.wait_for_cc(host, host.s, "e")
+    assert host.calls == []
+
+
+def test_health_waits_for_cc_before_scorch(settings, monkeypatch):
+    _up(settings, monkeypatch, [False])
+    order = []
+    monkeypatch.setattr(experiment, "wait_for_cc", lambda *a, **k: order.append("cc"))
+
+    class H(FakeHost):
+        def run(self, cmd, **kw):
+            if "scorch" in cmd:
+                order.append("scorch")
+            return super().run(cmd, **kw)
+
+    scorch(res(settings), settings, H(settings=settings), None, 0, clock=FakeClock())
+    assert order == ["cc", "scorch"]
+
+
+def test_first_attempt_cap_kills_scorch_and_retry_takes_over(settings, monkeypatch):
+    _up(settings, monkeypatch, [False])  # the retry after the timeout is healthy
+    clock = FakeClock()
+    timeouts = []
+
+    class Hung(FakeHost):
+        def run(self, cmd, **kw):
+            if "scorch" in cmd and "experiment" in cmd:
+                timeouts.append(kw.get("timeout"))
+                if len(timeouts) == 1:
+                    clock.now += kw["timeout"]
+                    raise subprocess.TimeoutExpired(cmd, kw["timeout"], b"started\n")
+            return super().run(cmd, **kw)
+
+    host = Hung(settings=settings)
+    scorch(res(settings), settings, host, None, 900, clock=clock, first_cap=120)
+    assert timeouts == [120, None]  # only the first attempt is capped
+    kills = [c[-3:] for c in host.calls if "pkill" in c]
+    assert kills == [
+        ["pkill", "-f", "experiment scorch"],
+        ["pkill", "-f", "phenix-scorch-component-"],
+    ]
+    results = settings.work / "baseline" / "results"
+    assert (results / "run-0-attempt-1.log").read_text() == "started\n"
+    assert (results / "run-0-attempt-2.log").is_file()
+
+
+def test_retry_lines_and_final_failure_output(settings, monkeypatch, messages):
+    _up(settings, monkeypatch, [True] * 9)
+    clock = FakeClock()
+
+    class Loud(FakeHost):
+        def run(self, cmd, **kw):
+            if "scorch" in cmd and "experiment" in cmd:
+                clock.now += 100
+                return subprocess.CompletedProcess(cmd, 1, "out-text\n", "err-text\n")
+            return super().run(cmd, **kw)
+
+    scorch(res(settings), settings, Loud(settings=settings), None, 400, clock=clock)
+    retries = [m for lvl, m in messages if "not healthy yet" in m]
+    assert "attempt 1" in retries[0] and "settle 400 s left" in retries[0]
+    assert "~2 more attempt(s)" in retries[0]  # 400 // (60 + 100)
+    spew = [m for lvl, m in messages if "SCORCH output" in m]
+    assert len(spew) == 1 and "out-text" in spew[0]  # console output only on the final failure
+    log = settings.work / "baseline" / "results" / "run-0-attempt-1.log"
+    assert log.read_text() == "out-text\nerr-text\n"
+
+
+def test_passes_log_at_success_level(settings, monkeypatch, messages):
+    _up(settings, monkeypatch, [False])
+    scorch(res(settings), settings, FakeHost(settings=settings), None, 0, clock=FakeClock())
+    assert [m.split(" ")[0] for lvl, m in messages if lvl == "SUCCESS"] == ["run", "scorch"]
