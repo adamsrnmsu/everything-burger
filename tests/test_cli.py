@@ -347,3 +347,73 @@ def test_first_cap_flag_defaults_to_600():
     p = cli._parser()
     assert p.parse_args(["scorch", "baseline"]).first_cap == 600
     assert p.parse_args(["run", "baseline", "--first-cap", "5"]).first_cap == 5
+
+
+def _site_rows_of(host):
+    from burger.checks import Row
+
+    rows = []
+
+    def chk(label, ok, hint=""):
+        rows.append(Row("-", label, "ok" if ok else "FAIL", "" if ok else hint, []))
+
+    cli._site_rows(host, rows, chk)
+    return rows
+
+
+def test_preflight_fails_a_bundle_that_cannot_verify_a_public_host(monkeypatch, tmp_path):
+    from burger.site import load_site
+
+    _site_env(tmp_path, monkeypatch)
+    host = FakeHost(site=load_site())
+    seen = []
+
+    def fake_probe(url, site, bundle, timeout=15):
+        seen.append(url)
+        if "pypi.org" in url:
+            return "[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate"
+
+    monkeypatch.setattr(cli, "probe", fake_probe)
+    (row,) = [r for r in _site_rows_of(host) if "pypi.org" in r.check]
+    assert "https://pypi.org/simple/" in seen
+    assert row.verdict == "FAIL"
+    assert "ca-certificates.crt" in row.reason and "whole trust store" in row.reason
+
+
+def test_preflight_unreachable_public_host_only_warns(monkeypatch, tmp_path):
+    from burger.site import load_site
+
+    _site_env(tmp_path, monkeypatch)
+    host = FakeHost(site=load_site())
+    monkeypatch.setattr(
+        cli, "probe", lambda url, *_a, **_k: "timed out" if "pypi.org" in url else None
+    )
+    (row,) = [r for r in _site_rows_of(host) if "pypi.org" in r.check]
+    assert row.verdict == "WARN" and "ca-certificates.crt" not in row.reason
+
+
+def test_preflight_warns_on_leftover_taps_and_ovs_ports(monkeypatch):
+    monkeypatch.setenv("BURGER_MINIMEGA_CONTAINER", "")  # native: no docker exec prefix
+    host = FakeHost(
+        {
+            "ip -o link": subprocess.CompletedProcess(
+                [], 0, "1: lo: <X>\n7: ebwes-metadata-0: <X>\n8: eth0@if9: <X>\n", ""
+            ),
+            "ovs-vsctl list-ports": subprocess.CompletedProcess([], 0, "mega_tap0\nvx0\n", ""),
+        }
+    )
+    rows = []
+    cli._leftover_rows(host, rows)
+    (row,) = rows
+    assert row.verdict == "WARN" and "mega_tap0" not in row.reason
+    assert "sudo ip link delete ebwes-metadata-0" in row.reason
+    assert "sudo ovs-vsctl --if-exists del-port mega_bridge vx0" in row.reason
+
+
+def test_preflight_clean_or_ovs_less_host_has_no_leftover_row(monkeypatch):
+    monkeypatch.setenv("BURGER_MINIMEGA_CONTAINER", "")
+    rows = []
+    cli._leftover_rows(FakeHost(), rows)
+    host = FakeHost({"ovs-vsctl": subprocess.CompletedProcess([], 127, "", "not found")})
+    cli._leftover_rows(host, rows)
+    assert rows == []

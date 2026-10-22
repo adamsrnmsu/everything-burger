@@ -17,7 +17,7 @@ from pathlib import Path
 from burger.checks import Row
 from burger.items import Item
 from burger.switchboard import Resolved
-from burger.vcs import board_dir
+from burger.vcs import board_dir, load_manifest
 
 _RECORD = re.compile(r"(?m)^(?=(?:ok|invalid|warning|skipped|deferred)\s)")
 _HEAD = re.compile(r"(\w+)\s+.*?: (\S+) \(\S*\)")
@@ -95,6 +95,22 @@ def scorch_rows(res: Resolved, settings, host, models: Path) -> list[Row]:
     return rows
 
 
+def _installed(res: Resolved, settings, host) -> bool:
+    """Whether phēnix has the apps this board synced (what `burger install` records)."""
+    got = host.ctr("cat", "/tmp/burger/installed.json", check=False, capture=True)
+    try:
+        have = json.loads(got.stdout).get("apps") if got.returncode == 0 else None
+    except ValueError:
+        return False
+    return have == load_manifest(settings, res.board.name)["apps"]["head"]
+
+
+def _stage(host, entry: str, stage: str, stdin: str):
+    """Run an installed app stage where phēnix runs (docker exec needs -i for stdin)."""
+    pre = ["docker", "exec", "-i", host.s.ctr] if host.s.ctr else []
+    return host.run([*pre, entry, stage, "--dry-run"], check=False, capture=True, input=stdin)
+
+
 def app_rows(res: Resolved, settings, host, topo: dict, workdir: Path) -> list[Row]:
     """The app items that must be rejected: run the app's early stages on `topo`."""
     items = expected(res, "app")
@@ -115,18 +131,20 @@ def app_rows(res: Resolved, settings, host, topo: dict, workdir: Path) -> list[R
             },
         }
         for stage in ("configure", "pre-start"):
+            entry, stdin = f"phenix-app-{item.type}", json.dumps(exp)
             got = host.run(
-                [*UV, src, f"phenix-app-{item.type}", stage, "--dry-run"],
-                check=False,
-                capture=True,
-                input=json.dumps(exp),
+                [*UV, src, entry, stage, "--dry-run"], check=False, capture=True, input=stdin
             )
+            if got.returncode == 127:  # no uv: use the apps installed in phēnix, if they are
+                if not _installed(res, settings, host):  # this board's; needs no index
+                    break
+                got = _stage(host, entry, stage, stdin)
             if got.returncode:
                 break
         out = f"{got.stdout}{got.stderr}"
         label = f"{item.type} {stage} rejects"
         if got.returncode == 127:
-            rows += _skip([item], "uv not found")
+            rows += _skip([item], "uv not found, and this board's apps are not installed in phēnix")
         elif not got.returncode:
             rows.append(Row(item.name, label, "FAIL", "every stage accepted the config", []))
         elif re.search(item.expect_invalid, out):

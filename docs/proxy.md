@@ -19,6 +19,7 @@ proxy:
   https: http://proxy.site:8080
   no_proxy: localhost,127.0.0.1,.site.internal
 ca_certs:                       # PEM files, all trusted (burger joins them into one bundle)
+  - /etc/ssl/certs/ca-certificates.crt   # public CAs; the proxy doesn't re-sign everything
   - /etc/pki/site/root-ca.pem
   - /etc/pki/site/issuing-ca.pem
 mirrors:
@@ -34,6 +35,26 @@ mirrors:
 dockerfile_extra: |                                   # spliced after every FROM
   RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
 ```
+
+## `ca_certs` is the whole trust store
+
+burger joins `ca_certs` into one bundle and points `SSL_CERT_FILE`,
+`REQUESTS_CA_BUNDLE`, `PIP_CERT`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO` and the
+rest at it. That bundle **replaces** the system store everywhere those
+variables are read; it does not add to it. A proxy that re-signs only some
+traffic and passes the rest through with its real chain (seen on en18:
+`pypi.org` arrived un-resigned and failed with "unable to get local issuer
+certificate") needs the system bundle listed next to the site CAs:
+
+```yaml
+ca_certs:
+  - /etc/ssl/certs/ca-certificates.crt   # public CAs; the proxy doesn't re-sign everything
+  - <site CA PEMs...>
+```
+
+`./burger preflight` fetches `https://pypi.org/simple/` through the proxy with
+the bundle and fails on a certificate error with this advice. A host it cannot
+reach at all (an air-gapped site) is a WARN, not a failure.
 
 ## What it changes
 
@@ -73,7 +94,7 @@ systemctl daemon-reload && systemctl restart docker
 ```
 
 `./burger preflight` checks this for real with a `docker pull` from the
-registry mirror, and probes each mirror through the proxy with the CA bundle.
+registry mirror, and probes each mirror, and one public URL, through the proxy with the CA bundle.
 
 ## Notes
 

@@ -41,11 +41,12 @@ accepted or rejected for another reason.
 
 `./burger check <board>` judges them offline on the board's synced apps tree
 (`./burger sync <board>` first) with `uv run --with work/<board>/apps/src/python`;
-it prints `skipped` when the tree is not synced or `uv` is missing, and exits 1
-on a FAIL. `./burger verify` judges the scorch ones from the validator inside
+it prints `skipped` when the tree is not synced or (scorch items) `uv` is missing,
+and exits 1 on a FAIL. Without `uv` on the host the app items run the `phenix-app-*` commands already installed
+in phēnix instead, but only when `burger install` put this board's apps there
+(same commit); otherwise they are `skipped` with that reason. `./burger verify` judges the scorch ones from the validator inside
 phēnix it already runs (its models.yaml carries them, and a rejection they were
-expected to get no longer fails the board) and the app ones with `uv`, as `check`
-does. Examples: `vmstats-bad-name`, `qos-bad-rate`, `helics-no-broker`, `pipe-bad-name`.
+expected to get no longer fails the board) and the app ones as `check` does. Examples: `vmstats-bad-name`, `qos-bad-rate`, `helics-no-broker`, `pipe-bad-name`.
 
 ## Adding a test
 
