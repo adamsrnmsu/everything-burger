@@ -1,6 +1,5 @@
-# #160 metadata models #164-#177 and #191's cc filter helper, plus #158, on
-# stock bennu. Their shared base #190 merged upstream on 2026-10-20 and is on
-# main. Models no route can run
+# #160 metadata models #164-#177 and #191's cc filter helper on stock bennu.
+# Their shared base #190, #158 and #173 pipe are merged and on main. Models no route can run
 # (disruption-dos) are checked offline by phenix-scorch-validate; the rtds,
 # providerdata, collector, iperf and ssh models are validated on their own
 # boards. pcap-alias and tcpdump-alias do the same for the deprecated convertToJSON key.
@@ -11,9 +10,9 @@
 # Modbus. mm also captures one VM interface with a filter, stops only that
 # interface and converts it. tcpdump converts to JSON. Any logger.error line in
 # a status file fails the item, since these paths log and carry on.
-about: "#158 + #164-#177 metadata models + #191"
+about: "#164-#177 metadata models + #191"
 route: waterway
-apps: {prs: [158, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 191]}
+apps: {prs: [164, 165, 166, 167, 168, 169, 170, 171, 172, 174, 175, 176, 177, 191]}
 items:
   disruption: on
   disruption-dos: on

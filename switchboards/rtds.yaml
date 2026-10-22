@@ -3,7 +3,7 @@
 # provider VM. Needs BURGER_SITE_TOPOLOGY and BURGER_SITE_SCENARIO.
 about: "#164 #166 #169 #177 + bennu #59 (pybennu) on a site RTDS rig"
 route: site
-apps: {prs: [158, 164, 166, 169, 177]}
+apps: {prs: [164, 166, 169, 177]}
 bennu:
   pr: 59
   install: [pybennu]

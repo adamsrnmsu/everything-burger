@@ -24,10 +24,10 @@ this.
 | `baseline` | upstream `main` | stock `bennu.qc2` | health checks only. If this fails, the rig is broken, not a PR |
 | `bennu` | upstream `main` | #59 (main with #54–#58, plus loguru) deb and pybennu wheel | health checks on the PR build of bennu |
 | `pybennu` | upstream `main` | #59 deb and pybennu wheel | soap without Ignition: `pybennu-power-solver` runs and logs through loguru, each C++ RTU queries it; siren's log file (advisory) |
-| `metadata` | #158, #164–#177, #191 | stock `bennu.qc2` | disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos (+ advisory erspan); lowercase mgmt VLAN for #158; offline: deprecated-key aliases and the configs that must be rejected (`vmstats-bad-name`, `qos-bad-rate`) |
-| `harden` | #155, #158 | stock `bennu.qc2` | cc validators, pcap, tcpdump, mm (bridge capture with a spaced filter), mgmt_tap, mirror app into a `monitor` VM |
-| `rtds` | #158, #164, #166, #169, #177 | #59 pybennu wheel | rtds, providerdata, collector and a baseline disruption on **your rig's** topology (`site` route), not waterway |
-| `provider` | #158, #164, #166, #169, #177 | stock `bennu.qc2` | providerdata, rtds (lifecycle only) and collector with a baseline disruption, on **soap**'s pybennu PyPower provider; health: the solver runs |
+| `metadata` | #164–#172, #174–#177, #191 | stock `bennu.qc2` | disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos (+ advisory erspan); lowercase mgmt VLAN (#158, merged); offline: deprecated-key aliases and the configs that must be rejected (`vmstats-bad-name`, `qos-bad-rate`) |
+| `harden` | #155 | stock `bennu.qc2` | cc validators, pcap, tcpdump, mm (bridge capture with a spaced filter), mgmt_tap, mirror app into a `monitor` VM |
+| `rtds` | #164, #166, #169, #177 | #59 pybennu wheel | rtds, providerdata, collector and a baseline disruption on **your rig's** topology (`site` route), not waterway |
+| `provider` | #164, #166, #169, #177 | stock `bennu.qc2` | providerdata, rtds (lifecycle only) and collector with a baseline disruption, on **soap**'s pybennu PyPower provider; health: the solver runs |
 | `iperf` | #165, #191 | stock `bennu.qc2` | iperf from rtu-2 to rtu-1 on waterway, after the waterway health checks; burger installs iperf3 into both |
 | `bench` | upstream `main` | #59 deb and pybennu wheel (carries #55) | soap: `field-device-bench` times a throwaway 800-tag field device on rtu-1 and fails above 2 s per write cycle; the report row shows the measured time |
 | `opendss` | bennu #64 | #64 pybennu wheel | soap: `opendss-batched-write` runs the OpenDSS solver in-process on the provider VM and sends one write for two loads; fails if either is still enabled in OpenDSS. Fails on stock main (only the last device is applied); WARN when `opendssdirect` is missing |

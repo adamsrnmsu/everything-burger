@@ -8,18 +8,16 @@ the rendered scenario, no VMs.
 |---|---|---|
 | #132 | none; to be closed | |
 | #155 | `harden`: cc validators, pcap, tcpdump, mm, mgmt_tap, mirror; mm's bridge capture filter `tcp port 502` (one quoted minimega argument: the start stage fails without the quoting, and the capture must hold Modbus) | kafka (no broker); art, ssh; the `Token`/`Args`/`FilterExpr` allowlists, `extract_run_name` and the filter/VM-name rejections (unit tests only: they stop the stage, not the experiment, so no board can pass on them) |
-| #158 | `metadata` and `harden`; `metadata` renames the mgmt VLAN to `mgmt` | |
 | #159, #161, #163, #179 | CI and docs only; nothing to run | |
 | #164 disruption | `metadata` (baseline); dos model offline | dos and physical live (no Kali, no OPC script) |
 | #165 iperf | `iperf` switchboard (with #191; burger installs iperf3; the client runs with `add_client_args: "--omit 2"`); model offline in `metadata` | Windows client; the PID files, kill-by-PID and `iperf_version` matching of the local head (3904686 is not pushed); rejected `add_*_args` (a rejection cannot be a pass) |
 | #166 rtds | `provider` switchboard (lifecycle on a PyPower provider); `rtds` switchboard on your rig; `base-soap` (with #195); model offline in `metadata` | RTDS data checks off waterway/soap; `provider_start_wait` (only runs when the provider is down at configure, and `power-solver` starts it first) |
-| #167 pcap | `metadata` live: per-VM `filter` (rtu-1 filtered, rtu-2 not) and the filter reset, seen in mm's bridge capture; `convert_to_json: true` with a `.jsonl` check; the old `convertToJSON` key through the model (`pcap-alias`, offline) | `create_merged_pcap` live. The `.jsonl` check **fails until the renamed key is pushed**: upstream head 9495e16 still reads `convertToJSON` (local 5900184 is not pushed); the alias is not run live (one pcap component per board) |
+| #167 pcap | `metadata` live: per-VM `filter` (rtu-1 filtered, rtu-2 not) and the filter reset, seen in mm's bridge capture; `convert_to_json: true` with a `.jsonl` check; the old `convertToJSON` key through the model (`pcap-alias`, offline) | `create_merged_pcap` live; the alias is not run live (one pcap component per board) |
 | #168 tcpdump | `metadata` live with `iface: any` and `convert_to_json: true` with a `.jsonl` check; the old `convertToJSON` key through the model (`tcpdump-alias`, offline); any error line (failed PID-file kill or conversion) fails | The `.jsonl` check **fails until the rename is pushed**: the pushed head ignores `convert_to_json` and logs an unknown-key warning |
 | #169 collector | `provider` switchboard; `rtds` switchboard on your rig; `base-soap` (with #195); model offline in `metadata` | the ordering rule (iperf listed after collector raises in `Collector.__init__`, not in the model, so neither `phenix-scorch-validate` nor `expect_invalid` can see it; unit tests only) |
 | #170 ssh | `ssh` switchboard over `mgmt_tap`; model offline in `metadata` | |
 | #171 erspan | `metadata` advisory run (local-only, TEST-NET peer) | a real receiver |
 | #172 mm | `metadata` live: bridge capture with `convert`, a filtered VM capture stopped by interface and converted | mm's own filter reset (no capture starts after its VM capture); `convert_timeout` expiry |
-| #173 pipe | `metadata` live: the component writes into a pipe at start and deletes it at cleanup | a reader receiving backslashes intact; `via` programs; cleanup refusing with an open writer (nothing reads or writes the pipe) |
 | #174 hoststats | `metadata` live; `base` (with #195, under the shared `mm`) | `vm_list` holding only this experiment's VMs (needs two experiments on one host) |
 | #175 vmstats | `metadata` live; `base` and `base-soap` run vmstats with no `vms` (with #195); `vmstats-bad-name` (`expect_invalid`, offline): a VM name with `#` must be rejected | the default VM list now includes `os_type` vyos and vyatta and vmstats' no-`-t` fallback: **no route has a VyOS router**, so neither is run (a live check needs a booted VyOS image with miniccc, then a default-list run: see the VyOS steps in the apps bead); `\` in a VM name (the same pattern; only `#` is tested) and a down VM during stop |
 | #176 qos | `metadata` live with the bare-number `delay: 20` (20 ms; **needs the pushed head**: the old pattern wants a unit, so the offline validator also flags it until then); `qos-bad-rate` (`expect_invalid`, offline): `1.0005 mbit` must be rejected | fractional rates (`1.5 mbit` becomes `1500 kbit`) and `.5s` delays live: not in the pushed head (af5a219) |
@@ -36,7 +34,8 @@ the rendered scenario, no VMs.
 
 Merged upstream and dropped from every board: #190 (2026-10-20), #183 and #157
 (2026-10-21, the cc parsing PRs; `cc-output-parsing` stays on `cc-empty` as a
-regression check on main).
+regression check on main), #158 and #173 (2026-10-22; `apps/mgmt-vlan-alias`
+and `pipe` stay on `metadata` as regression checks on main).
 
 The tests #191, #192, #194 and #195 add now live in their own files
 (`common/tests/test_utils_cc_filter.py`, `test_utils_elastic.py`,

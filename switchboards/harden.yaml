@@ -1,8 +1,8 @@
-# #155 security hardening (+ #158) on stock bennu: tcpdump, pcap and mm
+# #155 security hardening on stock bennu: tcpdump, pcap and mm
 # captures, mgmt_tap, and the mirror app feeding a monitor VM.
-about: "#155 + #158, mirror + mgmt_tap"
+about: "#155, mirror + mgmt_tap"
 route: waterway
-apps: {prs: [155, 158]}
+apps: {prs: [155]}
 items:
   pcap: on
   tcpdump: on
