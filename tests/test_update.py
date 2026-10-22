@@ -241,3 +241,43 @@ def test_api_error_status_is_not_read_as_no_experiments(settings, lines):
 def test_project_name_is_left_out_when_the_label_is_missing():
     c = {"dir": "/d", "files": ["/d/a.yml"], "service": "s", "project": None}
     assert update._compose(c)[:3] == ["docker", "compose", "--project-directory"]
+
+
+# --- apps layer ---
+
+
+def test_apps_layer_goes_through_the_main_board(settings, lines, monkeypatch):
+    seen = []
+    man = {"apps": {"head": "f" * 40}}
+    monkeypatch.setattr(update.vcs, "sync", lambda res, s, h: seen.append(("sync", res)) or man)
+    monkeypatch.setattr(update.experiment, "build", lambda res, s, h: seen.append(("build", res)))
+    monkeypatch.setattr(
+        update.experiment, "install", lambda res, s, h: seen.append(("install", res))
+    )
+    h = host_for(
+        settings,
+        {"docker exec phenix cat /tmp/burger/installed.json": cp('{"apps": "' + "e" * 40 + '"}')},
+    )
+    rows = run_update(settings, h, lines, ["apps"])
+    assert [k for k, _ in seen] == ["sync", "build", "install"]
+    board = seen[0][1].board
+    assert (board.name, board.apps_branch, board.apps_prs, board.items) == (
+        "main",
+        {"branch": "main", "remote": "upstream"},
+        [],
+        {},
+    )
+    assert board.bennu is None
+    assert rows == [("apps", "e" * 10, "f" * 10, "installed from upstream main")]
+
+
+def test_apps_dry_run_prints_steps_and_changes_nothing(settings, lines, monkeypatch):
+    monkeypatch.setattr(update.vcs, "sync", lambda *a: pytest.fail("sync"))
+    sha = "9" * 40
+    h = host_for(settings, {"git ls-remote": cp(f"{sha}\trefs/heads/main\n")})
+    rows = run_update(settings, h, lines, ["apps"], dry=True)
+    assert [line for line in lines if line.startswith("+ burger")] == [
+        f"+ burger {step} main  (upstream phenix-apps main {sha[:10]})"
+        for step in ("sync", "build", "install")
+    ]
+    assert rows[0][2] == sha[:10]

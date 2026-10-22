@@ -13,8 +13,10 @@ from loguru import logger
 from rich.table import Table
 from rich.text import Text
 
-from burger.config import BurgerError, Settings
+from burger import experiment, vcs
+from burger.config import REPOS, BurgerError, Settings
 from burger.site import redact
+from burger.switchboard import Resolved, Switchboard, resolve
 
 LAYERS = ("burger", "containers", "apps", "bennu")
 # Probes that read state; --dry-run still runs these so it can report what it would change.
@@ -225,6 +227,52 @@ def update_containers(ctx: Ctx, timeout: int = 180) -> None:
         ctx.say(f"phenix version: {version.splitlines()[0] if version else '?'}")
 
 
+def main_board(s: Settings, name: str = "main", bennu: dict | None = None) -> Resolved:
+    """A built-in board: upstream main apps, no PRs, no items; optionally bennu main too."""
+    upstream = {"branch": "main", "remote": "upstream"}
+    board = Switchboard(
+        name=name,
+        about="upstream main",
+        route="waterway",
+        apps_prs=[],
+        bennu=bennu,
+        items={},
+        overrides={},
+        runs=None,
+        linux_only=False,
+        exp=f"ebwes-{name}",
+        apps_branch=upstream,
+    )
+    return resolve(board, s)
+
+
+def installed_apps(host) -> str:
+    """The apps sha burger last installed into the phēnix container, if its marker is there."""
+    got = host.ctr("cat", "/tmp/burger/installed.json", check=False, capture=True)
+    try:
+        return json.loads(got.stdout)["apps"][:10]
+    except (ValueError, KeyError, TypeError):
+        return "unknown"
+
+
+def update_apps(ctx: Ctx) -> None:
+    """Install upstream phenix-apps main through the usual sync, build, install path.
+    Runs after the containers layer: the phēnix entrypoint reinstalls upstream on every boot."""
+    s, host = ctx.s, ctx.host
+    res = main_board(s)
+    before = installed_apps(host)
+    if ctx.dry:
+        sha = vcs._ls_remote(host, REPOS["apps"], "refs/heads/main") or "?"
+        for step in ("sync", "build", "install"):
+            ctx.say(f"+ burger {step} main  (upstream phenix-apps main {sha[:10]})")
+        ctx.report("apps", before, sha[:10], "dry-run")
+        return
+    man = vcs.sync(res, s, host)
+    experiment.build(res, s, host)
+    experiment.install(res, s, host)
+    ctx.report("apps", before, man["apps"]["head"][:10], "installed from upstream main")
+
+
 def update(s: Settings, host, only: list[str], dry_run: bool, force: bool, say) -> list:
     """Run the chosen layers in order; the summary rows."""
     unknown = [n for n in only if n not in LAYERS]
@@ -238,4 +286,6 @@ def update(s: Settings, host, only: list[str], dry_run: bool, force: bool, say) 
             update_burger(ctx, names[i + 1 :])
         elif name == "containers":
             update_containers(ctx)
+        elif name == "apps":
+            update_apps(ctx)
     return ctx.rows
