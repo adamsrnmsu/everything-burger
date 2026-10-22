@@ -1,8 +1,11 @@
 """`burger update`: bring a stale phēnix host up to main, one layer at a time."""
 
+import datetime as dt
 import json
 import os
+import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -14,10 +17,12 @@ from rich.table import Table
 from rich.text import Text
 
 from burger import experiment, vcs
+from burger.bennu import build_bennu
 from burger.config import REPOS, BurgerError, Settings
 from burger.site import redact
 from burger.switchboard import Resolved, Switchboard, resolve
 
+IMAGES_REPO = "https://github.com/sandialabs/sceptre-phenix-images.git"
 LAYERS = ("burger", "containers", "apps", "bennu")
 # Probes that read state; --dry-run still runs these so it can report what it would change.
 _READ_CTR = {"test", "cat", "readlink", "ls", "stat"}
@@ -273,6 +278,183 @@ def update_apps(ctx: Ctx) -> None:
     ctx.report("apps", before, man["apps"]["head"][:10], "installed from upstream main")
 
 
+# scripts/bennu.sh downloads bennu.deb and the pybennu wheel from the latest release; the
+# patterns match those two blocks (wget, install, rm) so they can be swapped for local files.
+_DEB_BLOCK = re.compile(r"^wget \S+/bennu\.deb .*\napt-get install -y /tmp/bennu\.deb\n.*\n", re.M)
+_WHL_BLOCK = re.compile(r"^wget \S+/(pybennu-\S+\.whl) .*\npip install \S+\n.*\n", re.M)
+LOCAL_DEBS = "/root/burger-debs"
+
+
+def patch_bennu_sh(text: str) -> str:
+    """bennu.sh with bennu.deb and pybennu installed from files the overlay put in the image.
+    helics and libzmq keep their release downloads: burger builds neither."""
+    text, n_deb = _DEB_BLOCK.subn(f"apt-get install -y {LOCAL_DEBS}/bennu.deb\n", text)
+    text, n_whl = _WHL_BLOCK.subn(
+        f"pip install {LOCAL_DEBS}/pybennu-*.whl\nrm -rf {LOCAL_DEBS}\n", text
+    )
+    if n_deb != 1 or n_whl != 1:
+        raise BurgerError(
+            "scripts/bennu.sh in sceptre-phenix-images no longer downloads bennu.deb and the "
+            "pybennu wheel in the shape burger patches; update patch_bennu_sh"
+        )
+    return text
+
+
+def _now() -> dt.datetime:
+    return dt.datetime.now()
+
+
+def images_dir(s: Settings) -> str:
+    return os.environ.get("BURGER_IMAGES_DIR", f"{s.phenix_dir}/burger/images")
+
+
+def _ctr_prefix(s: Settings) -> str:
+    return f"docker exec {s.ctr} " if s.ctr else ""
+
+
+def point_link(ctx: Ctx, name: str) -> str:
+    """Make images/bennu.qc2 a symlink to `name`, keeping a real file it replaces under a
+    dated name; the command that undoes it."""
+    host, imgs = ctx.host, f"{ctx.s.phenix_dir}/images"
+    link, prev = f"{imgs}/bennu.qc2", ""
+    if host.ctr("test", "-L", link, check=False).returncode == 0:
+        prev = host.ctr("readlink", link, capture=True).stdout.strip()
+    elif host.ctr("test", "-e", link, check=False).returncode == 0:
+        now = _now()
+        prev = f"{imgs}/bennu-{now:%Y%m%d}.qc2"
+        if host.ctr("test", "-e", prev, check=False).returncode == 0:
+            prev = f"{imgs}/bennu-{now:%Y%m%d-%H%M%S}.qc2"
+        host.ctr("mv", link, prev)
+    host.ctr("ln", "-sfn", name, link)
+    return (
+        f"{_ctr_prefix(ctx.s)}ln -sfn {prev} {link}" if prev else f"{_ctr_prefix(ctx.s)}rm {link}"
+    )
+
+
+def bennu_current(host, s: Settings) -> str:
+    link = f"{s.phenix_dir}/images/bennu.qc2"
+    if host.ctr("test", "-L", link, check=False).returncode == 0:
+        return os.path.basename(host.ctr("readlink", link, capture=True).stdout.strip())
+    return "regular file" if host.ctr("test", "-e", link, check=False).returncode == 0 else "none"
+
+
+def checkout_images(ctx: Ctx, d: str) -> None:
+    """The sceptre-phenix-images checkout, current with origin main."""
+    host = ctx.host
+    if host.run(["test", "-d", f"{d}/.git"], check=False).returncode:
+        host.run(["git", "clone", "--quiet", IMAGES_REPO, d])
+    else:
+        host.git(d, "fetch", "--quiet", "origin", "main")
+        host.git(d, "checkout", "--quiet", "--detach", "FETCH_HEAD")
+    if not ctx.dry and host.ctr("test", "-f", f"{d}/scripts/bennu.sh", check=False).returncode:
+        raise BurgerError(
+            f"the phēnix container cannot see {d}/scripts/bennu.sh: {d} must be the same "
+            "directory on the host and in the container (set BURGER_IMAGES_DIR)"
+        )
+
+
+def build_image(ctx: Ctx, d: str, out) -> None:
+    """The `bennu` target of sceptre-phenix-images' Makefile, with the patched script and
+    one more overlay. Not `make`: its paths and `docker exec -t` are for a person at a tty."""
+    host, s = ctx.host, ctx.s
+    # burger moves its own result away, so a leftover is a failed build or somebody's file
+    for name in ("bennu.qc2", "bennu.tar"):
+        if host.ctr("test", "-e", f"{d}/{name}", check=False).returncode == 0:
+            raise BurgerError(f"{d}/{name} exists; move or remove it, burger will not delete it")
+
+    def stage():
+        shutil.rmtree(f"{d}/overlays/burger-bennu", ignore_errors=True)
+        debs = f"{d}/overlays/burger-bennu{LOCAL_DEBS}"
+        os.makedirs(debs)
+        for f in (out / "bennu.deb", *out.glob("pybennu-*.whl")):
+            shutil.copy2(f, debs)
+        with open(f"{d}/scripts/bennu.sh") as f:
+            script = patch_bennu_sh(f.read())
+        with open(f"{d}/scripts/bennu-burger.sh", "w") as f:
+            f.write(script)
+        os.chmod(f"{d}/scripts/bennu-burger.sh", 0o755)
+
+    ctx.do(f"stage overlays/burger-bennu and scripts/bennu-burger.sh in {d}", stage)
+    # The Makefile refuses while the image config exists.
+    listing = host.phenix("cfg", "list", check=False, capture=True).stdout.splitlines()
+    cells = (line.split() for line in listing if "Image" in line)
+    if any(len(c) > 5 and c[5] == "bennu" for c in cells):
+        host.phenix("image", "delete", "bennu")
+    mirror = ((host.site.mirrors if host.site else {}).get("apt")) or ""
+    host.phenix(
+        "image", "create",
+        "-O", f"{d}/overlays/bennu,{d}/overlays/brash,{d}/overlays/burger-bennu",
+        "-T", f"{d}/scripts/bennu-burger.sh",
+        *([f"--mirror={mirror}"] if mirror else []),
+        "--compress", "bennu",
+    )  # fmt: skip
+    host.phenix("image", "build", "-o", d, "-c", "-x", "bennu")
+    for miniccc in (f"{s.phenix_dir}/miniccc", f"{d}/miniccc"):
+        if host.ctr("test", "-f", miniccc, check=False).returncode == 0:
+            host.phenix("image", "inject-miniexe", miniccc, f"{d}/bennu.qc2")
+            return
+    ctx.say("no miniccc in the phenix directory or images checkout: not injected into bennu.qc2")
+
+
+def update_bennu(ctx: Ctx) -> None:
+    """bennu.qc2 from bennu main: build, image build in the phēnix container, symlink."""
+    s, host = ctx.s, ctx.host
+    guard_experiments(ctx, "bennu.qc2")
+    d = images_dir(s)
+    if host.ctr("test", "-d", d, check=False).returncode:
+        msg = (
+            f"{d} is not a directory in the phēnix container. The images Makefile passes paths "
+            "through `docker exec`, so burger needs a sceptre-phenix-images checkout at one "
+            f"path the host and the container both see: mkdir it on a bind mount "
+            "(default /phenix/burger/images) or set BURGER_IMAGES_DIR"
+        )
+        if not ctx.dry:
+            raise BurgerError(msg)
+        ctx.say(f"! a real run would stop here: {msg}")
+    before = bennu_current(host, s)
+    sha = vcs._ls_remote(host, REPOS["bennu"], "refs/heads/main") or ""
+    imgs = f"{s.phenix_dir}/images"
+    if (
+        sha
+        and host.ctr("test", "-e", f"{imgs}/bennu-main-{sha[:7]}.qc2", check=False).returncode == 0
+    ):
+        name = f"bennu-main-{sha[:7]}.qc2"
+        note = "image already built"
+    else:
+        name, note = _build_bennu_image(ctx, d, sha)
+    if before == name:
+        ctx.report("bennu", before, name, "already current")
+        return
+    rollback = point_link(ctx, name)
+    ctx.report("bennu", before, name, note)
+    ctx.say(f"to roll back: {rollback}")
+    ctx.say("helics and libzmq in the image still come from the latest sceptre-bennu release")
+
+
+def _build_bennu_image(ctx: Ctx, d: str, sha: str) -> tuple[str, str]:
+    s, host = ctx.s, ctx.host
+    spec = {"branch": "main", "remote": "upstream", "install": ["deb", "pybennu"]}
+    res = main_board(s, "upd-bennu", spec)
+    checkout_images(ctx, d)
+    out = vcs.board_dir(s, res.board.name) / "out"
+    if ctx.dry:
+        ctx.say(f"+ burger sync and build bennu main (deb, pybennu wheel) into {out}")
+        sha = sha or "<sha7>"
+    else:
+        man = vcs.sync(res, s, host)
+        shutil.rmtree(out, ignore_errors=True)
+        out.mkdir(parents=True)
+        build_bennu(host, vcs.board_dir(s, res.board.name) / "bennu", out, man, spec["install"], [])
+        sha = man["bennu"]["sha"]
+    name = f"bennu-main-{sha[:7]}.qc2"
+    target = f"{s.phenix_dir}/images/{name}"
+    if host.ctr("test", "-e", target, check=False).returncode == 0:
+        raise BurgerError(f"{target} exists; remove it to rebuild")
+    build_image(ctx, d, out)
+    host.ctr("mv", f"{d}/bennu.qc2", target)
+    return name, f"built from bennu main {sha[:10]}"
+
+
 def update(s: Settings, host, only: list[str], dry_run: bool, force: bool, say) -> list:
     """Run the chosen layers in order; the summary rows."""
     unknown = [n for n in only if n not in LAYERS]
@@ -288,4 +470,6 @@ def update(s: Settings, host, only: list[str], dry_run: bool, force: bool, say) 
             update_containers(ctx)
         elif name == "apps":
             update_apps(ctx)
+        elif name == "bennu":
+            update_bennu(ctx)
     return ctx.rows
