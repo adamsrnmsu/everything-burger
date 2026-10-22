@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from burger import __version__, experiment, vcs, verify
+from burger import __version__, experiment, invalid, vcs, verify
 from burger.bennu import bennu_check
 from burger.checks import Row
 from burger.compose import compose
@@ -23,6 +23,7 @@ from burger.shell import Host
 from burger.site import load_site, probe, redact
 from burger.switchboard import Resolved, all_switchboards, load_switchboard, resolve
 from burger.ui import banner, results_table, setup_logging
+from burger.verify import models_yaml
 
 TEMPLATES = Path(__file__).parent / "templates"
 KIND_DIR = {"scorch": "components", "app": "apps", "bennu": "bennu"}
@@ -306,7 +307,14 @@ def _check(args, s, host) -> int:
         )
         out.print(f"run {n} {run.get('name')}: {stages}", markup=False, highlight=False)
     out.print(f"ok: {args.board} renders; wrote {dest}/topology.json and scenario.json")
-    return 0
+    models_yaml(res, dest / "models.yaml")
+    rows = [
+        *invalid.scorch_rows(res, s, host, dest / "models.yaml"),
+        *invalid.app_rows(res, s, host, topo, dest / "apps"),
+    ]
+    if rows:  # items that must be rejected, judged on the synced apps tree
+        out.print(results_table(rows))
+    return 1 if any(r.verdict == "FAIL" for r in rows) else 0
 
 
 def _parser() -> argparse.ArgumentParser:

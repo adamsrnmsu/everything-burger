@@ -25,6 +25,8 @@ items:
   hoststats: on
   vmstats: on
   qos: on
+  vmstats-bad-name: on
+  qos-bad-rate: on
   erspan: on
   apps/mgmt-vlan-alias: on
   bennu/field-device: on

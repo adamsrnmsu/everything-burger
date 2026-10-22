@@ -1,0 +1,16 @@
+name: qos-bad-rate
+kind: scorch
+type: qos
+about: >
+  qos with a rate of '1.0005 mbit', which is 1000.5 kbit. minimega parses the
+  rate as a whole number, so #176 rejects it instead of failing at `qos add`
+  mid-experiment. Validate-only: it passes when phenix-scorch-validate rejects
+  it with that explanation. No delay beside the rate, since rate with delay is
+  rejected too and would hide the reason under test.
+routes: []
+stages: [start, stop]
+expect_invalid: "whole number of kbit"
+config:
+  vms: [{hostname: "{route.rtus[1]}", interface: 0, rate: "1.0005 mbit"}]
+requires:
+  apps_prs: [176]

@@ -29,6 +29,7 @@ items:
   apps/mgmt_tap: on
   apps/mirror: on
   apps/helics: on
+  apps/helics-no-broker: on
   bennu/field-device: on
   bennu/simulink-provider: on
   bennu/modbus-polled: on

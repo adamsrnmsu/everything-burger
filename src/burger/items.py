@@ -8,7 +8,8 @@ from burger.loader import load_yaml
 from burger.routes import Route
 
 ITEM_FIELDS = {
-    *"name kind type about routes stages holds background advisory expect_error".split(),
+    *"name kind type about routes stages holds background advisory".split(),
+    *"expect_error expect_invalid".split(),
     *"config hosts requires".split(),
     *"verify waterway soap site".split(),
 }
@@ -56,6 +57,7 @@ class Item:
     background: bool
     advisory: bool
     expect_error: str
+    expect_invalid: str
     config: dict
     hosts: list
     requires: dict
@@ -117,6 +119,14 @@ def load_item(ref: str, settings: Settings) -> Item:
     if bad:
         raise BurgerError(f"{path}: unknown stage '{bad[0]}' (allowed: {', '.join(STAGES)})")
     _check_fields(path, doc)
+    if bad := str(doc.get("expect_invalid") or ""):
+        # a config that must be rejected can never run, so it is judged offline
+        if doc["kind"] == "bennu" or doc.get("routes"):
+            raise BurgerError(f"{path}: expect_invalid needs kind scorch or app and `routes: []`")
+        try:
+            re.compile(bad)
+        except re.error as e:
+            raise BurgerError(f"{path}: expect_invalid is not a regex: {e}") from None
     for r in _ROUTE_BLOCKS:
         if isinstance(doc.get(r), dict):
             _check_fields(path, doc[r], f"{r}.")
@@ -131,6 +141,7 @@ def load_item(ref: str, settings: Settings) -> Item:
         background=bool(doc.get("background")),
         advisory=bool(doc.get("advisory")),
         expect_error=str(doc.get("expect_error") or ""),
+        expect_invalid=str(doc.get("expect_invalid") or ""),
         config=doc.get("config") or {},
         hosts=doc.get("hosts") or [],
         requires=doc.get("requires") or {},

@@ -7,13 +7,14 @@ from burger.checks import CheckContext, Row, run_checks
 from burger.checks.status import evaluate
 from burger.compose import compose, health_checks, item_locations
 from burger.experiment import collect, not_running
+from burger.invalid import app_rows, expected, judge
 from burger.switchboard import Resolved
 from burger.vcs import board_dir, load_manifest
 
 NO_VALIDATOR = "command -v phenix-scorch-validate"
 
 
-def _models_yaml(res: Resolved, path: Path) -> None:
+def models_yaml(res: Resolved, path: Path) -> None:
     """Every scorch item config, validate-only ones included, in the old `components:` format."""
     comps = [
         {"name": i.name, "type": i.type, "metadata": i.config}
@@ -36,7 +37,7 @@ def _install_row(res: Resolved, man: dict, host) -> Row:
     return Row("-", "phenix-apps install", "ok" if ok else "FAIL", reason, [])
 
 
-def _validate_row(res: Resolved, settings, host, models: Path) -> Row:
+def _validate_rows(res: Resolved, settings, host, models: Path) -> list[Row]:
     check = "phenix-scorch-validate"
     found = host.ctr("sh", "-c", NO_VALIDATOR, check=False, capture=True).returncode == 0
     if not found:
@@ -44,16 +45,21 @@ def _validate_row(res: Resolved, settings, host, models: Path) -> Row:
             i.requires.get("apps_prs") for i in [*res.items, *res.validate_only]
         )  # the models need a PR the installed apps may lack
         reason = "not installed" + (" but an item needs an apps PR" if needs else "")
-        return Row("-", check, "FAIL" if needs else "skipped", reason, [])
+        return [Row("-", check, "FAIL" if needs else "skipped", reason, [])]
     stage = f"{settings.phenix_dir}/burger/{res.board.name}"
     host.put(models, f"{stage}/models.yaml")
     got = host.ctr(
         check, f"{stage}/scenario.json", f"{stage}/models.yaml", check=False, capture=True
     )
-    if got.returncode == 0:
-        return Row("-", check, "ok", "", [str(models)])
-    tail = " ".join(f"{got.stdout or ''}{got.stderr or ''}".split())[-200:]
-    return Row("-", check, "FAIL", tail or f"exit {got.returncode}", [str(models)])
+    # items with expect_invalid must be rejected: the pass is the validator saying so
+    expect = {i.name: i.expect_invalid for i in expected(res, "scorch")}
+    unexpected, rejects = judge(f"{got.stdout or ''}{got.stderr or ''}", expect)
+    rejects = [Row(r.item, r.check, r.verdict, r.reason, [str(models)]) for r in rejects]
+    if unexpected or (got.returncode and not any(r.verdict == "ok" for r in rejects)):
+        tail = (unexpected or [f"{got.stdout or ''}{got.stderr or ''}"])[0]
+        tail = " ".join(tail.split())[-200:]
+        return [Row("-", check, "FAIL", tail or f"exit {got.returncode}", [str(models)]), *rejects]
+    return [Row("-", check, "ok", "", [str(models)]), *rejects]
 
 
 def _label(host: str, args: str) -> str:
@@ -108,8 +114,11 @@ def verify(res: Resolved, settings, host) -> list[Row]:
     rows = [_install_row(res, man, host)]
     bad = not_running(host, res.board.exp)
     rows.append(Row("-", "experiment + VMs running", "FAIL" if bad else "ok", bad, []))
-    _models_yaml(res, rd_out / "models.yaml")
-    rows.append(_validate_row(res, settings, host, rd_out / "models.yaml"))
+    models_yaml(res, rd_out / "models.yaml")
+    rows += _validate_rows(res, settings, host, rd_out / "models.yaml")
+    topo_file = rd_out / "topology.json"
+    if topo_file.is_file():
+        rows += app_rows(res, settings, host, json.loads(topo_file.read_text()), rd_out / "apps")
 
     components, runs = compose(res, man)
     background = {c["name"] for c in components if c.get("background")}

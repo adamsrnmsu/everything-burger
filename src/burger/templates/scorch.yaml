@@ -10,6 +10,7 @@ routes: []              # waterway, soap, site; empty = validate-only (never run
 stages: [start, stop]   # configure | start | stop | cleanup
 holds: false            # true: blocks `start` for its duration, ordered last
 background: false       # true: polls until stopped; needs a stop stage and a POLLERS type
+expect_invalid: ""      # regex: validate-only item (routes: []) that must be REJECTED, e.g. "should match pattern"
 advisory: false         # true: runs in an extras-* run whose failures do not fail the board
 config:                 # SCORCH metadata exactly as phenix-apps expects
   vms: [{hostname: "{route.rtus[0]}", interface: 0}]   # {route.<key>} comes from routes/*.yaml
