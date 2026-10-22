@@ -9,7 +9,6 @@ the rendered scenario, no VMs.
 | #132 | none; to be closed | |
 | #155 | `harden`: cc validators, pcap, tcpdump, mm, pipe, mgmt_tap, mirror; mm's bridge capture filter `tcp port 502` (one quoted minimega argument: the start stage fails without the quoting, and the capture must hold Modbus); `pipe-bad-name` (`expect_invalid`, offline): the `Token` allowlist rejects `burger;id`, which main accepts | kafka (no broker); art, ssh; pipe `via` refused under `PHENIX_SCORCH_HOST_VALIDATORS=0` (a phenix host setting); the `Args`/`FilterExpr` allowlists, `extract_run_name` and the filter/VM-name rejections (unit tests only) |
 | #159, #161, #163, #179 | CI and docs only; nothing to run | |
-| #164 disruption | `metadata` (baseline); dos model offline | dos and physical live (no Kali, no OPC script) |
 | #165 iperf | `iperf` switchboard (with #191; burger installs iperf3; the client runs with `add_client_args: "--omit 2"`); model offline in `metadata` | Windows client; the PID files, kill-by-PID and `iperf_version` matching of the local head (3904686 is not pushed); rejected `add_*_args` (a rejection cannot be a pass) |
 | #166 rtds | `provider` switchboard (lifecycle on a PyPower provider); `rtds` switchboard on your rig; `base-soap` (with #195); model offline in `metadata` | RTDS data checks off waterway/soap; `provider_start_wait` (only runs when the provider is down at configure, and `power-solver` starts it first) |
 | #167 pcap | `metadata` live: per-VM `filter` (rtu-1 filtered, rtu-2 not) and the filter reset, seen in mm's bridge capture; `convert_to_json: true` with a `.jsonl` check; the old `convertToJSON` key through the model (`pcap-alias`, offline) | `create_merged_pcap` live; the alias is not run live (one pcap component per board) |
@@ -21,9 +20,8 @@ the rendered scenario, no VMs.
 | #174 hoststats | `metadata` live; `base` (with #195, under the shared `mm`) | `vm_list` holding only this experiment's VMs (needs two experiments on one host) |
 | #175 vmstats | `metadata` live; `base` and `base-soap` run vmstats with no `vms` (with #195); `vmstats-bad-name` (`expect_invalid`, offline): a VM name with `#` must be rejected | the default VM list now includes `os_type` vyos and vyatta and vmstats' no-`-t` fallback: **no route has a VyOS router**, so neither is run (a live check needs a booted VyOS image with miniccc, then a default-list run: see the VyOS steps in the apps bead); `\` in a VM name (the same pattern; only `#` is tested) and a down VM during stop |
 | #176 qos | `metadata` live with the bare-number `delay: 20` (20 ms; **needs the pushed head**: the old pattern wants a unit, so the offline validator also flags it until then); `qos-bad-rate` (`expect_invalid`, offline): `1.0005 mbit` must be rejected | fractional rates (`1.5 mbit` becomes `1500 kbit`) and `.5s` delays live: not in the pushed head (af5a219) |
-| #177 providerdata | `provider` switchboard; `rtds` switchboard on your rig; `elastic` (with #192); `base-soap` (with #195); model offline in `metadata` | |
+| #177 providerdata | `provider` switchboard; `rtds` switchboard on your rig; `elastic`; `base-soap` (with #195); model offline in `metadata` | |
 | #191 cc filter helper | `metadata` and `iperf`: iperf and disruption cleanup go through it | |
-| #192 connect_elastic | `elastic` switchboard: a fake Elasticsearch on the provider VM answers `{}`, the one reply that reaches the changed line; the stage must fail with "returned no cluster info" (on main it exits with no status file) | an unreachable server: the client raises before the changed line with or without #192, so it is not a test. Never run live: soap has not run `mgmt_tap` before |
 | #194 empty cc output | `cc-empty`: a validator on a command that prints nothing. Still needed: upstream main's `mm_exec_wait` sets stdout and stderr to `None` | |
 | #195 ExperimentBase | `base` (waterway): cc health on every node's `os_type`, vmstats' default VM list, pcap/tcpdump/mm/hoststats/disruption on the shared `mm`, `mgmt_tap`, `mirror`, and `helics` resolving its root broker; `base-soap`: collector's annotations and lookups, rtds, providerdata. The sceptre app runs in every board | iperf and the disruption models (conflict with #165, #164); ot-sim, wind turbine, caldera and ignition apps; null networks stops the experiment before SCORCH, so only #195's unit tests cover it. The missing helics broker `missinghost\|eth0` is `helics-no-broker` (`expect_invalid` on `base`: the app's pre-start stage run with `--dry-run` on the rendered topology) |
 | bennu #55 | every switchboard but `baseline`: field devices and the Simulink provider run the PR build | |
@@ -35,7 +33,9 @@ the rendered scenario, no VMs.
 Merged upstream and dropped from every board: #190 (2026-10-20), #183 and #157
 (2026-10-21, the cc parsing PRs; `cc-output-parsing` stays on `cc-empty` as a
 regression check on main), #158 and #173 (2026-10-22; `apps/mgmt-vlan-alias`
-and `pipe` stay on `metadata` as regression checks on main).
+and `pipe` stay on `metadata` as regression checks on main), #159, #161, #164
+and #192 (2026-10-22; disruption stays on `metadata`, `elastic-empty` checks
+#192 on main).
 
 The tests #191, #192, #194 and #195 add now live in their own files
 (`common/tests/test_utils_cc_filter.py`, `test_utils_elastic.py`,

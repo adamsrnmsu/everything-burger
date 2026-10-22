@@ -3,9 +3,9 @@ kind: scorch
 type: providerdata
 about: >
   providerdata verifies Elasticsearch in start; the server is es-stub, which
-  answers with an empty body. With #192, connect_elastic raises "returned no
+  answers with an empty body. Since #192 (on main), connect_elastic raises "returned no
   cluster info" and the stage fails with that error, which is the pass here
-  (expect_error). On main it calls sys.exit(1): the component dies without a
+  (expect_error). Before #192 it called sys.exit(1): the component dies without a
   status file and this fails. The server is the provider's MGMT address, which
   the phenix host reaches over mgmt_tap.
 routes: [soap]
@@ -16,4 +16,4 @@ config:
   elasticsearch: {verify: true, server: "http://172.16.1.2:9200", index: burger}
 requires:
   apps: [apps/mgmt_tap]
-  apps_prs: [177, 192]
+  apps_prs: [177]

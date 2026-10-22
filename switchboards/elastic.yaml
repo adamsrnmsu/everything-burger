@@ -1,16 +1,15 @@
-# #192: connect_elastic raises AppError instead of sys.exit(1) when the
+# #192 (merged 2026-10-22, on main): connect_elastic raises AppError instead of sys.exit(1) when the
 # Elasticsearch it connects to returns no cluster info. Only an empty reply
 # reaches that line: a refused connection raises inside the client either way.
 # es-stub, a fake Elasticsearch answering `{}` on the provider VM, gives
 # providerdata that reply, and elastic-empty passes when its start stage fails
-# with #192's error. Run it once with `prs: [177]` to see main exit silently.
+# with #192's error; on a main older than #192 it exits silently instead.
 #
 # On soap, over mgmt_tap (the phenix host needs a route to the provider's MGMT
-# address). #177 is the providerdata model elastic-empty is written for. #192
-# conflicts with #191 in common/tests/test_utils.py, so it is not on metadata.
-about: "#177 + #192 connect_elastic against an empty Elasticsearch reply"
+# address). #177 is the providerdata model elastic-empty is written for.
+about: "#177 + main's #192 connect_elastic against an empty Elasticsearch reply"
 route: soap
-apps: {prs: [177, 192]}
+apps: {prs: [177]}
 items:
   elastic-empty: on
   es-stub: on

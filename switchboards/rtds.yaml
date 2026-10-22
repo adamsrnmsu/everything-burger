@@ -1,9 +1,9 @@
 # RTDS family on your own rig: #166 rtds, #177 providerdata, #169 collector
-# (with the #164 disruption it reads), and the PR build of pybennu on the
+# (with the disruption it reads), and the PR build of pybennu on the
 # provider VM. Needs BURGER_SITE_TOPOLOGY and BURGER_SITE_SCENARIO.
-about: "#164 #166 #169 #177 + bennu #59 (pybennu) on a site RTDS rig"
+about: "#166 #169 #177 + bennu #59 (pybennu) on a site RTDS rig"
 route: site
-apps: {prs: [164, 166, 169, 177]}
+apps: {prs: [166, 169, 177]}
 bennu:
   pr: 59
   install: [pybennu]
