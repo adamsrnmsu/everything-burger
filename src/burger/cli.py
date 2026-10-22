@@ -27,6 +27,7 @@ from burger.verify import models_yaml
 
 TEMPLATES = Path(__file__).parent / "templates"
 KIND_DIR = {"scorch": "components", "app": "apps", "bennu": "bennu"}
+MEGA_BRIDGE = "mega_bridge"  # minimega's OVS bridge; its VM taps are mega_tap*
 PUBLIC_PROBE = "https://pypi.org/simple/"  # public: a proxy that re-signs only some TLS skips it
 NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
 # The old preflight's read probe: a read through the whole backing chain.
@@ -170,10 +171,30 @@ def _preflight(args, s, host) -> int:
         free_gb >= 20,
         "switchboards need ~20 GiB of snapshots",
     )
+    _leftover_rows(host, rows)
     if host.site:
         _site_rows(host, rows, chk)
     out.print(results_table(rows))
     return int(any(r.verdict == "FAIL" for r in rows))
+
+
+def _leftover_rows(host, rows) -> None:
+    """WARN on host taps and OVS ports that an earlier run left behind (never a FAIL)."""
+    where = ["docker", "exec", host.s.mm_ctr] if host.s.mm_ctr else []
+    links = host.run([*where, "ip", "-o", "link", "show"], check=False, capture=True)
+    taps = sorted(set(re.findall(r"(?m)^\d+: (ebwes-[^:@\s]+)", links.stdout or "")))
+    ovs = host.run([*where, "ovs-vsctl", "list-ports", MEGA_BRIDGE], check=False, capture=True)
+    ports = (
+        []
+        if ovs.returncode
+        else sorted(p for p in (ovs.stdout or "").split() if not p.startswith("mega_tap"))
+    )
+    cleanup = [f"ip link delete {t}" for t in taps] + [
+        f"ovs-vsctl --if-exists del-port {MEGA_BRIDGE} {p}" for p in ports
+    ]
+    if cleanup:
+        msg = f"leftover {', '.join(taps + ports)}; remove with: sudo {'; sudo '.join(cleanup)}"
+        rows.append(Row("-", "leftover host state", "WARN", msg, []))
 
 
 def _site_rows(host, rows, chk) -> None:

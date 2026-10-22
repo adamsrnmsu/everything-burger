@@ -384,3 +384,30 @@ def test_preflight_unreachable_public_host_only_warns(monkeypatch, tmp_path):
     )
     (row,) = [r for r in _site_rows_of(host) if "pypi.org" in r.check]
     assert row.verdict == "WARN" and "ca-certificates.crt" not in row.reason
+
+
+def test_preflight_warns_on_leftover_taps_and_ovs_ports(monkeypatch):
+    monkeypatch.setenv("BURGER_MINIMEGA_CONTAINER", "")  # native: no docker exec prefix
+    host = FakeHost(
+        {
+            "ip -o link": subprocess.CompletedProcess(
+                [], 0, "1: lo: <X>\n7: ebwes-metadata-0: <X>\n8: eth0@if9: <X>\n", ""
+            ),
+            "ovs-vsctl list-ports": subprocess.CompletedProcess([], 0, "mega_tap0\nvx0\n", ""),
+        }
+    )
+    rows = []
+    cli._leftover_rows(host, rows)
+    (row,) = rows
+    assert row.verdict == "WARN" and "mega_tap0" not in row.reason
+    assert "sudo ip link delete ebwes-metadata-0" in row.reason
+    assert "sudo ovs-vsctl --if-exists del-port mega_bridge vx0" in row.reason
+
+
+def test_preflight_clean_or_ovs_less_host_has_no_leftover_row(monkeypatch):
+    monkeypatch.setenv("BURGER_MINIMEGA_CONTAINER", "")
+    rows = []
+    cli._leftover_rows(FakeHost(), rows)
+    host = FakeHost({"ovs-vsctl": subprocess.CompletedProcess([], 127, "", "not found")})
+    cli._leftover_rows(host, rows)
+    assert rows == []

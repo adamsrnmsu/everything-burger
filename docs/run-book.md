@@ -1,7 +1,7 @@
 # Run book
 
 ```bash
-./burger preflight            # host checks; add --linux-only without Windows images
+./burger preflight            # host checks, WARNs on leftover ebwes-* taps / OVS ports; add --linux-only without Windows images
 ./burger list                 # switchboards and items
 ./burger prs                  # my open PRs, the switchboard that carries each, stale syncs
 ./burger check metadata       # resolve and render offline; no phēnix needed
