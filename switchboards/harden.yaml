@@ -21,3 +21,15 @@ overrides:
     verify:
       - files: {glob: "*.pcap", min: 1}
       - pcap: {glob: "*.pcap", tcp_port: 502, ip_proto: 47, min_packets: 10, windows: true}
+  # #155 quotes a capture filter as one minimega argument: `capture pcap filter
+  # tcp port 502` is an invalid command without the quotes, so on a head without
+  # that fix the start stage fails. The filter keeps only Modbus on the bridge.
+  mm:
+    config:
+      start:
+        - type: start_capture
+          capture: {bridge: phenix, filename: burger-bridge.pcap, filter: "tcp port 502"}
+      stop: [{type: stop_capture, capture: {bridge: phenix}}]
+    verify:
+      - files: {glob: "burger-bridge.pcap", min: 1}
+      - pcap: {glob: "burger-bridge.pcap", tcp_port: 502, min_packets: 10, windows: true}

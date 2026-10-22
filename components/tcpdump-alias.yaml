@@ -1,0 +1,17 @@
+name: tcpdump-alias
+kind: scorch
+type: tcpdump
+about: >
+  tcpdump with its old convertToJSON key. #168 renamed it to convert_to_json
+  and keeps the old name as a deprecated alias that logs a warning, so this
+  must still validate (before the rename it is simply the field's name). The
+  metadata board runs tcpdump itself with the new key; no route runs two
+  tcpdump components at once, so this one only goes through
+  phenix-scorch-validate.
+routes: []
+stages: [start, stop]
+config:
+  vms: [{hostname: "{route.rtus[0]}", iface: any, filter: "tcp port {route.ics_port}"}]
+  convertToJSON: true
+requires:
+  apps_prs: [168]

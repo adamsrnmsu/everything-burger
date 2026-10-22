@@ -320,7 +320,8 @@
                   {
                     "capture": {
                       "bridge": "phenix",
-                      "filename": "burger-bridge.pcap"
+                      "filename": "burger-bridge.pcap",
+                      "filter": "tcp port 502"
                     },
                     "type": "start_capture"
                   }

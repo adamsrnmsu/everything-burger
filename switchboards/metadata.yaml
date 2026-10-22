@@ -3,7 +3,7 @@
 # main. Models no route can run
 # (disruption-dos) are checked offline by phenix-scorch-validate; the rtds,
 # providerdata, collector, iperf and ssh models are validated on their own
-# boards. pcap-alias does the same for pcap's deprecated convertToJSON key.
+# boards. pcap-alias and tcpdump-alias do the same for the deprecated convertToJSON key.
 #
 # The capture overrides test round 2 of review. pcap filters rtu-1 to
 # non-Modbus traffic, then resets minimega's namespace-wide filter. mm's bridge
@@ -18,6 +18,7 @@ items:
   disruption: on
   disruption-dos: on
   pcap-alias: on
+  tcpdump-alias: on
   pcap: on
   tcpdump: on
   mm: on
