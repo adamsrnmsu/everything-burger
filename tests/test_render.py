@@ -185,3 +185,30 @@ def test_fifo_renders_one_cc_component(settings, topologies):
     names = [c["name"] for c in scorch_of(scen)["components"] if not c["name"].startswith("health")]
     assert names == ["fifo"]
     assert res.board.bennu["pr"] == 66
+
+
+def test_miniccc_startup_leaves_a_running_miniccc_alone(tmp_path):
+
+    from burger.render import MINICCC_STARTUP
+
+    lines = MINICCC_STARTUP.splitlines()
+    assert lines[2].startswith("exec >>") and lines[3] == "if pgrep -x miniccc >/dev/null; then"
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    for cmd, code in (("pgrep", 0), ("systemctl", 0), ("install", 1), ("modprobe", 1)):
+        (fake / cmd).write_text(f"#!/bin/sh\necho {cmd} >> {tmp_path}/ran\nexit {code}\n")
+        (fake / cmd).chmod(0o755)
+    script = tmp_path / "s.sh"
+    script.write_text(MINICCC_STARTUP.replace("/var/log/burger-miniccc.log", str(tmp_path / "log")))
+    out = subprocess.run(
+        ["/bin/bash", str(script)], env={"PATH": f"{fake}:/usr/bin:/bin"}, check=False
+    )
+    assert out.returncode == 0
+    assert (tmp_path / "ran").read_text() == "pgrep\n"  # nothing was installed or restarted
+    assert "leaving the image's own alone" in (tmp_path / "log").read_text()
+
+
+def test_integrate_names_the_mgmt_vlan_as_the_topology_does(settings):
+    r = resolve(load_switchboard("integrate", settings), settings)
+    tap = next(i for i in r.items if i.name == "mgmt_tap")
+    assert tap.config["vlan"] == "mgmt"

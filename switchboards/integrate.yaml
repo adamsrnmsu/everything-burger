@@ -62,6 +62,11 @@ items:
   bennu/simulink-provider: on
   bennu/modbus-polled: on
 overrides:
+  # mgmt_tap looks its VLAN up case-sensitively among the topology's aliases, but
+  # this board's topology renames MGMT to mgmt. Name it as the topology does until
+  # the app matches case-insensitively (upstream fix: sandialabs/sceptre-phenix-apps).
+  apps/mgmt_tap:
+    config: {vlan: mgmt}
   pcap:
     config:
       vms:

@@ -44,13 +44,21 @@ MONITOR_NODE = {
 }
 
 
-# On the rig tested, bennu VMs had no miniccc binary and no virtio_console
-# loaded, so they never registered with cc (likely an image built without
-# `phenix image inject-miniexe`). Install the minimega container's own miniccc
-# (same ron protocol) before sceptre's startup, whatever the image carries.
+# On the rig tested, older bennu VMs had no miniccc binary and no virtio_console
+# loaded, so they never registered with cc (an image built without `phenix image
+# inject-miniexe`). The install path below stays as the rescue for such images:
+# it installs the minimega container's own miniccc (same ron protocol) before
+# sceptre's startup. A running miniccc must never be restarted: newer bennu.qc2
+# images ship a working one, and `systemctl restart miniccc` drops its live ron
+# connection. An in-flight once cc command is never re-delivered after that, so
+# phēnix's mm_cc_send_wait (timeout=0.0) waits forever.
 MINICCC_STARTUP = """#!/bin/bash
 # install miniccc (matching the host's minimega) and start it
 exec >>/var/log/burger-miniccc.log 2>&1
+if pgrep -x miniccc >/dev/null; then
+  echo "miniccc already running; leaving the image's own alone"
+  exit 0
+fi
 install -D -m 0755 /root/burger-miniccc /opt/minimega/bin/miniccc
 modprobe virtio_console
 for _ in $(seq 60); do [ -e /dev/virtio-ports/cc ] && break; sleep 1; done

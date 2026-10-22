@@ -8,7 +8,7 @@ from burger import config
 from burger.config import BurgerError
 from burger.shell import Host
 from burger.switchboard import load_switchboard, resolve
-from burger.vcs import _branch_ref, _fetch_branch, fork_owner, prs, sync
+from burger.vcs import _branch_ref, _fetch_branch, branch_url, fork_owner, prs, sync
 from tests.fakes import FakeHost
 
 
@@ -211,6 +211,14 @@ def test_gh_failing_is_a_burger_error_with_a_hint():
 
     with pytest.raises(BurgerError, match="gh auth login"):
         fork_owner(NoGh())
+
+
+def test_fork_owner_env_skips_gh(monkeypatch):
+    monkeypatch.setenv("BURGER_FORK_OWNER", "someone")
+    host = FakeHost()
+    assert fork_owner(host) == "someone"
+    assert branch_url(host, "apps", "fork") == "https://github.com/someone/sceptre-phenix-apps.git"
+    assert host.calls == []  # gh never ran
 
 
 def test_fork_owner_is_asked_once_per_host_and_not_shared():
