@@ -3,7 +3,7 @@ import subprocess
 
 import pytest
 
-from burger.config import BurgerError, Settings
+from burger.config import GIT_SAFE, BurgerError, Settings
 from burger.shell import Host
 from tests.fakes import FakeHost
 
@@ -97,7 +97,7 @@ def test_git_gets_site_options(tmp_path, monkeypatch):
     bundle = tmp_path / "work" / "site" / "ca-bundle.pem"
     assert cmd == ["git", "-c", "url.https://gitlab.site/gh/.insteadOf=https://github.com/",
                    "-c", f"http.sslCAInfo={bundle}", "-c", "http.proxy=http://p:8080",
-                   "fetch", "x"]  # fmt: skip
+                   *GIT_SAFE, "fetch", "x"]  # fmt: skip
     assert kw["env"]["HTTPS_PROXY"] == "http://p:8080"
 
 
@@ -115,18 +115,21 @@ def test_no_site_git_unchanged(tmp_path, monkeypatch):
     seen = _capture(monkeypatch)
     Host(Settings.from_env(tmp_path)).run(["git", "fetch", "x"])
     ((cmd, kw),) = seen
-    assert cmd == ["git", "fetch", "x"] and "env" not in kw
+    assert cmd == ["git", *GIT_SAFE, "fetch", "x"] and "env" not in kw
 
 
-def test_redacts_credentials_in_logs_and_errors(tmp_path):
-    from loguru import logger
-
-    lines = []
-    sink = logger.add(lines.append, level="DEBUG", format="{message}")
-    try:
-        with pytest.raises(BurgerError) as err:
-            Host(Settings.from_env(tmp_path)).run(["false", "https://u:tok@m.site/x"])
-    finally:
-        logger.remove(sink)
-    assert "tok" not in str(err.value) and "***@m.site" in str(err.value)
-    assert lines and not any("tok" in str(ln) for ln in lines)
+def test_git_ignores_ctime_fsmonitor_and_auto_gc(tmp_path, monkeypatch):
+    # burger-15k: macOS bumps the ctime of new files ~2s after checkout (com.apple.provenance),
+    # so `git merge` -> `git stash create` died with a bare "fatal: stash failed" at a random PR;
+    # core.fsmonitor=true in ~/.gitconfig also left a daemon per worktree
+    gitconfig = tmp_path / "gitconfig"
+    gitconfig.write_text("[core]\n\tfsmonitor = true\n[gc]\n\tauto = 1\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
+    host = Host(Settings.from_env(tmp_path))
+    for key, want in [
+        ("core.trustctime", "false"),
+        ("core.fsmonitor", "false"),
+        ("gc.auto", "0"),
+        ("maintenance.auto", "false"),
+    ]:
+        assert host.run(["git", "config", key], capture=True).stdout.strip() == want

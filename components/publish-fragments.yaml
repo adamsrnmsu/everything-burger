@@ -1,0 +1,19 @@
+name: publish-fragments
+kind: scorch
+type: pcap
+about: >
+  Live check for bennu #67: the provider's publishes must not be IP-fragmented.
+  Captures the provider VM's interface 0 and requires UDP traffic on the
+  publish port (so an empty capture cannot pass) and zero IP fragments. A
+  RADIO datagram is 1 + group + body inside 28 B of IPv4/UDP headers, so
+  stock bennu's full chunks (up to 1480 B from pybennu, 1516 B from the C++
+  publisher) exceed a 1500 B link. Stock fails only when a publish fills a
+  chunk; the PyPower provider's point list is long enough, waterway's
+  15-point list (260 B) is not, so this runs on soap. See burger-db0.
+routes: [soap]
+stages: [start, stop]
+config:
+  vms: [{hostname: "{route.provider}", interface: 0}]
+verify:
+  - files: {glob: "*.pcap", min: 1}
+  - pcap: {glob: "*.pcap", udp_port: 40000, min_packets: 5, max_fragments: 0}

@@ -1,0 +1,15 @@
+name: vmstats-bad-name
+kind: scorch
+type: vmstats
+about: >
+  vmstats with a VM name holding '#', which the minimega lexer reads as a
+  comment (#175). The model must reject it before any command runs, so this
+  is validate-only: it passes when phenix-scorch-validate says the name does
+  not match the allowed pattern. Judged by `burger check` and `burger verify`.
+routes: []
+stages: [start, stop]
+expect_invalid: "String should match pattern"
+config:
+  vms: ["{route.rtus[0]}#1"]
+requires:
+  apps_prs: [175]

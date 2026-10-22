@@ -94,6 +94,8 @@ HEAD = "name: x\nkind: scorch\ntype: x\n"
         ("verify:\n  - {vm: {host: a, run: b}, files: {glob: x}}\n", "verify[0] must be one check"),
         ("requires: {app_prs: [170]}\n", "requires.app_prs is not a requirement"),
         ("soap:\n  verify:\n    - pcap: {tcp_port: 1}\n", "soap.verify[0].pcap needs 'glob'"),
+        ("expect_invalid: x\nroutes: [waterway]\n", "expect_invalid needs kind scorch or app"),
+        ("expect_invalid: '('\nroutes: []\n", "expect_invalid is not a regex"),
     ],
 )
 def test_nested_fields_validated_at_load(settings, tmp_path, body, field):
@@ -102,6 +104,15 @@ def test_nested_fields_validated_at_load(settings, tmp_path, body, field):
     with pytest.raises(BurgerError) as e:
         load_item("zz", dataclasses.replace(settings, root=tmp_path))
     assert "zz.yaml" in str(e.value) and field in str(e.value)
+
+
+def test_expect_invalid_rejects_a_bennu_item(settings, tmp_path):
+    (tmp_path / "bennu").mkdir()
+    (tmp_path / "bennu" / "zz.yaml").write_text(
+        "name: x\nkind: bennu\ntype: x\nexpect_invalid: x\n"
+    )
+    with pytest.raises(BurgerError, match="expect_invalid needs kind scorch or app"):
+        load_item("bennu/zz", dataclasses.replace(settings, root=tmp_path))
 
 
 def test_board_override_verify_validated(settings):

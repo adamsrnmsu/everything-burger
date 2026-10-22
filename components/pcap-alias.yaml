@@ -1,0 +1,16 @@
+name: pcap-alias
+kind: scorch
+type: pcap
+about: >
+  pcap with its old convertToJSON key. #167 renamed it to convert_to_json and
+  keeps the old name as a deprecated alias that logs a warning, so this must
+  still validate. The metadata board runs pcap itself with the new key; no
+  route runs two pcap components at once, so this one only goes through
+  phenix-scorch-validate.
+routes: []
+stages: [start, stop]
+config:
+  vms: [{hostname: "{route.rtus[0]}", interface: 0}]
+  convertToJSON: true
+requires:
+  apps_prs: [167]

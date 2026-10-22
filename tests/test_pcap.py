@@ -92,3 +92,34 @@ def test_pcap_check_missing_is_fail(tmp_path, settings):
     r = pcap.pcap({"glob": "*.pcap", "tcp_port": 502}, ctx)
     assert r.verdict == "FAIL"
     assert r.reason.startswith("no output found at")
+
+
+def fragment(offset=0, more=False, **kw):
+    ip = bytearray(ip_packet(proto=17, **kw))
+    ip[6:8] = struct.pack(">H", (0x2000 if more else 0) | offset)
+    return bytes(ip)
+
+
+def test_pcap_counts_ip_fragments(tmp_path):
+    p = tmp_path / "a.pcap"
+    whole = ip_packet(proto=17, sport=40000, dport=40000)
+    first = fragment(more=True, sport=40000, dport=40000)  # MF set, offset 0
+    last = fragment(offset=185, sport=40000, dport=40000)  # offset only: carries no ports
+    p.write_bytes(classic([eth(whole), eth(first), eth(last)]))
+    assert pcap.count_fragments(p) == 2
+    assert pcap.count_packets(p, udp_port=40000) == 2  # the whole packet and the first fragment
+    p.write_bytes(classic([eth(whole)]))
+    assert pcap.count_fragments(p) == 0
+
+
+def test_pcap_check_max_fragments(tmp_path, settings):
+    ctx, loop = make_ctx(settings, tmp_path)
+    spec = {"glob": "*.pcap", "udp_port": 40000, "min_packets": 1, "max_fragments": 0}
+    whole = eth(ip_packet(proto=17, sport=40000, dport=40000))
+    (loop / "a.pcap").write_bytes(classic([whole]))
+    assert pcap.pcap(spec, ctx).verdict == "ok"
+    (loop / "a.pcap").write_bytes(classic([whole, eth(fragment(more=True, sport=40000))]))
+    r = pcap.pcap(spec, ctx)
+    assert r.verdict == "FAIL" and "1 IP fragment(s), at most 0" in r.reason
+    (loop / "a.pcap").write_bytes(classic([]))  # an empty capture proves nothing
+    assert pcap.pcap(spec, ctx).verdict == "FAIL"

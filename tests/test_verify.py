@@ -132,7 +132,12 @@ def test_windows_checks_skipped_under_linux_only(settings, monkeypatch):
     skipped = {
         (r.item, r.check.split(":")[0]) for r in rows if r.reason == "needs the Windows nodes"
     }
-    assert skipped == {("pcap", "pcap"), ("tcpdump", "pcap"), ("mirror", "vm monitor")}
+    assert skipped == {
+        ("pcap", "pcap"),
+        ("tcpdump", "pcap"),
+        ("mm", "pcap"),
+        ("mirror", "vm monitor"),
+    }
     assert all(r.verdict == "skipped" for r in rows if r.reason == "needs the Windows nodes")
 
 

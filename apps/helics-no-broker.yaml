@@ -1,0 +1,15 @@
+name: helics-no-broker
+kind: app
+type: helics
+about: >
+  The helics app with a root broker on a host the topology lacks. #195's
+  extract_node_ip raises "node missinghost does not exist" in pre-start, which
+  stops the experiment before SCORCH runs, so no board can run it. Validate-only:
+  `burger check` and `burger verify` run the app's configure and pre-start stages
+  with --dry-run on the rendered topology and pass when pre-start fails with that
+  message. Needs uv and a synced board.
+routes: []
+expect_invalid: "root broker not found in topology: node missinghost does not exist"
+config: {broker: {root: "missinghost|eth0"}}
+requires:
+  apps_prs: [195]

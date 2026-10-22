@@ -4,6 +4,7 @@ import pytest
 
 from burger.config import BurgerError
 from burger.switchboard import all_switchboards, load_switchboard, resolve
+from tests.conftest import res
 
 
 def board(settings, name, **kw):
@@ -72,7 +73,7 @@ def test_experiment_name_too_long(settings):
 @pytest.mark.usefixtures("site_env")
 def test_every_switchboard_resolves(settings):
     names = all_switchboards(settings)
-    assert len(names) == 12
+    assert len(names) == 17
     for name in names:
         resolve(load_switchboard(name, settings), settings)
 
@@ -100,3 +101,19 @@ def test_harden_tcpdump_counts_gre(settings):
     spec = next(v["pcap"] for v in tcpdump.verify if "pcap" in v)
     assert spec["tcp_port"] == 502 and spec["ip_proto"] == 47
     assert [next(iter(v)) for v in tcpdump.verify] == ["files", "pcap"]
+
+
+def test_elastic_board_expects_192_error_and_adds_mgmt_tap(settings):
+    r = res(settings, "elastic")
+    items = {i.name: i for i in r.items}
+    assert items["elastic-empty"].expect_error == "returned no cluster info"
+    assert "mgmt_tap" in items  # elastic-empty requires it: the host reaches the stub over MGMT
+    assert r.board.apps_prs == [177, 192]
+
+
+def test_pcap_alias_is_validated_but_not_run(settings):
+    r = res(settings, "metadata")
+    assert "pcap-alias" in [i.name for i in r.validate_only]
+    assert "pcap-alias" not in [i.name for i in r.items]
+    new = next(i for i in r.items if i.name == "pcap")
+    assert new.config["convert_to_json"] is True and "convertToJSON" not in new.config

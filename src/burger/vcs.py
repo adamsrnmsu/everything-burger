@@ -88,11 +88,11 @@ def sync(res: Resolved, settings: Settings, host) -> dict:
             bad = host.git(
                 wt, "diff", "--name-only", "--diff-filter=U", capture=True
             ).stdout.split()
-            host.git(wt, "merge", "--abort", check=False)
+            host.git(wt, "merge", "--abort", check=False, capture=True)
             raise BurgerError(
                 f"switchboard '{board.name}': #{n} conflicts with the PRs before it "
-                f"in {', '.join(bad) or '(see git output)'}; drop or reorder it in "
-                f"switchboards/{board.name}.yaml"
+                f"in {', '.join(bad) or '(none; see git output)'}; drop or reorder it in "
+                f"switchboards/{board.name}.yaml\n{merged.stdout}{merged.stderr}".rstrip()
             )
     man["apps"]["head"] = _rev(host, wt, "HEAD")
 

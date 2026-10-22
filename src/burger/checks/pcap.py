@@ -1,4 +1,5 @@
-"""Stdlib pcap/pcapng reader: counts IPv4 packets matching a TCP/UDP port or IP protocol."""
+"""Stdlib pcap/pcapng reader: counts IPv4 packets matching a TCP/UDP port or IP protocol,
+and IP fragments."""
 
 import struct
 from collections.abc import Iterator
@@ -76,14 +77,22 @@ def _ipv4(link: int, pkt: bytes) -> bytes | None:
     return ip if len(ip) >= 20 and ip[0] >> 4 == 4 else None
 
 
+def _ipv4_packets(path: Path) -> Iterator[bytes]:
+    for link, pkt in _records(Path(path).read_bytes()):
+        if (ip := _ipv4(link, pkt)) is not None:
+            yield ip
+
+
+def count_fragments(path: Path) -> int:
+    """IPv4 packets that are a fragment: more-fragments set or a nonzero offset."""
+    return sum(struct.unpack(">H", ip[6:8])[0] & 0x3FFF != 0 for ip in _ipv4_packets(path))
+
+
 def count_packets(path: Path, tcp_port=None, udp_port=None, ip_proto=None) -> int:
     """IPv4 packets with TCP port tcp_port, UDP port udp_port, or IP protocol ip_proto
     (any one matching counts); with no criteria, every IPv4 packet."""
     n = 0
-    for link, pkt in _records(Path(path).read_bytes()):
-        ip = _ipv4(link, pkt)
-        if ip is None:
-            continue
+    for ip in _ipv4_packets(path):
         proto, hdr = ip[9], (ip[0] & 0x0F) * 4
         if tcp_port is None and udp_port is None and ip_proto is None:
             n += 1
@@ -103,13 +112,18 @@ def pcap(spec: dict, ctx: CheckContext) -> Row:
     found = find(spec, ctx)
     if not found:
         return missing(spec, ctx, "pcap")
-    total = 0
+    total = frags = 0
     for p in found:
         try:
             total += count_packets(
                 p, spec.get("tcp_port"), spec.get("udp_port"), spec.get("ip_proto")
             )
+            frags += count_fragments(p) if "max_fragments" in spec else 0
         except BurgerError as e:
             return row(ctx, "pcap", False, f"{p.name}: {e}", found)
     need = spec.get("min_packets", 1)
-    return row(ctx, "pcap", total >= need, f"{total} matching packet(s), need {need}", found)
+    ok, why = total >= need, f"{total} matching packet(s), need {need}"
+    if "max_fragments" in spec:  # a fragment carries no ports, so this counts all of them
+        most = spec["max_fragments"]
+        ok, why = ok and frags <= most, f"{why}; {frags} IP fragment(s), at most {most}"
+    return row(ctx, "pcap", ok, why, found)

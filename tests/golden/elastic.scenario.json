@@ -1,0 +1,227 @@
+{
+  "apiVersion": "phenix.sandia.gov/v2",
+  "kind": "Scenario",
+  "metadata": {
+    "annotations": {
+      "topology": "ebwes-elastic"
+    },
+    "name": "ebwes-elastic"
+  },
+  "spec": {
+    "apps": [
+      {
+        "metadata": {
+          "taps": [
+            {
+              "bridge": "phenix",
+              "externalAccess": {
+                "enabled": true
+              },
+              "ip": "172.16.0.1/16",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "name": "tap"
+      },
+      {
+        "assetDir": "/phenix/topologies/burger-soap",
+        "hosts": [
+          {
+            "hostname": "power-provider",
+            "metadata": {
+              "case": "/phenix/topologies/burger-soap/injects/case300.py",
+              "labels": [
+                "elk"
+              ],
+              "publish_endpoint": "udp://*;239.0.0.1:40000",
+              "simulator": "PyPower",
+              "type": "provider"
+            }
+          },
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "dnp3": [
+                {
+                  "name": "bus-242",
+                  "type": "bus"
+                },
+                {
+                  "name": "generator-1_bus-242",
+                  "type": "generator"
+                },
+                {
+                  "name": "bus-alert",
+                  "type": "bus"
+                }
+              ],
+              "infrastructure": "power-transmission",
+              "labels": [
+                "elk"
+              ],
+              "provider": "power-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "dnp3": [
+                {
+                  "name": "bus-243",
+                  "type": "bus"
+                },
+                {
+                  "name": "load-1_bus-243",
+                  "type": "load"
+                },
+                {
+                  "name": "generator-1_bus-243",
+                  "type": "generator"
+                }
+              ],
+              "infrastructure": "power-transmission",
+              "labels": [
+                "elk"
+              ],
+              "provider": "power-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-3",
+            "metadata": {
+              "dnp3": [
+                {
+                  "name": "bus-244",
+                  "type": "bus"
+                },
+                {
+                  "name": "branch-1_243-244",
+                  "type": "branch"
+                }
+              ],
+              "infrastructure": "power-transmission",
+              "labels": [
+                "elk"
+              ],
+              "provider": "power-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-4",
+            "metadata": {
+              "dnp3": [
+                {
+                  "name": "bus-245",
+                  "type": "bus"
+                },
+                {
+                  "name": "load-1_bus-245",
+                  "type": "load"
+                },
+                {
+                  "name": "branch-1_242-245",
+                  "type": "branch"
+                },
+                {
+                  "name": "branch-1_243-245",
+                  "type": "branch"
+                }
+              ],
+              "infrastructure": "power-transmission",
+              "labels": [
+                "elk"
+              ],
+              "provider": "power-provider",
+              "type": "fd-server"
+            }
+          }
+        ],
+        "name": "sceptre"
+      },
+      {
+        "metadata": {
+          "subnet": "172.16.0.0/16",
+          "vlan": "MGMT"
+        },
+        "name": "mgmt_tap"
+      },
+      {
+        "metadata": {
+          "components": [
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "power-provider",
+                    "start": [
+                      {
+                        "args": "pgrep -f '(^|/)pybennu-power-solver( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "health",
+              "type": "cc"
+            },
+            {
+              "metadata": {
+                "elasticsearch": {
+                  "index": "burger",
+                  "server": "http://172.16.1.2:9200",
+                  "verify": true
+                },
+                "hostname": "power-provider"
+              },
+              "name": "elastic-empty",
+              "type": "providerdata"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "power-provider",
+                    "start": [
+                      {
+                        "args": "cat > /tmp/burger-es-stub.py <<'PY'\nimport http.server\nclass H(http.server.BaseHTTPRequestHandler):\n    def do_GET(self):\n        body = b\"{}\"\n        self.send_response(200)\n        self.send_header(\"X-Elastic-Product\", \"Elasticsearch\")\n        self.send_header(\"Content-Type\", \"application/json\")\n        self.send_header(\"Content-Length\", str(len(body)))\n        self.end_headers()\n        self.wfile.write(body)\n    def log_message(self, *a):\n        pass\nhttp.server.HTTPServer((\"0.0.0.0\", 9200), H).serve_forever()\nPY\nsetsid nohup python3 /tmp/burger-es-stub.py </dev/null >/tmp/burger-es-stub.log 2>&1 &\nfor i in 1 2 3 4 5; do\n  ss -ltn | grep -q ':9200 ' && exit 0\n  sleep 1\ndone\necho 'es stub is not listening on 9200' >&2\nexit 1\n",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "es-stub",
+              "type": "cc"
+            }
+          ],
+          "runs": [
+            {
+              "name": "health",
+              "start": [
+                "health"
+              ]
+            },
+            {
+              "configure": [
+                "elastic-empty"
+              ],
+              "name": "elastic",
+              "start": [
+                "es-stub",
+                "elastic-empty"
+              ]
+            }
+          ]
+        },
+        "name": "scorch"
+      }
+    ]
+  }
+}

@@ -38,7 +38,7 @@ To debug, run the steps by hand:
 ./burger scorch metadata --run 1
 ./burger verify metadata      # report: work/metadata/report.md
 ./burger down metadata
-./burger bennu-check bennu    # bennu's own docker harness: the #56 and #57 coverage
+./burger bennu-check bennu    # bennu's own docker harness on the board's bennu PR
 ```
 
 Every switchboard also gets a `health` run: a SCORCH `cc` component whose

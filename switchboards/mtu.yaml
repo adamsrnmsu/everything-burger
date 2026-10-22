@@ -1,0 +1,18 @@
+# Live proof of bennu #67 (publish datagrams sized to the link MTU). The
+# PyPower provider on soap publishes the long point list; a capture on its
+# interface must hold UDP traffic on the publish port and no IP fragments.
+# Drop the `bennu:` block to run it on stock bennu.qc2: it should FAIL there
+# whenever a publish fills a chunk. disruption only holds the run open so the
+# capture spans several publishes.
+about: "bennu #67 on soap: provider publishes must not be IP-fragmented"
+route: soap
+apps: {prs: []}
+bennu:
+  pr: 67
+  install: [deb, pybennu]
+items:
+  publish-fragments: on
+  disruption: on
+  bennu/power-solver: on
+overrides:
+  disruption: {config: {run_duration: 60}}

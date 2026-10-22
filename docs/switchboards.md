@@ -24,15 +24,20 @@ this.
 | `baseline` | upstream `main` | stock `bennu.qc2` | health checks only. If this fails, the rig is broken, not a PR |
 | `bennu` | upstream `main` | #59 (main with #54–#58, plus loguru) deb and pybennu wheel | health checks on the PR build of bennu |
 | `pybennu` | upstream `main` | #59 deb and pybennu wheel | soap without Ignition: `pybennu-power-solver` runs and logs through loguru, each C++ RTU queries it; siren's log file (advisory) |
-| `metadata` | #158, #164–#177 | #58 | disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos (+ advisory erspan); lowercase mgmt VLAN for #158 |
-| `harden` | #155, #158 | #58 | cc validators, pcap, tcpdump, mm, mgmt_tap, mirror app into a `monitor` VM |
+| `metadata` | #158, #164–#177, #191 | stock `bennu.qc2` | disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos (+ advisory erspan); lowercase mgmt VLAN for #158; offline: deprecated-key aliases and the configs that must be rejected (`vmstats-bad-name`, `qos-bad-rate`) |
+| `harden` | #155, #158 | stock `bennu.qc2` | cc validators, pcap, tcpdump, mm (bridge capture with a spaced filter), mgmt_tap, mirror app into a `monitor` VM |
 | `rtds` | #158, #164, #166, #169, #177 | #59 pybennu wheel | rtds, providerdata, collector and a baseline disruption on **your rig's** topology (`site` route), not waterway |
 | `provider` | #158, #164, #166, #169, #177 | stock `bennu.qc2` | providerdata, rtds (lifecycle only) and collector with a baseline disruption, on **soap**'s pybennu PyPower provider; health: the solver runs |
-| `iperf` | #165 | stock `bennu.qc2` | iperf from rtu-2 to rtu-1 on waterway, after the waterway health checks; burger installs iperf3 into both |
+| `iperf` | #165, #191 | stock `bennu.qc2` | iperf from rtu-2 to rtu-1 on waterway, after the waterway health checks; burger installs iperf3 into both |
 | `bench` | upstream `main` | #59 deb and pybennu wheel (carries #55) | soap: `field-device-bench` times a throwaway 800-tag field device on rtu-1 and fails above 2 s per write cycle; the report row shows the measured time |
 | `opendss` | bennu #64 | #64 pybennu wheel | soap: `opendss-batched-write` runs the OpenDSS solver in-process on the provider VM and sends one write for two loads; fails if either is still enabled in OpenDSS. Fails on stock main (only the last device is applied); WARN when `opendssdirect` is missing |
 | `ssh` | #170 | stock `bennu.qc2` | ssh to rtu-1 over `mgmt_tap`, after the waterway health checks; needs `BURGER_VM_PASSWORD` |
 | `fifo` | upstream `main` | #66 deb | one 1000-tag batched WRITE from rtu-1 to waterway's simulink provider must ACK, and `provider.log` must show no FIFO error. **Fails on stock bennu** by design (drop the `bennu:` block to see it) |
+| `cc-empty` | #194 | stock `bennu.qc2` | a cc validator on a command that prints nothing (`cc-empty-output`) and #183's stderr/`/`/`:` case (`cc-output-parsing`, merged: a regression check on main), after the waterway health checks; `cc-empty-output` crashes on main (#186) |
+| `elastic` | #177, #192 | stock `bennu.qc2` | soap: `es-stub` serves an empty Elasticsearch reply from the provider VM over `mgmt_tap`; `elastic-empty` (providerdata) must fail with #192's "returned no cluster info" (`expect_error`). On main it exits with no status file and fails |
+| `base` | #195 | stock `bennu.qc2` | ExperimentBase on waterway: cc health, vmstats' default VM list, pcap, tcpdump, mm, hoststats, disruption, `mgmt_tap`, `mirror`, and the `helics` app (root broker `rtu-1\|IF0`; checks its injected start script; `helics-no-broker` must be rejected, offline) |
+| `mtu` | upstream `main` | #67 deb and pybennu wheel | soap: `publish-fragments` captures the PyPower provider and fails on any IP fragment; `disruption` only holds the run open. Meant to fail on stock bennu when a publish fills a chunk |
+| `base-soap` | #166, #169, #177, #195 | stock `bennu.qc2` | ExperimentBase on soap: rtds, providerdata, collector (annotations, node lookups), disruption and vmstats' default VM list |
 
 Models no route can run are validated offline by `phenix-scorch-validate`
 (items with `routes: []` are validate-only).

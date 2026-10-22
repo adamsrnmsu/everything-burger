@@ -8,6 +8,9 @@ routes: [waterway]
 stages: [configure, start, stop, cleanup]
 config:
   run_duration: 20
+  # #165 allowlists these (letters, digits, space and _.,:=@%/+-); --omit 2
+  # drops the first two seconds of every client's report.
+  add_client_args: "--omit 2"
   iperf_paths: {linux: /usr/bin/iperf3}
   servers:
     - hostname: "{route.rtus[0]}"

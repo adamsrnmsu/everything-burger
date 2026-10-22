@@ -5,7 +5,7 @@ apps added to the scenario) or `bennu/` (in-VM checks and bennu config). The
 fields, with comments, are in the template `burger new` copies. The ones
 that matter: `about` (what it does and what a pass means), `routes` (where it
 runs), `stages`, `holds`, `background`, `advisory` (failures do not fail the
-board), `config` (SCORCH metadata exactly as phenix-apps expects), `requires`
+board), `expect_error` (a regex the component's failure must match: that is the pass; any other outcome, `sys.exit` included, fails), `expect_invalid` (a regex: the config must be *rejected*, see below), `config` (SCORCH metadata exactly as phenix-apps expects), `requires`
 and `verify`. `{route.<key>}` in an item reads the route file (`rtus`,
 `provider`, `ics_port`). A `waterway:`, `soap:` or `site:` block overrides
 `config` or `verify` for that route.
@@ -26,6 +26,26 @@ with `bennu-probe` (its `--tag` takes the whole comma-separated batch), and a
 python check passes only if the provider ACKs. A vm check also fails on a FIFO
 error in `/etc/sceptre/log/provider.log`. Stock bennu's 64 KiB pipe fills at
 the 257th record, so this item is meant to FAIL there.
+
+## Configs that must be rejected
+
+Some bad configs fail validation or stop the experiment before SCORCH runs, so
+no board can run them and `expect_error` cannot see them. Give a validate-only
+item (`routes: []`, kind `scorch` or `app`) `expect_invalid: <regex>`: it passes
+when the config is rejected with output matching the regex, and fails if it is
+accepted or rejected for another reason.
+
+- **scorch**: `phenix-scorch-validate` must report the component `invalid`.
+- **app**: the app's `configure` and `pre-start` stages run with `--dry-run` on
+  the rendered topology; one must exit non-zero.
+
+`./burger check <board>` judges them offline on the board's synced apps tree
+(`./burger sync <board>` first) with `uv run --with work/<board>/apps/src/python`;
+it prints `skipped` when the tree is not synced or `uv` is missing, and exits 1
+on a FAIL. `./burger verify` judges the scorch ones from the validator inside
+phēnix it already runs (its models.yaml carries them, and a rejection they were
+expected to get no longer fails the board) and the app ones with `uv`, as `check`
+does. Examples: `vmstats-bad-name`, `qos-bad-rate`, `helics-no-broker`.
 
 ## Adding a test
 

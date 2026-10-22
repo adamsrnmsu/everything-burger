@@ -9,7 +9,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from burger.config import BurgerError, Settings
+from burger.config import GIT_SAFE, BurgerError, Settings
 from burger.site import redact
 
 
@@ -22,6 +22,8 @@ class Host:
 
     def run(self, cmd, check=True, capture=False, **kw):
         cmd = [str(c) for c in cmd]
+        if cmd and cmd[0] == "git":
+            cmd = ["git", *GIT_SAFE, *cmd[1:]]
         if self.site and cmd and cmd[0] in ("git", "gh"):
             bundle = self.site.bundle(self.s.work)
             if cmd[0] == "git":

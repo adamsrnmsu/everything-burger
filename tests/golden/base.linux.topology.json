@@ -1,0 +1,265 @@
+{
+  "apiVersion": "phenix.sandia.gov/v1",
+  "kind": "Topology",
+  "metadata": {
+    "created": "",
+    "name": "ebwes-base",
+    "updated": ""
+  },
+  "spec": {
+    "nodes": [
+      {
+        "general": {
+          "description": "SCEPTRE Simulink fuel provider",
+          "hostname": "simulink-provider"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "bennu.qc2"
+            }
+          ],
+          "memory": 8192,
+          "os_type": "linux",
+          "vcpus": 4
+        },
+        "injections": [
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "172.16.1.2",
+              "gateway": "172.16.1.1",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "general": {
+          "description": "SCEPTRE RTU",
+          "hostname": "rtu-1"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "bennu.qc2"
+            }
+          ],
+          "os_type": "linux",
+          "vcpus": 2
+        },
+        "injections": [
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.1.1.101",
+              "gateway": "10.1.1.1",
+              "mask": 24,
+              "name": "IF0",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "ICS"
+            },
+            {
+              "address": "172.16.1.101",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "general": {
+          "description": "SCEPTRE RTU",
+          "hostname": "rtu-2"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "bennu.qc2"
+            }
+          ],
+          "os_type": "linux",
+          "vcpus": 2
+        },
+        "injections": [
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.1.1.102",
+              "gateway": "10.1.1.1",
+              "mask": 24,
+              "name": "IF0",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "ICS"
+            },
+            {
+              "address": "172.16.1.102",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "general": {
+          "description": "Router",
+          "hostname": "router"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "minirouter.qc2"
+            }
+          ],
+          "os_type": "minirouter"
+        },
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.1.2.1",
+              "mask": 24,
+              "name": "IF0",
+              "proto": "ospf",
+              "type": "ethernet",
+              "vlan": "SCADA"
+            },
+            {
+              "address": "10.1.1.1",
+              "mask": 24,
+              "name": "IF1",
+              "proto": "ospf",
+              "type": "ethernet",
+              "vlan": "ICS"
+            },
+            {
+              "address": "172.16.1.1",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ],
+          "ospf": {
+            "areas": [
+              {
+                "area_id": 0,
+                "area_networks": [
+                  {
+                    "network": "10.1.2.0/24"
+                  },
+                  {
+                    "network": "10.1.1.0/24"
+                  }
+                ]
+              }
+            ],
+            "router_id": "0.0.0.1"
+          }
+        },
+        "type": "Router"
+      },
+      {
+        "general": {
+          "description": "burger mirror target",
+          "hostname": "monitor"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "bennu.qc2"
+            }
+          ],
+          "memory": 2048,
+          "os_type": "linux",
+          "vcpus": 2
+        },
+        "injections": [
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
+        "network": {
+          "interfaces": [
+            {
+              "address": "172.16.1.200",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            },
+            {
+              "address": "10.248.171.254",
+              "mask": 24,
+              "name": "mirror",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "mirror"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      }
+    ]
+  }
+}
