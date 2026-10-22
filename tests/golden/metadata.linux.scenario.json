@@ -220,7 +220,7 @@
             },
             {
               "metadata": {
-                "convertToJSON": true,
+                "convert_to_json": true,
                 "vms": [
                   {
                     "filter": "tcp port 502",
@@ -312,7 +312,7 @@
               "metadata": {
                 "vms": [
                   {
-                    "delay": "20ms",
+                    "delay": 20,
                     "hostname": "rtu-2",
                     "interface": 0
                   }

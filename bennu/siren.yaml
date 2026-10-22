@@ -3,10 +3,17 @@ kind: bennu
 type: siren
 about: >
   Advisory: without the LabJack, pybennu-siren fails after startup, so its
-  log file proves only #59's file sink, not siren.
+  log file proves only #59's file sink, not siren. The topology's siren.json
+  sets the device's level_name to debug; #59 keeps Siren's stdlib per-device
+  loggers and lowers the loguru sinks to that level, so the log must hold DEBUG
+  lines. Without that, the INFO-level sinks drop them (untested live: the device
+  may fail before it logs anything at DEBUG).
 routes: [soap]
 advisory: true
 verify:
   - vm:
       host: siren
       run: "test -s /var/log/bennu/pybennu-siren.log"
+  - vm:
+      host: siren
+      run: "grep -Eq ' \\| DEBUG +\\| ' /var/log/bennu/pybennu-siren.log"

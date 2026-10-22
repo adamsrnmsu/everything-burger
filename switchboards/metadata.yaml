@@ -51,7 +51,9 @@ overrides:
   tcpdump:
     config:
       vms: [{hostname: rtu-2, iface: any, filter: "tcp port 502"}]
-      convertToJSON: true
+      # #168 renamed convertToJSON to convert_to_json (the old key is a deprecated alias,
+      # as for pcap); the head burger syncs ignores the new key until it is pushed
+      convert_to_json: true
     verify:
       # a failed kill or conversion is logged as an error and the stage carries on
       - log: {glob: "*.json", lacks: "\\] ERROR :"}
@@ -75,4 +77,6 @@ overrides:
       # pcap's "not tcp port 502" must be reset before this bridge capture starts
       - pcap: {glob: "burger-bridge.pcap", tcp_port: 502, min_packets: 10, windows: true}
   vmstats: {config: {vms: [rtu-1, rtu-2, simulink-provider]}}
-  qos: {config: {vms: [{hostname: rtu-2, interface: 0, delay: 20ms}]}}
+  # #176: a bare number is milliseconds (minimega retries ParseDuration with "ms"), so
+  # `delay: 20` is 20ms. The pushed head wants a unit and rejects it until the update lands.
+  qos: {config: {vms: [{hostname: rtu-2, interface: 0, delay: 20}]}}
