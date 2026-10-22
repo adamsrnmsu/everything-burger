@@ -89,7 +89,7 @@ def test_burger_stays_put_when_head_is_unchanged(settings, lines, monkeypatch):
     monkeypatch.setattr(update.os, "execv", lambda *a: pytest.fail("re-exec"))
     h = heads(settings, "a" * 40, "a" * 40)
     rows = run_update(settings, h, lines, ["burger", "containers"])
-    assert rows == [("burger", "a" * 10, "a" * 10, "already current")]
+    assert rows[0] == ("burger", "a" * 10, "a" * 10, "already current")
 
 
 def test_burger_dry_run_does_not_claim_already_current(settings, lines):
@@ -121,3 +121,123 @@ def test_cli_update_prints_summary(settings, monkeypatch, capsys):
     assert main(["--quiet", "update", "--only", "burger"]) == 0
     assert "already current" in capsys.readouterr().out
     assert main(["--quiet", "update", "--only", "bogus"]) == 1
+
+
+# --- containers layer ---
+
+LABELS = (
+    '{"com.docker.compose.project.working_dir":"/srv/phenix",'
+    '"com.docker.compose.project.config_files":"/srv/phenix/a.yml,/srv/phenix/b.yml",'
+    '"com.docker.compose.service":"phenix","com.docker.compose.project":"stack"}'
+)
+INSPECT = "docker inspect -f {{json .Config.Labels}} "
+
+
+def compose_host(settings, labels=LABELS, **extra):
+    return host_for(settings, {INSPECT + settings.ctr: cp(labels), **extra})
+
+
+def test_compose_labels_parsed(settings):
+    h = compose_host(settings)
+    assert update.compose_labels(h, "phenix") == {
+        "dir": "/srv/phenix",
+        "files": ["/srv/phenix/a.yml", "/srv/phenix/b.yml"],
+        "service": "phenix",
+        "project": "stack",
+    }
+
+
+@pytest.mark.parametrize("labels", ["null", "{}", '{"com.docker.compose.service":"x"}'])
+def test_not_compose_managed(settings, labels):
+    assert update.compose_labels(compose_host(settings, labels), "phenix") is None
+
+
+def test_containers_pull_and_up_through_compose(settings, lines, monkeypatch):
+    h = compose_host(settings)
+    h.responses["docker inspect -f {{json .Config.Labels}} " + settings.mm_ctr] = cp("null")
+    monkeypatch.setattr(update.time, "sleep", lambda s: None)
+    rows = run_update(settings, h, lines, ["containers"])
+    base = (
+        "docker compose -p stack --project-directory /srv/phenix"
+        " -f /srv/phenix/a.yml -f /srv/phenix/b.yml"
+    )
+    joined = [" ".join(c) for c in h.calls]
+    assert joined.index(f"{base} pull phenix") < joined.index(f"{base} up -d --no-deps phenix")
+    assert "docker exec phenix phenix mm version" in joined
+    assert [r[0] for r in rows] == ["phenix", "minimega"]
+    assert "not managed by compose" in rows[1][3]
+    assert not any(" pull " in j and "minimega" in j for j in joined)
+
+
+def test_containers_report_image_change(settings, lines, monkeypatch):
+    ids = iter(["sha256:aaaaaaaaaaaaaaaa\n", "sha256:bbbbbbbbbbbbbbbb\n"])
+
+    class Host(FakeHost):
+        def run(self, cmd, check=True, capture=False, **kw):
+            res = super().run(cmd, check, capture, **kw)
+            if cmd[:4] == ["docker", "inspect", "-f", "{{.Image}}"] and cmd[4] == "phenix":
+                return cp(next(ids))
+            return res
+
+    h = Host({INSPECT + "phenix": cp(LABELS), INSPECT + "minimega": cp("null")}, settings)
+    rows = run_update(settings, h, lines, ["containers"])
+    assert rows[0] == ("phenix", "aaaaaaaaaaaa", "bbbbbbbbbbbb", "recreated")
+
+
+def test_local_build_is_reported_not_rebuilt(settings, lines):
+    cfg = '{"services":{"phenix":{"build":{"context":"."}}}}'
+    key = "docker compose -p stack --project-directory /srv/phenix"
+    h = compose_host(settings, **{key: cp(cfg)})
+    h.responses[INSPECT + "minimega"] = cp("null")
+    rows = run_update(settings, h, lines, ["containers"])
+    assert "local context" in rows[0][3]
+    assert not any(c[:2] == ["docker", "compose"] and "pull" in c for c in h.calls)
+
+
+def test_running_experiment_refuses_then_force_proceeds(settings, lines, monkeypatch):
+    monkeypatch.setattr(update.time, "sleep", lambda s: None)
+    h = compose_host(settings)
+    h.responses[INSPECT + "minimega"] = cp("null")
+    h.api_responses["/experiments"] = {"experiments": [{"name": "a", "running": True}]}
+    with pytest.raises(BurgerError, match="experiments running: a"):
+        run_update(settings, h, lines, ["containers"])
+    assert not any("compose" in c for call in h.calls for c in call[:2])
+    run_update(settings, h, lines, ["containers"], force=True)
+    assert any(c[:2] == ["docker", "compose"] and "up" in c for c in h.calls)
+
+
+def test_dry_run_containers_prints_compose_and_runs_none(settings, lines):
+    h = compose_host(settings)
+    h.responses[INSPECT + "minimega"] = cp("null")
+    rows = run_update(settings, h, lines, ["containers"], dry=True)
+    assert rows[0][3] == "dry-run"
+    assert any("pull phenix" in line for line in lines)
+    assert any("up -d --no-deps phenix" in line for line in lines)
+    assert not any(" pull " in " ".join(c) or " up " in " ".join(c) for c in h.calls)
+
+
+def test_force_skips_the_guard_even_when_the_api_is_down(settings, lines, monkeypatch):
+    def down(path):
+        raise OSError("refused")
+
+    monkeypatch.setattr(update.time, "sleep", lambda s: None)
+    h = compose_host(settings)
+    h.responses[INSPECT + "minimega"] = cp("null")
+    h.api = down
+    with pytest.raises(BurgerError, match="cannot list"):
+        run_update(settings, h, lines, ["containers"])
+    run_update(settings, h, lines, ["containers"], force=True)
+    assert any(c[:2] == ["docker", "compose"] and "up" in c for c in h.calls)
+
+
+def test_api_error_status_is_not_read_as_no_experiments(settings, lines):
+    h = compose_host(settings)
+    h.api_responses["/experiments"] = None
+    with pytest.raises(BurgerError, match="answered the experiments request with an error"):
+        run_update(settings, h, lines, ["containers"])
+    assert not any("compose" in c for call in h.calls for c in call[:2])
+
+
+def test_project_name_is_left_out_when_the_label_is_missing():
+    c = {"dir": "/d", "files": ["/d/a.yml"], "service": "s", "project": None}
+    assert update._compose(c)[:3] == ["docker", "compose", "--project-directory"]
