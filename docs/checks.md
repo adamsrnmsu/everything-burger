@@ -8,7 +8,7 @@ Every component's status files are judged without a `verify` entry: an error `re
 | Check | Passes when | Example |
 |---|---|---|
 | `files` | a glob matches at least `min` files, each at least `min_bytes` | `- files: {glob: "*.pcap", min: 1}` |
-| `pcap` | pcap/pcapng files parse and hold at least `min_packets` matching a TCP/UDP port (or protocol) | `- pcap: {glob: "*.pcap", tcp_port: 502, min_packets: 10}` |
+| `pcap` | pcap/pcapng files parse and hold at least `min_packets` matching a TCP/UDP port (or protocol); with `max_fragments`, also at most that many IP fragments (counted over every packet, since a fragment has no ports) | `- pcap: {glob: "*.pcap", tcp_port: 502, min_packets: 10}` |
 | `json` | a JSON file's field exists, equals or matches | `- json: {glob: "*.json", field: "status", equals: "ok"}` |
 | `csv` | a CSV has at least `min_rows` rows, or the named `columns` | `- csv: {glob: "*.csv", min_rows: 1}` |
 | `log` | a log file contains or lacks a pattern | `- log: {glob: "*.log", lacks: "ERROR"}` |
