@@ -7,7 +7,7 @@ about: >
   stops the experiment before SCORCH runs, so no board can run it. Validate-only:
   `burger check` and `burger verify` run the app's configure and pre-start stages
   with --dry-run on the rendered topology and pass when pre-start fails with that
-  message. Needs uv and a synced board.
+  message. Needs a synced board, and `uv` or this board's apps installed in phēnix.
 routes: []
 expect_invalid: "root broker not found in topology: node missinghost does not exist"
 config: {broker: {root: "missinghost|eth0"}}

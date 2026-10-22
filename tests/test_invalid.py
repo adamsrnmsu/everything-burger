@@ -79,6 +79,29 @@ def test_scorch_rows_run_the_validator_from_the_synced_tree(settings, tmp_path):
     assert "FAIL" not in got.values()  # `vmstats` in OUT is valid
 
 
+def test_app_rows_without_uv_use_the_apps_installed_in_phenix(settings, tmp_path):
+    import json
+
+    synced(settings, "base")
+    man = board_dir(settings, "base") / "manifest.json"
+    man.write_text(json.dumps({"apps": {"head": "abc"}}))
+    r = res(settings, "base")
+    err = "root broker not found in topology: node missinghost does not exist"
+    topo = {"spec": {"nodes": []}}
+    answers = {
+        "uv run": subprocess.CompletedProcess([], 127, "", "uv not found"),
+        "docker exec phenix cat": subprocess.CompletedProcess([], 0, '{"apps": "abc"}', ""),
+        "docker exec -i phenix phenix-app-helics": subprocess.CompletedProcess([], 1, "", err),
+    }
+    host = FakeHost(answers, settings)
+    assert [x.verdict for x in invalid.app_rows(r, settings, host, topo, tmp_path)] == ["ok"]
+    assert any(c[:4] == ["docker", "exec", "-i", "phenix"] for c in host.calls)
+    # installed apps from another commit are not evidence: skip, do not judge stale code
+    answers["docker exec phenix cat"] = subprocess.CompletedProcess([], 0, '{"apps": "old"}', "")
+    rows = invalid.app_rows(r, settings, FakeHost(answers, settings), topo, tmp_path)
+    assert [x.verdict for x in rows] == ["skipped"] and "uv not found" in rows[0].reason
+
+
 def test_app_rows_stop_at_the_first_failing_stage(settings, tmp_path):
     synced(settings, "base")
     r = res(settings, "base")
