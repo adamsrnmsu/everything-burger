@@ -93,3 +93,22 @@ the fixes below (all NEW, all in the merge commit) are mechanical Optional/typin
   #195 disruption.py no longer conflicts (PRs rebased). Outside-hunk re-applications unchanged: pcap README+test_pcap, ssh.py, mm tests +
   test_command_helpers, scorch/app.py `import re`, test_iperf.py.
 - CHANGELOG.md differs only in union-merge line order/duplicated "Changed" headings (rebased PR changelog contexts); same lines.
+
+## v4 update (en18 findings, 10-22): four PR fixes merged on top of v3
+- Head 045cb78 = d985de4 + merges of the new heads of #165 (a24d7ae), #167 (ba4818a), #168 (65aaacb), #172 (551447c).
+  upstream/main is still 14d7b31 and no other PR moved, so the 16 merges were not replayed. Suite 1750 passed; ruff, mypy clean.
+- #167 pcap.py vs #155: kept #155's `utils._validate_mm_filter` quoting; the reset is now `'len >= 0'` instead of `""`.
+- #168 tcpdump.py vs #155: kept `GuestOptions`/`GuestFilter` (`FilterExpr` allows BPF parentheses) with #168's new comment;
+  the launcher script shell-quotes both.
+- #172: CHANGELOG only (union). #165: no conflict.
+
+## Rule: no bare `$var` in an inline cc command
+minimega expands a bare `$name` in an inline cc command (`cc exec`, `cc background`) before it reaches the VM: `$$`,
+`$@`, `$pid`, `$p`, `$n` all arrive empty. Command substitution `$(...)` survives. Anything that needs shell variables
+goes in a script file: write it under root_dir/exp_name, `cc send` it (`utils.mm_cc_send_wait`), then run
+`bash /tmp/miniccc/files/<exp>/<name>` (as cc.py, tcpdump and iperf do).
+
+## Rule: never reset a minimega setting with `""`
+phenix runs commands under `namespace <ns>`; minimega rebuilds the subcommand's text with `inputItems.String()`, which
+quotes only values containing whitespace, so an empty argument vanishes. `capture pcap filter ""` becomes
+`capture pcap filter`, which only prints the current value. Reset the capture filter with the match-all `'len >= 0'`.
