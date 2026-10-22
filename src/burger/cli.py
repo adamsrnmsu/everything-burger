@@ -27,6 +27,7 @@ from burger.verify import models_yaml
 
 TEMPLATES = Path(__file__).parent / "templates"
 KIND_DIR = {"scorch": "components", "app": "apps", "bennu": "bennu"}
+PUBLIC_PROBE = "https://pypi.org/simple/"  # public: a proxy that re-signs only some TLS skips it
 NAME = re.compile(r"[a-z0-9][a-z0-9_-]*")
 # The old preflight's read probe: a read through the whole backing chain.
 READ_PROBE = (
@@ -193,6 +194,20 @@ def _site_rows(host, rows, chk) -> None:
             f"the docker daemon pulls images: give it the CA in /etc/docker/certs.d/"
             f"{registry_host}/ca.crt and the proxy in its systemd http-proxy.conf drop-in",
         )
+    if bundle:  # a public host the proxy does not re-sign must still verify with this bundle
+        err = probe(PUBLIC_PROBE, site, bundle)
+        if err is None:
+            chk(f"CA bundle verifies {PUBLIC_PROBE}", True)
+        elif "certificate" in err.lower():
+            chk(
+                f"CA bundle verifies {PUBLIC_PROBE}",
+                False,
+                f"{err}. ca_certs is the whole trust store: if the proxy passes some TLS "
+                "through un-resigned, list the system bundle too "
+                "(/etc/ssl/certs/ca-certificates.crt); see docs/proxy.md",
+            )
+        else:  # air-gapped sites reach no public host; that is not a CA problem
+            rows.append(Row("-", f"CA bundle vs {PUBLIC_PROBE}", "WARN", f"not reached: {err}", []))
     for key, url in (
         ("pypi", m.get("pypi")),
         ("apt", m.get("apt") and m["apt"].rstrip("/") + "/dists/jammy/Release"),

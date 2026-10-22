@@ -341,3 +341,46 @@ def test_preflight_redacts_mirror_tokens(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "probe", lambda *_a, **_k: None)
     main(["--quiet", "preflight", "--linux-only"])
     assert "tok" not in capsys.readouterr().out
+
+
+def _site_rows_of(host):
+    from burger.checks import Row
+
+    rows = []
+
+    def chk(label, ok, hint=""):
+        rows.append(Row("-", label, "ok" if ok else "FAIL", "" if ok else hint, []))
+
+    cli._site_rows(host, rows, chk)
+    return rows
+
+
+def test_preflight_fails_a_bundle_that_cannot_verify_a_public_host(monkeypatch, tmp_path):
+    from burger.site import load_site
+
+    _site_env(tmp_path, monkeypatch)
+    host = FakeHost(site=load_site())
+    seen = []
+
+    def fake_probe(url, site, bundle, timeout=15):
+        seen.append(url)
+        if "pypi.org" in url:
+            return "[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate"
+
+    monkeypatch.setattr(cli, "probe", fake_probe)
+    (row,) = [r for r in _site_rows_of(host) if "pypi.org" in r.check]
+    assert "https://pypi.org/simple/" in seen
+    assert row.verdict == "FAIL"
+    assert "ca-certificates.crt" in row.reason and "whole trust store" in row.reason
+
+
+def test_preflight_unreachable_public_host_only_warns(monkeypatch, tmp_path):
+    from burger.site import load_site
+
+    _site_env(tmp_path, monkeypatch)
+    host = FakeHost(site=load_site())
+    monkeypatch.setattr(
+        cli, "probe", lambda url, *_a, **_k: "timed out" if "pypi.org" in url else None
+    )
+    (row,) = [r for r in _site_rows_of(host) if "pypi.org" in r.check]
+    assert row.verdict == "WARN" and "ca-certificates.crt" not in row.reason
