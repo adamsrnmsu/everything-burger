@@ -1,9 +1,10 @@
 # Named `integrate`, not `integration`: ebwes-integration is 17 characters, over
 # phenix's 15-character experiment name limit.
 # The tree main will hold once the open phenix-apps PRs merge in order A:
-# adamsrnmsu/sceptre-phenix-apps `integration` = upstream main plus the merge
-# commits of #159 #161 #192 #191 #194 #155 #164 #165 #166 #167 #168 #169 #170
-# #171 #172 #174 #175 #176 #177 #195, in that order, each conflict resolved once
+# adamsrnmsu/sceptre-phenix-apps `integration` = upstream main (14d7b31, with
+# #158 #159 #161 #163 #164 #173 #192 merged) plus the merge commits of #191 #194
+# #155 #165 #166 #167 #168 #169 #170 #171 #172 #174 #175 #176 #177 #195, in that
+# order, each conflict resolved once and mypy-clean
 # (docs/integration-notes.md records every resolution). This is the pre-merge
 # check for order A: if it passes, merging the PRs in that order gives this tree.
 #
@@ -32,7 +33,7 @@ about: "order A: all open phenix-apps PRs merged on the integration branch"
 route: waterway
 apps:
   branch: integration
-  contains: [159, 161, 192, 191, 194, 155, 164, 165, 166, 167, 168, 169, 170, 171, 172, 174, 175, 176, 177, 195]
+  contains: [191, 194, 155, 165, 166, 167, 168, 169, 170, 171, 172, 174, 175, 176, 177, 195]
 items:
   disruption: on
   disruption-dos: on
