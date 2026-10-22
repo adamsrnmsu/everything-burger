@@ -63,7 +63,7 @@ found before and after, and the run ends with a table.
 1. **burger**: refuses a dirty checkout or a branch other than `main`, then
    `git pull --ff-only` and `pip install -e .`. If HEAD moved it re-executes
    `./burger update --only <the rest>` so the new code runs the remaining layers.
-2. **containers**: the phēnix and minimego containers, through the compose labels
+2. **containers**: the phēnix and minimega containers, through the compose labels
    on each (`docker compose pull <service>`, then `up -d <service>`), then waits for
    `phenix version` and `phenix mm version`. A container compose did not create gets
    the commands to run by hand and is skipped; a service built from a local context

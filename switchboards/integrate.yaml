@@ -8,7 +8,7 @@
 # check for order A: if it passes, merging the PRs in that order gives this tree.
 #
 # The branch goes stale when a PR head moves or upstream main advances: rebuild
-# it, push it, and run `./burger sync integration` again. `burger prs` flags a
+# it, push it, and run `./burger sync integrate` again. `burger prs` flags a
 # new branch head since sync, but cannot see that a PR moved.
 #
 # Items are the union of the metadata, harden, iperf, base and cc-empty boards
