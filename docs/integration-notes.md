@@ -1,6 +1,6 @@
 # Integration branch notes
 
-Branch `integration` (adamsrnmsu fork, dcce244) = upstream/main (14d7b31, includes #158 #159 #161 #163 #164 #173 #192) + 16 PR merges in order
+Branch `integration` (adamsrnmsu fork, d985de4) = upstream/main (14d7b31, includes #158 #159 #161 #163 #164 #173 #192) + 16 PR merges in order
 191, 194, 155, 165, 166, 167, 168, 169, 170, 171, 172, 174, 175, 176, 177, 195.
 CHANGELOG.md merges cleanly with `merge=union` (use it, or expect a CHANGELOG conflict at every merge).
 No fix commits: all fixes are inside the merge commits. Merges 191, 194, 155, 165, 166, 169, 174-177 had no textual conflict.
@@ -83,3 +83,13 @@ the fixes below (all NEW, all in the merge commit) are mechanical Optional/typin
 - ssh `known_hosts` has no direct test.
 - The `cast(Box, node)` in base.py is a shortcut; proper fix is `@overload` on `extract_node` keyed on `wildcard`.
 - PRs 132 and 179 are open but were not in the list, so they are not merged.
+
+## v3 rebuild (PR heads rebased on upstream/main 14d7b31 and made mypy-clean)
+- Same base (14d7b31), same 16 merges/order; branch head d985de4 (local `integration-v3`). Suite 1747 passed; ruff, format, mypy clean.
+- The "NEW mypy fix" items above are now inside the PR branches, not the merge commits. The only residual tree difference vs
+  the dcce244 build: pcap.py `_loop_chain(run_config: Any)` (was `level: Any`) and tcpdump.py `assert app is not None; app.get("metadata") or {}`,
+  both PR-side mypy fixes written differently from the old merge-side ones.
+- Conflicts replayed by rerere: #167 pcap.py, #168 tcpdump.py, #170 ssh/README.md, #171 erspan.py, #172 mm.py+README.md, #195 iperf.py+vmstats/README.md.
+  #195 disruption.py no longer conflicts (PRs rebased). Outside-hunk re-applications unchanged: pcap README+test_pcap, ssh.py, mm tests +
+  test_command_helpers, scorch/app.py `import re`, test_iperf.py.
+- CHANGELOG.md differs only in union-merge line order/duplicated "Changed" headings (rebased PR changelog contexts); same lines.
