@@ -54,6 +54,23 @@ def test_sync_conflict_names_files(settings, apps_origin):
         sync(board_with_prs(settings, [1, 2]), settings, Host(settings))
 
 
+def test_sync_merge_failure_without_conflict_shows_git_output(settings, apps_origin, monkeypatch):
+    # burger-15k: a merge that dies before it starts (no conflict files, no MERGE_HEAD)
+    # used to report only "conflicts ... (see git output)" with the output thrown away
+    make_origin(apps_origin, {1: "one\n"})
+
+    class Boom(Host):
+        def run(self, cmd, **kw):
+            if "merge" in cmd and "--no-ff" in cmd:
+                return subprocess.CompletedProcess(cmd, 128, "", "fatal: stash failed\n")
+            return super().run(cmd, **kw)
+
+    with pytest.raises(
+        BurgerError, match=r"(?s)#1 conflicts.*in \(none; see git output\).*stash failed"
+    ):
+        sync(board_with_prs(settings, [1]), settings, Boom(settings))
+
+
 def test_sync_merges_prs_and_writes_manifest(settings, apps_origin, topologies, monkeypatch):
     make_origin(apps_origin, {1: "one\n"})
     monkeypatch.setitem(config.REPOS, "topologies", str(topologies))

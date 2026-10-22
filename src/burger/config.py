@@ -16,6 +16,27 @@ REPOS = {
 # ponytail: hand-kept list; add a type here when its PR says "background".
 POLLERS = {"hoststats"}
 MAX_EXP_NAME = 15  # phēnix bridge-name limit (api/experiment/experiment.go)
+# git -c options for every burger git command. burger creates and deletes worktrees on every
+# sync, under a directory macOS keeps touching:
+# - trustctime=false: macOS adds the com.apple.provenance xattr to new files about two seconds
+#   after they are written, which bumps their ctime. The index then holds stale ctimes and
+#   the `git stash create` that `git merge` runs first dies with a bare "fatal: stash failed"
+#   if it lands in that window: the intermittent sync failure at a random PR (burger-15k).
+# - fsmonitor/untrackedCache off: core.fsmonitor=true in a user's gitconfig starts a
+#   daemon in every worktree burger makes, and they are never stopped.
+# - gc.auto/maintenance.auto off: no detached gc after fetch or merge racing the next command.
+GIT_SAFE = [
+    "-c",
+    "core.trustctime=false",
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.untrackedCache=false",
+    "-c",
+    "gc.auto=0",
+    "-c",
+    "maintenance.auto=false",
+]
 GIT_ID = ["-c", "user.name=burger", "-c", "user.email=burger@localhost"]
 
 
