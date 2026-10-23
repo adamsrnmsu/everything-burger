@@ -208,10 +208,11 @@ def test_miniccc_startup_leaves_a_running_miniccc_alone(tmp_path):
     assert "leaving the image's own alone" in (tmp_path / "log").read_text()
 
 
-def test_integrate_names_the_mgmt_vlan_as_the_topology_does(settings):
+def test_integrate_relies_on_case_insensitive_mgmt_vlan(settings):
+    # the topology names the VLAN mgmt; #199 makes mgmt_tap match MGMT to it
     r = resolve(load_switchboard("integrate", settings), settings)
     tap = next(i for i in r.items if i.name == "mgmt_tap")
-    assert tap.config["vlan"] == "mgmt"
+    assert tap.config["vlan"] == "MGMT"
 
 
 def test_iperf_322_injects_static_binary(settings, topologies):
