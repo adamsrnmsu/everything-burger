@@ -73,7 +73,7 @@ def test_experiment_name_too_long(settings):
 @pytest.mark.usefixtures("site_env")
 def test_every_switchboard_resolves(settings):
     names = all_switchboards(settings)
-    assert len(names) == 19
+    assert len(names) == 20
     for name in names:
         resolve(load_switchboard(name, settings), settings)
 
@@ -108,7 +108,7 @@ def test_elastic_board_expects_192_error_and_adds_mgmt_tap(settings):
     items = {i.name: i for i in r.items}
     assert items["elastic-empty"].expect_error == "returned no cluster info"
     assert "mgmt_tap" in items  # elastic-empty requires it: the host reaches the stub over MGMT
-    assert r.board.apps_prs == [177]  # #192 is on main
+    assert r.board.apps_prs == []  # #177 and #192 are on main
 
 
 def test_pcap_alias_is_validated_but_not_run(settings):

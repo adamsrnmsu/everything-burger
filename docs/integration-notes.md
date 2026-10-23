@@ -1,5 +1,8 @@
 # Integration branch notes
 
+> **Retired 10-23.** PRs no longer edit CHANGELOG.md (releasaurus), so the `integrate` board now merges the
+> open PRs itself over upstream main. The notes below record how the branch was built through v6.
+
 Branch `integration` (adamsrnmsu fork, d985de4) = upstream/main (14d7b31, includes #158 #159 #161 #163 #164 #173 #192) + 16 PR merges in order
 191, 194, 155, 165, 166, 167, 168, 169, 170, 171, 172, 174, 175, 176, 177, 195.
 CHANGELOG.md merges cleanly with `merge=union` (use it, or expect a CHANGELOG conflict at every merge).

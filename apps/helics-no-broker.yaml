@@ -11,5 +11,3 @@ about: >
 routes: []
 expect_invalid: "root broker not found in topology: node missinghost does not exist"
 config: {broker: {root: "missinghost|eth0"}}
-requires:
-  apps_prs: [195]

@@ -1,9 +1,9 @@
-# #155 security hardening on stock bennu: tcpdump, pcap and mm
-# captures, pipe, mgmt_tap, and the mirror app feeding a monitor VM. Offline,
-# pipe-bad-name checks the Token allowlist rejects a name main accepts.
-about: "#155, pipe, mirror + mgmt_tap"
+# The #155 hardening (merged 2026-10-23) on main and stock bennu: tcpdump, pcap
+# and mm captures, pipe, mgmt_tap, and the mirror app feeding a monitor VM.
+# Offline, pipe-bad-name checks the Token allowlist rejects a ';' in a name.
+about: "hardened capture paths, pipe, mirror + mgmt_tap (main)"
 route: waterway
-apps: {prs: [155]}
+apps: {prs: []}
 items:
   pcap: on
   tcpdump: on

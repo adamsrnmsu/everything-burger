@@ -5,5 +5,3 @@ about: Reads the rtds and providerdata folders last, after both have exported.
 routes: [soap, site]
 stages: [stop]
 config: {}
-requires:
-  apps_prs: [169]

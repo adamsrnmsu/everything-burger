@@ -1,8 +1,8 @@
-# #177 providerdata, #166 rtds and #169 collector (with the disruption it
-# reads), live on soap's PyPower provider. All of soap is kept.
-about: "#166 #169 #177 on soap's PyPower provider"
+# providerdata, rtds (#166) and collector (with the disruption it reads), live
+# on soap's PyPower provider. All of soap is kept.
+about: "#166 rtds, providerdata, collector on soap's PyPower provider"
 route: soap
-apps: {prs: [166, 169, 177]}
+apps: {prs: [166]}
 items:
   rtds: on
   providerdata: on

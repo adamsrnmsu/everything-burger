@@ -28,7 +28,11 @@ pytestmark = pytest.mark.usefixtures("site_env")
 def man_for(board):
     man = copy.deepcopy(MAN)
     if b := board.bennu:
-        man["bennu"]["pr"] = b["pr"]
+        if "pr" in b:
+            man["bennu"]["pr"] = b["pr"]
+        else:  # a branch build, e.g. bennu main
+            del man["bennu"]["pr"]
+            man["bennu"] |= {"branch": b["branch"], "remote": b.get("remote", "upstream")}
         if "pybennu" in b.get("install", ["deb"]):
             man["bennu"]["wheel"] = WHEEL
         if b.get("pip"):
@@ -184,7 +188,7 @@ def test_fifo_renders_one_cc_component(settings, topologies):
     res, _, _, scen = build(settings, topologies, "fifo", False)
     names = [c["name"] for c in scorch_of(scen)["components"] if not c["name"].startswith("health")]
     assert names == ["fifo"]
-    assert res.board.bennu["pr"] == 66
+    assert res.board.bennu["branch"] == "main"  # #66 is merged
 
 
 def test_miniccc_startup_leaves_a_running_miniccc_alone(tmp_path):

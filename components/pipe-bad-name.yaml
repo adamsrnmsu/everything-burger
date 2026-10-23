@@ -10,5 +10,3 @@ routes: []
 stages: [start, cleanup]
 expect_invalid: "pipe"
 config: {pipe: "burger;id", data: hello-from-burger}
-requires:
-  apps_prs: [155]

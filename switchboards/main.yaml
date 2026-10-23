@@ -1,0 +1,66 @@
+# Upstream main with no PRs: the persistent check of every app and component
+# burger covers, whatever is open. Run it after merges, or any time, to see the
+# state of main.
+#
+# Items are integrate's, minus the ones that still need an open PR: iperf (#165),
+# pcap-alias (#167) and tcpdump-alias (#168). pcap and tcpdump run with their
+# plain configs, since per-VM pcap filters and convert_to_json arrive with #167
+# and #168. When an open PR merges, move its items and overrides here from
+# integrate. Each override below already works on main:
+#   - tcpdump: harden's monitor VM and "tcp port 502 or ip proto 47" filter;
+#   - mm: bridge + per-VM captures with conversion (#172);
+#   - vmstats: an explicit VM list (#175); qos: a delay on rtu-2 (#176).
+about: "upstream main, no PRs: every app and component burger covers"
+route: waterway
+apps: {prs: []}
+items:
+  disruption: on
+  disruption-dos: on
+  pcap: on
+  tcpdump: on
+  mm: on
+  pipe: on
+  pipe-bad-name: on
+  hoststats: on
+  vmstats: on
+  qos: on
+  vmstats-bad-name: on
+  qos-bad-rate: on
+  erspan: on
+  cc-empty-output: on
+  cc-output-parsing: on
+  apps/mgmt-vlan-alias: on
+  apps/mirror: on
+  apps/mgmt_tap: on
+  apps/helics: on
+  apps/helics-no-broker: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+overrides:
+  tcpdump:
+    config:
+      vms: [{hostname: monitor, iface: any, filter: "tcp port 502 or ip proto 47"}]
+    # the mirror delivers GRE: count it as well as plain Modbus, like the filter
+    verify:
+      - files: {glob: "*.pcap", min: 1}
+      - pcap: {glob: "*.pcap", tcp_port: 502, ip_proto: 47, min_packets: 10, windows: true}
+  mm:
+    config:
+      start:
+        - type: start_capture
+          capture: {bridge: phenix, filename: burger-bridge.pcap, filter: "tcp port 502"}
+      stop: [{type: stop_capture, capture: {bridge: phenix, convert: true}}]
+      vms:
+        - hostname: simulink-provider
+          start:
+            - type: start_capture
+              capture: {interface: 0, filename: burger-provider.pcap, filter: "not tcp port 502"}
+          stop: [{type: stop_capture, capture: {interface: 0, convert: true}}]
+    verify:
+      - log: {glob: "*.json", lacks: "\\] ERROR :"}
+      - files: {glob: "burger-*.pcap", min: 2}
+      - files: {glob: "*.jsonl", min: 2}
+      - pcap: {glob: "burger-bridge.pcap", tcp_port: 502, min_packets: 10, windows: true}
+  vmstats: {config: {vms: [rtu-1, rtu-2, simulink-provider]}}
+  qos: {config: {vms: [{hostname: rtu-2, interface: 0, delay: 20}]}}

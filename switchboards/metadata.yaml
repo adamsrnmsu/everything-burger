@@ -1,8 +1,9 @@
-# #160 metadata models #165-#177 and #191's cc filter helper on stock bennu.
-# Their shared base #190, #158, #164 disruption and #173 pipe are merged and on main. Models no route can run
-# (disruption-dos) are checked offline by phenix-scorch-validate; the rtds,
-# providerdata, collector, iperf and ssh models are validated on their own
-# boards. pcap-alias and tcpdump-alias do the same for the deprecated convertToJSON key.
+# #160 metadata models still open: #165 iperf, #166 rtds, #167 pcap, #168 tcpdump,
+# #170 ssh, on main and stock bennu (the rest of #165-#177 and #191 are merged).
+# Models no route can run (disruption-dos) are checked offline by
+# phenix-scorch-validate; the rtds, providerdata, collector, iperf and ssh models
+# are validated on their own boards. pcap-alias and tcpdump-alias do the same
+# for the deprecated convertToJSON key.
 #
 # The capture overrides test round 2 of review. pcap filters rtu-1 to
 # non-Modbus traffic, then resets minimega's namespace-wide filter. mm's bridge
@@ -10,9 +11,9 @@
 # Modbus. mm also captures one VM interface with a filter, stops only that
 # interface and converts it. tcpdump converts to JSON. Any logger.error line in
 # a status file fails the item, since these paths log and carry on.
-about: "#165-#177 metadata models + #191"
+about: "open #160 metadata models: #165-#168, #170"
 route: waterway
-apps: {prs: [165, 166, 167, 168, 169, 170, 171, 172, 174, 175, 176, 177, 191]}
+apps: {prs: [165, 166, 167, 168, 170]}
 items:
   disruption: on
   disruption-dos: on

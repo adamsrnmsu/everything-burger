@@ -12,5 +12,3 @@ stages: [start, stop]
 expect_invalid: "whole number of kbit"
 config:
   vms: [{hostname: "{route.rtus[1]}", interface: 0, rate: "1.0005 mbit"}]
-requires:
-  apps_prs: [176]

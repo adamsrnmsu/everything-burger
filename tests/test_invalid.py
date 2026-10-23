@@ -153,11 +153,12 @@ def test_verify_fails_a_validator_that_crashes(settings, monkeypatch):
     assert row.verdict == "FAIL"
 
 
-def test_every_expect_invalid_item_is_validate_only_and_names_its_pr(settings):
+def test_every_expect_invalid_item_is_validate_only(settings):
+    # once the PR that adds a rejection merges, the item needs no apps_prs: main rejects it
     items = [i for i in all_items(settings) if i.expect_invalid]
     assert {i.name for i in items} >= {"vmstats-bad-name", "qos-bad-rate", "helics-no-broker"}
     for i in items:
-        assert i.routes == [] and i.requires.get("apps_prs"), i.name
+        assert i.routes == [], i.name
         assert not i.verify, f"{i.name}: expect_invalid items run nothing, so verify is dead"
 
 

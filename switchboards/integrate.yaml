@@ -1,17 +1,11 @@
 # Named `integrate`, not `integration`: ebwes-integration is 17 characters, over
 # phenix's 15-character experiment name limit.
-# The tree main will hold once the open phenix-apps PRs merge in order A:
-# adamsrnmsu/sceptre-phenix-apps `integration` = upstream main (14d7b31, with
-# #158 #159 #161 #163 #164 #173 #192 merged) plus the merge commits of #191 #194
-# #155 #165 #166 #167 #168 #169 #170 #171 #172 #174 #175 #176 #177 #195, in that
-# order, each conflict resolved once and mypy-clean; head d78234b (v6: rebuilt on
-# main c95fd35 after #155 #174 #191 #199 merged; the 13 remaining PRs, squashed)
-# (docs/integration-notes.md records every resolution). This is the pre-merge
-# check for order A: if it passes, merging the PRs in that order gives this tree.
-#
-# The branch goes stale when a PR head moves or upstream main advances: rebuild
-# it, push it, and run `./burger sync integrate` again. `burger prs` flags a
-# new branch head since sync, but cannot see that a PR moved.
+# Upstream main plus every open phenix-apps PR with code (#165 iperf, #166 rtds,
+# #167 pcap, #168 tcpdump, #170 ssh), merged by burger at sync. PRs no longer
+# edit CHANGELOG.md (releasaurus generates it), so they merge with each other
+# cleanly and no hand-built integration branch is needed. If this passes, the
+# open PRs can merge in any order. When one merges, drop it from `prs`. When
+# all have merged, this board is the same as `main`.
 #
 # Items are the union of the metadata, harden, iperf, base and cc-empty boards
 # on waterway (soap-only items such as provider's are left out: one route per
@@ -30,11 +24,9 @@
 # No two items share a component name, so nothing else had to be chosen.
 #
 # bennu is stock: no included item needs a bennu PR.
-about: "order A: all open phenix-apps PRs merged on the integration branch"
+about: "main + every open phenix-apps PR (#165-#168, #170) together"
 route: waterway
-apps:
-  branch: integration
-  contains: [191, 194, 155, 165, 166, 167, 168, 169, 170, 171, 172, 174, 175, 176, 177, 195]
+apps: {prs: [165, 166, 167, 168, 170]}
 items:
   disruption: on
   disruption-dos: on

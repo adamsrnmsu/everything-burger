@@ -1,7 +1,6 @@
-# #195 ExperimentBase: topology lookups and the minimega connection move out of
-# AppBase and ComponentBase into one shared class, and the apps and components
-# switch to its extract_node_ip, require_node and extract_node_os_type. The
-# changed paths are the ones every run uses:
+# ExperimentBase (#195, merged 2026-10-23) on main: topology lookups and the
+# minimega connection live in one shared class that every app and component uses.
+# The paths every run takes:
 #   - each cc health exec reads the node's os_type (extract_node_os_type), the
 #     Windows nodes and the router included;
 #   - vmstats with no `vms` walks every node's os_type and logs the Windows
@@ -10,15 +9,12 @@
 #     shared mm property;
 #   - mgmt_tap and mirror are AppBase apps (add_* on the shared lookups);
 #   - helics resolves its root broker with extract_node_ip and the reverse
-#     extract_node_hostname_for_ip (new item).
-# #195 conflicts with #164, #165, #175 and #191 (disruption.py, iperf.py,
-# vmstats README, test_utils.py), and with #192 and #194 in test_utils.py, so
-# the models those PRs add are not on this board and iperf runs on `iperf`
-# without it. The error paths (a missing helics broker, null networks) stop the
-# experiment before SCORCH runs; #195's own tests cover them.
-about: "#195 ExperimentBase lookups in apps and components"
+#     extract_node_hostname_for_ip.
+# The error paths (a missing helics broker, null networks) stop the experiment
+# before SCORCH runs; helics-no-broker checks the first offline.
+about: "ExperimentBase lookups in apps and components (main)"
 route: waterway
-apps: {prs: [195]}
+apps: {prs: []}
 items:
   disruption: on
   pcap: on

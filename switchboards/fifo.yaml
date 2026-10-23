@@ -1,12 +1,12 @@
-# bennu #66: the simulink provider's updates FIFO holds a whole batched WRITE.
-# One 1000-tag WRITE from rtu-1 must ACK and provider.log must show no FIFO
-# error. This board is meant to FAIL on stock bennu (drop the bennu: block):
-# the 64 KiB pipe fills at the 257th record.
-about: "bennu #66: one batched WRITE fits the simulink provider's FIFO (fails on stock bennu)"
+# The simulink provider's updates FIFO holds a whole batched WRITE (bennu #66,
+# merged): one 1000-tag WRITE from rtu-1 must ACK and provider.log must show no
+# FIFO error. Builds bennu from main; on a bennu older than #66 (stock
+# bennu.qc2 images may be) the 64 KiB pipe fills at the 257th record and this fails.
+about: "one batched WRITE fits the simulink provider's FIFO (bennu main)"
 route: waterway
 apps: {prs: []}
 bennu:
-  pr: 66
+  branch: main
   install: [deb]
 # The bennu items give it the waterway health run, which also waits out VM boot
 # (--settle), so the provider is up before the WRITE.

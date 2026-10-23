@@ -11,5 +11,3 @@ stages: [start, stop]
 expect_invalid: "String should match pattern"
 config:
   vms: ["{route.rtus[0]}#1"]
-requires:
-  apps_prs: [175]

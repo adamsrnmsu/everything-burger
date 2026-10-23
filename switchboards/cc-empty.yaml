@@ -1,19 +1,13 @@
-# #194: cc commands that print nothing return "" instead of None, so a
-# validator on one no longer crashes the cc component (#186). Still needed:
-# upstream main's mm_exec_wait sets stdout and stderr to None (the header-line
-# parsing of 2fdd62f/89b2e60, #157 and #183, fixed something else).
-# Run it once with `prs: []` to see the crash on main.
+# cc commands that print nothing return "" instead of None (#194, merged
+# 2026-10-23), so a validator on one no longer crashes the cc component (#186).
+# A regression check on main; a main older than #194 crashes here.
 #
 # cc-output-parsing is #183's failure case (stderr before stdout, '/' and ':'
-# in stdout). #183 merged upstream on 2026-10-21, so it runs here as a
-# regression check on main; the bennu items give the waterway health run,
+# in stdout), also on main. The bennu items give the waterway health run,
 # which also waits out VM boot.
-#
-# #194 conflicts with #191, #192 and #195 in common/tests/test_utils.py (each
-# appends tests at the end of it), so it has its own board.
-about: "#194 empty cc output, validator on a silent command"
+about: "empty cc output, validator on a silent command (main)"
 route: waterway
-apps: {prs: [194]}
+apps: {prs: []}
 items:
   cc-empty-output: on
   cc-output-parsing: on

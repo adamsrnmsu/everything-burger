@@ -16,4 +16,3 @@ config:
   elasticsearch: {verify: true, server: "http://172.16.1.2:9200", index: burger}
 requires:
   apps: [apps/mgmt_tap]
-  apps_prs: [177]

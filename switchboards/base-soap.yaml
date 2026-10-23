@@ -1,15 +1,13 @@
-# #195 ExperimentBase on soap, where collector and the providers run. The
+# ExperimentBase on soap, where collector and the providers run. The
 # collector's stop stage reads the experiment annotations with get_annotation,
 # looks nodes up with require_node and extract_node_os_type, and skips nodes
 # whose network is null; rtds and providerdata run under the shared mm and
 # lookups; vmstats with no `vms` takes every Linux node by os_type.
-# #166, #169 and #177 are the models rtds, collector and providerdata need.
-# #195 merges cleanly over them but #169 breaks #195's own collector
-# annotation test (the stub lacks _disruption_metadata); runtime is unaffected.
-# Disruption runs without #164, which conflicts with #195 in disruption.py.
-about: "#195 + #166 #169 #177 collector, rtds, providerdata on soap"
+# collector (#169), providerdata (#177) and ExperimentBase (#195) are on main;
+# rtds still needs #166.
+about: "collector, rtds, providerdata on soap (main + #166)"
 route: soap
-apps: {prs: [166, 169, 177, 195]}
+apps: {prs: [166]}
 items:
   rtds: on
   providerdata: on
