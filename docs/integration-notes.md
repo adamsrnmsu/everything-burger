@@ -127,6 +127,11 @@ minimega expands a bare `$name` in an inline cc command (`cc exec`, `cc backgrou
 `$@`, `$pid`, `$p`, `$n` all arrive empty. Command substitution `$(...)` survives. Anything that needs shell variables
 goes in a script file: write it under root_dir/exp_name, `cc send` it (`utils.mm_cc_send_wait`), then run
 `bash /tmp/miniccc/files/<exp>/<name>` (as cc.py, tcpdump and iperf do).
+This is minimega's preprocessor, not a bug: `cliPreprocess` (`cmd/minimega/cli.go`) runs `os.ExpandEnv` on every
+string argument, with the minimega daemon's environment. Prefixing a command with `.preprocess false` turns it off for
+that command (minimega 2.4 release notes), which is the lighter fix where a script file is overkill.
+Upstream issues filed 10-23: sandia-minimega/minimega#1685 (empty argument dropped under a namespace) and
+sandialabs/sceptre-phenix-apps#201 (`mm_wait_for_cmd` waits forever on a lost once command).
 
 ## Rule: never reset a minimega setting with `""`
 phenix runs commands under `namespace <ns>`; minimega rebuilds the subcommand's text with `inputItems.String()`, which
