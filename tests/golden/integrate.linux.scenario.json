@@ -126,7 +126,7 @@
       {
         "metadata": {
           "subnet": "172.16.0.0/16",
-          "vlan": "mgmt"
+          "vlan": "MGMT"
         },
         "name": "mgmt_tap"
       },
@@ -369,9 +369,11 @@
             {
               "metadata": {
                 "add_client_args": "--omit 2",
+                "bandwidth": 10000000,
                 "iperf_paths": {
-                  "linux": "/usr/bin/iperf3"
+                  "linux": "/usr/local/bin/iperf3-3.15"
                 },
+                "iperf_version": "3.15",
                 "run_duration": 20,
                 "servers": [
                   {

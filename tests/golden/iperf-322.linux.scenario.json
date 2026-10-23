@@ -195,6 +195,7 @@
             {
               "metadata": {
                 "add_client_args": "--omit 2",
+                "bandwidth": 10000000,
                 "iperf_paths": {
                   "linux": "/usr/local/bin/iperf3-3.22"
                 },
