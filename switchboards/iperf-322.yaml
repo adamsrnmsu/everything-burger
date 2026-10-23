@@ -1,6 +1,6 @@
 # #165 iperf 3.22 (a static binary burger builds and injects) between two
 # waterway RTUs on the ICS network, with #191's cc filter helper. Same route and
-# items as `iperf`, which keeps the jammy 3.9 debs.
+# items as `iperf`, which runs the low end of #165's range, 3.15.
 about: "#165 iperf 3.22 + #191, rtu-2 to rtu-1"
 route: waterway
 apps: {prs: [165, 191]}

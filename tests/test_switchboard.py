@@ -60,8 +60,8 @@ def test_required_app_follows_its_requirer(settings):
 
 def test_requires_aggregate(settings):
     r = resolve(load_switchboard("iperf", settings), settings)
-    assert r.requires.debs_packages == ["iperf3", "libiperf0", "libsctp1"]
-    assert r.requires.debs_nodes == ["rtu-1", "rtu-2"]
+    assert r.requires.iperf_static == "3.15"
+    assert r.requires.iperf_nodes == ["rtu-1", "rtu-2"]
     assert resolve(load_switchboard("harden", settings), settings).requires.monitor
 
 
@@ -206,4 +206,4 @@ def test_iperf_322_requires_and_config(settings):
     cfg = next(i for i in r.items if i.name == "iperf-322").config
     assert cfg["iperf_version"] == "3.22"
     assert cfg["iperf_paths"] == {"linux": "/usr/local/bin/iperf3-3.22"}
-    assert resolve(load_switchboard("iperf", settings), settings).requires.iperf_static is None
+    assert resolve(load_switchboard("iperf", settings), settings).requires.iperf_static == "3.15"

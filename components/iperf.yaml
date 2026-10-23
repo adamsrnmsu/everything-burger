@@ -2,8 +2,11 @@ name: iperf
 kind: scorch
 type: iperf
 about: >
-  iperf between two RTUs on the ICS network. bennu.qc2 has no iperf3, so the
-  jammy packages are installed into both VMs at boot.
+  iperf 3.15 between two RTUs on the ICS network. bennu.qc2 has no iperf3 and
+  the jammy debs carry 3.9, which the component cannot drive (3.9 has no server
+  --idle-timeout and calls client --pidfile server-only), so burger builds a
+  static 3.15 (esnet/iperf tag 3.15, the low end of the 3.15-3.22 range #165
+  claims) and injects it into both VMs as /usr/local/bin/iperf3-3.15.
 routes: [waterway]
 stages: [configure, start, stop, cleanup]
 config:
@@ -11,16 +14,15 @@ config:
   # #165 allowlists these (letters, digits, space and _.,:=@%/+-); --omit 2
   # drops the first two seconds of every client's report.
   add_client_args: "--omit 2"
-  iperf_paths: {linux: /usr/bin/iperf3}
+  iperf_version: "3.15"
+  iperf_paths: {linux: /usr/local/bin/iperf3-3.15}
   servers:
     - hostname: "{route.rtus[0]}"
       port_range_start: 5201
       clients: [{hostname: "{route.rtus[1]}"}]
 verify:
   # the results come from the iperf3 this board injects, not some other one
-  - json: {glob: "iperf_client-*.json", field: start.version, matches: '^iperf 3\.9\b'}
+  - json: {glob: "iperf_client-*.json", field: start.version, matches: '^iperf 3\.15\b'}
 requires:
-  debs:
-    packages: [iperf3, libiperf0, libsctp1]
-    nodes: "{route.rtus}"
+  iperf_static: {version: "3.15", nodes: "{route.rtus}"}
   apps_prs: [165]
