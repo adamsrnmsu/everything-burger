@@ -264,6 +264,17 @@
             "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
             "permissions": "0755",
             "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          },
+          {
+            "description": "burger: the round's packages",
+            "dst": "/root/burger-debs/",
+            "src": "/phenix/burger/x/debs/"
+          },
+          {
+            "description": "burger: install the round's packages",
+            "dst": "/etc/phenix/startup/02-burger-debs.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/02-burger-debs.sh"
           }
         ],
         "network": {

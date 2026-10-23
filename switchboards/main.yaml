@@ -27,6 +27,8 @@ items:
   vmstats-bad-name: on
   qos-bad-rate: on
   erspan: on
+  snort-conf: on
+  snort: on
   cc-empty-output: on
   cc-output-parsing: on
   apps/mgmt-vlan-alias: on

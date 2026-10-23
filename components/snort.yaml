@@ -1,0 +1,30 @@
+name: snort
+kind: scorch
+type: snort
+about: >
+  Runs Snort 2.9 (jammy's snort package, injected) on the first RTU, sniffing its
+  ICS interface while the field devices are polled, and checks it alerted on the
+  Modbus traffic and the component turned its stats into JSON. snort-conf
+  writes the config. The interface is the topology's name for it (IF0): snort
+  cannot sniff `any` (it does not decode the Linux cooked link type).
+routes: [waterway]
+stages: [configure, start, stop, cleanup]
+config:
+  hostname: "{route.rtus[0]}"
+  sniffInterface: IF0
+  # stop waits this long before stopping snort: the polls it alerts on
+  waitDuration: 20
+verify:
+  - files: {glob: "alert", min: 1, min_bytes: 1}
+  - log: {glob: "alert", contains: "burger modbus"}
+  - files: {glob: "snort-stats.jsonl", min: 1}
+requires:
+  apps: [snort-conf]
+  # jammy's snort and everything it pulls onto a minimal ubuntu:22.04
+  debs:
+    packages: [snort, snort-common, snort-common-libraries, snort-rules-default, libdaq2,
+      libdumbnet1, libluajit-5.1-2, libluajit-5.1-common, libnetfilter-queue1, libnfnetlink0,
+      libmnl0, libpcap0.8, libdbus-1-3, libnghttp2-14, net-tools, libpopt0, logrotate, rsyslog,
+      libestr0, libfastjson4, ucf, cron, perl, perl-modules-5.34, libperl5.34, libgdbm6,
+      libgdbm-compat4]
+    nodes: ["{route.rtus[0]}"]

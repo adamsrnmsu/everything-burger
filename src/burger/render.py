@@ -87,6 +87,8 @@ def miniccc_injections(stage_dir):
 DEBS_STARTUP = """#!/bin/bash
 # everything-burger: install the round's packages
 # find: works whether phēnix copies the directory's contents or the directory
+# noninteractive: a package's debconf questions (snort's interface, say) take their defaults
+export DEBIAN_FRONTEND=noninteractive
 find /root/burger-debs -name '*.deb' -exec dpkg -i {} + >/var/log/burger-debs.log 2>&1
 """
 

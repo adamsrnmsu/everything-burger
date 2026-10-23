@@ -41,7 +41,7 @@ this.
 | `mtu` | upstream `main` | #67 deb and pybennu wheel | soap: `publish-fragments` captures the PyPower provider and fails on any IP fragment; `disruption` only holds the run open. Meant to fail on stock bennu when a publish fills a chunk |
 | `base-soap` | #166 (#169, #177, #195 merged) | stock `bennu.qc2` | ExperimentBase on soap: rtds, providerdata, collector (annotations, node lookups), disruption and vmstats' default VM list |
 | `integrate` | #165, #166, #167, #168, #170: every open apps PR with code, merged by burger | stock `bennu.qc2` | `main`'s items plus the ones that still need an open PR (iperf, pcap-alias, tcpdump-alias, and #167/#168's per-VM pcap filter and JSON conversion), in one run on waterway. If it passes, the open PRs can merge in any order; drop each from `prs` as it merges |
-| `main` | upstream `main`, no PRs | stock `bennu.qc2` | the persistent check: every item burger covers that runs on main (disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos, erspan, cc, mgmt_tap, mirror, helics, and the offline rejections) in one run on waterway. Run it after merges to see the state of main; items join it when their PR merges |
+| `main` | upstream `main`, no PRs | stock `bennu.qc2` | the persistent check: every item burger covers that runs on main (disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos, erspan, snort, cc, mgmt_tap, mirror, helics, and the offline rejections) in one run on waterway. Run it after merges to see the state of main; items join it when their PR merges |
 
 Models no route can run are validated offline by `phenix-scorch-validate`
 (items with `routes: []` are validate-only).

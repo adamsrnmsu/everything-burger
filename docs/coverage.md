@@ -34,7 +34,8 @@ that still needs an open PR runs on `integrate` (and its PR's board) and joins
 | ssh | `ssh` over `mgmt_tap` | `ssh` until #170 merges | |
 | rtds | `rtds` (lifecycle on soap; full on a site RTDS rig) | (`provider`, `rtds`) until #166 merges | live RTDS hardware |
 | otsim, ignition, caldera, protonuke, scale, wind_turbine, wireguard apps | none | | everything (beads under burger-d90) |
-| art, caldera, ettercap, kafka, opcexport, snort, trafficgen components | none | | everything (snort and ettercap next) |
+| snort | `snort` on rtu-1's ICS interface with `snort-conf`'s config: must alert on Modbus and write stats (jammy's snort debs injected) | `main` | not yet run live; the guest interface name `IF0` is an assumption the first run checks |
+| art, caldera, ettercap, kafka, opcexport, trafficgen components | none | | everything (ettercap: the jammy debs are blocked by this machine's AV; beads under burger-d90) |
 
 ## Open PRs
 

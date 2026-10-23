@@ -1,0 +1,29 @@
+name: snort-conf
+kind: scorch
+type: cc
+about: >
+  Writes the snort.conf the snort item runs with on the first RTU, at configure.
+  The snort component collects /var/log/snort/alert, snort.log and snort.stats
+  and fails if one is missing, but jammy's stock config writes none of them, so
+  this config does: a full alert file, an unstamped unified2 log, perfmonitor
+  stats, and one rule that alerts on Modbus to the ICS port. Checksum checks are
+  off because virtio offloads them. Also stops the snort service the package
+  starts, so only the component's snort runs.
+routes: [waterway]
+stages: [configure]
+config:
+  vms:
+    - hostname: "{route.rtus[0]}"
+      configure:
+        # No $ anywhere: minimega expands bare $name, SCORCH templating eats ${...}.
+        - type: exec
+          wait: true
+          args: |
+            systemctl disable --now snort >/dev/null 2>&1 || true
+            cat > /etc/snort/snort.conf <<'CONF'
+            config checksum_mode: none
+            preprocessor perfmonitor: time 5 file /var/log/snort/snort.stats pktcnt 1
+            output alert_full: alert
+            output log_unified2: filename snort.log, limit 128, nostamp
+            alert tcp any any -> any {route.ics_port} (msg:"burger modbus"; sid:1000001; rev:1;)
+            CONF
