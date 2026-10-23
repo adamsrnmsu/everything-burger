@@ -102,6 +102,13 @@ the fixes below (all NEW, all in the merge commit) are mechanical Optional/typin
   the launcher script shell-quotes both.
 - #172: CHANGELOG only (union). #165: no conflict.
 
+## v5 (10-23): #165 README only
+- Head 4a2a126 = 045cb78 + merge of #165 582203d (README: iperf3 must be 3.10+). No code change, no conflict.
+- The integrate iperf stop failure on v4 was not the branch: the `iperf` item ran jammy's iperf3 3.9, which has no
+  server `--idle-timeout` and refuses client `--pidfile` ("some option you are trying to set is server only"), so the
+  client exited before writing `/iperf_client-*.json`. Reproduced in a jammy container. The item now injects a static
+  3.15 (burger 8da546c).
+
 ## Rule: no bare `$var` in an inline cc command
 minimega expands a bare `$name` in an inline cc command (`cc exec`, `cc background`) before it reaches the VM: `$$`,
 `$@`, `$pid`, `$p`, `$n` all arrive empty. Command substitution `$(...)` survives. Anything that needs shell variables
