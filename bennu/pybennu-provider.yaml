@@ -10,7 +10,8 @@ verify:
   - process: {host: "{route.provider}", name: pybennu-power-solver}
   - vm:
       host: "{route.provider}"
-      # #59: sceptre-start.sh runs start -d, so loguru writes DEBUG here.
+      # #59: sceptre-start.sh runs start -d (daemonize, not debug); the daemon
+      # logs INFO lines such as "Daemonized as PID" here.
       run: "grep -Eq ' \\| (INFO|DEBUG) +\\| ' /var/log/bennu/pybennu-power-solver.log"
   - vm:
       host: "{route.provider}"
