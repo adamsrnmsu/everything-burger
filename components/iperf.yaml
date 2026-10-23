@@ -16,6 +16,9 @@ config:
     - hostname: "{route.rtus[0]}"
       port_range_start: 5201
       clients: [{hostname: "{route.rtus[1]}"}]
+verify:
+  # the results come from the iperf3 this board injects, not some other one
+  - json: {glob: "iperf_client-*.json", field: start.version, matches: '^iperf 3\.9\b'}
 requires:
   debs:
     packages: [iperf3, libiperf0, libsctp1]
