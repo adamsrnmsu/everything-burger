@@ -4,8 +4,8 @@
 # adamsrnmsu/sceptre-phenix-apps `integration` = upstream main (14d7b31, with
 # #158 #159 #161 #163 #164 #173 #192 merged) plus the merge commits of #191 #194
 # #155 #165 #166 #167 #168 #169 #170 #171 #172 #174 #175 #176 #177 #195, in that
-# order, each conflict resolved once and mypy-clean; head 4a2a126 (v5: v4's en18
-# fixes to #165 #167 #168 #172, plus #165's iperf3 3.10+ README note)
+# order, each conflict resolved once and mypy-clean; head d78234b (v6: rebuilt on
+# main c95fd35 after #155 #174 #191 #199 merged; the 13 remaining PRs, squashed)
 # (docs/integration-notes.md records every resolution). This is the pre-merge
 # check for order A: if it passes, merging the PRs in that order gives this tree.
 #

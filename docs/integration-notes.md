@@ -109,6 +109,19 @@ the fixes below (all NEW, all in the merge commit) are mechanical Optional/typin
   client exited before writing `/iperf_client-*.json`. Reproduced in a jammy container. The item now injects a static
   3.15 (burger 8da546c).
 
+## v6 (10-23): rebuilt on main c95fd35
+- cmulk merged #155, #174, #191 and #199. Head d78234b = c95fd35 + merges of #194 #165 #166 #167 #168 #169 #170
+  #171 #172 #175 #176 #177 #195 (each rebased on c95fd35 and squashed to one commit) + one test fix. Tree = v5 + #199,
+  CHANGELOG aside. Suite 1754 passed; ruff, format, codespell, vulture, mypy clean.
+- Rebases: #167 pcap.py/README/test_pcap, #168 tcpdump.py, #170 ssh.py (auto-merged to #155's old-style
+  `self.metadata.get`), #171 erspan.py and #172 mm.py/README/test_mm/test_command_helpers took the integration
+  resolutions; #195 needed `import re` back in scorch/app.py.
+- PR-vs-PR conflicts still open: #195 vs #165 (iperf.py, plus test_iperf.py: missing node raises "node X does not
+  exist"), #195 vs #175 (vmstats README). Whichever merges second needs a rebase.
+- The main clone's .git/config has `merge.union.driver true`, a no-op driver that shadows git's built-in union and
+  keeps only "ours". With `merge=union` set it silently dropped every PR's CHANGELOG lines; resolve CHANGELOG with
+  `git merge-file --union` instead.
+
 ## Rule: no bare `$var` in an inline cc command
 minimega expands a bare `$name` in an inline cc command (`cc exec`, `cc background`) before it reaches the VM: `$$`,
 `$@`, `$pid`, `$p`, `$n` all arrive empty. Command substitution `$(...)` survives. Anything that needs shell variables
