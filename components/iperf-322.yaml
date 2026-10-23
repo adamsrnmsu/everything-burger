@@ -10,6 +10,9 @@ stages: [configure, start, stop, cleanup]
 config:
   run_duration: 20
   add_client_args: "--omit 2"
+  # 10 Mbit/s (--bitrate). Uncapped TCP runs at link rate, ~25 GB in 20 s,
+  # and the pcap item's match-all capture on rtu-2 records all of it.
+  bandwidth: 10000000
   iperf_version: "3.22"
   iperf_paths: {linux: /usr/local/bin/iperf3-3.22}
   servers:

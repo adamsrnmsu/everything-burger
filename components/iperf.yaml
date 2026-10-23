@@ -14,6 +14,9 @@ config:
   # #165 allowlists these (letters, digits, space and _.,:=@%/+-); --omit 2
   # drops the first two seconds of every client's report.
   add_client_args: "--omit 2"
+  # 10 Mbit/s (--bitrate). Uncapped TCP runs at link rate, ~25 GB in 20 s,
+  # and the pcap item's match-all capture on rtu-2 records all of it.
+  bandwidth: 10000000
   iperf_version: "3.15"
   iperf_paths: {linux: /usr/local/bin/iperf3-3.15}
   servers:
