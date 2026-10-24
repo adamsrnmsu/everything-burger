@@ -237,9 +237,16 @@
             },
             {
               "metadata": {
+                "convert_to_json": true,
                 "vms": [
                   {
+                    "filter": "not tcp port 502 and not port 5201",
                     "hostname": "rtu-1",
+                    "interface": 0
+                  },
+                  {
+                    "filter": "not port 5201",
+                    "hostname": "rtu-2",
                     "interface": 0
                   }
                 ]
@@ -251,7 +258,7 @@
               "metadata": {
                 "vms": [
                   {
-                    "filter": "tcp port 502 or ip proto 47",
+                    "filter": "ip proto 47 and less 600 or tcp port 502",
                     "hostname": "monitor",
                     "iface": "any"
                   }
@@ -361,6 +368,30 @@
             },
             {
               "metadata": {
+                "add_client_args": "--omit 2",
+                "bandwidth": 10000000,
+                "iperf_paths": {
+                  "linux": "/usr/local/bin/iperf3-3.15"
+                },
+                "iperf_version": "3.15",
+                "run_duration": 20,
+                "servers": [
+                  {
+                    "clients": [
+                      {
+                        "hostname": "rtu-2"
+                      }
+                    ],
+                    "hostname": "rtu-1",
+                    "port_range_start": 5201
+                  }
+                ]
+              },
+              "name": "iperf",
+              "type": "iperf"
+            },
+            {
+              "metadata": {
                 "vms": [
                   {
                     "configure": [
@@ -436,10 +467,12 @@
               "cleanup": [
                 "disruption",
                 "pipe",
+                "iperf",
                 "snort"
               ],
               "configure": [
                 "disruption",
+                "iperf",
                 "snort-conf",
                 "snort"
               ],
@@ -452,6 +485,7 @@
                 "hoststats",
                 "vmstats",
                 "qos",
+                "iperf",
                 "snort",
                 "cc-empty-output",
                 "cc-output-parsing",
@@ -464,6 +498,7 @@
                 "hoststats",
                 "vmstats",
                 "qos",
+                "iperf",
                 "snort"
               ]
             },

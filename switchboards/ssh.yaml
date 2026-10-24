@@ -1,13 +1,16 @@
-# #170 ssh into a waterway RTU over mgmt_tap. Needs BURGER_VM_PASSWORD, the
-# root password of the bennu.qc2 image; it lands in the rendered scenario.
-about: "#170 ssh to rtu-1 over mgmt_tap"
+# ssh (#170, merged) into a waterway RTU over mgmt_tap. Needs BURGER_VM_PASSWORD,
+# any lab-only value: ssh-password sets root's password to it at configure, so
+# the image's own password does not matter. It lands in the rendered scenario.
+about: "ssh to rtu-1 over mgmt_tap"
 route: waterway
-apps: {prs: [170]}
+apps: {prs: []}
 items:
+  ssh-password: on
   ssh: on
   bennu/field-device: on
   bennu/simulink-provider: on
   bennu/modbus-polled: on
 runs:
   - name: ssh
+    configure: [ssh-password]
     start: [ssh]

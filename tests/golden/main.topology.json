@@ -275,6 +275,12 @@
             "dst": "/etc/phenix/startup/02-burger-debs.sh",
             "permissions": "0755",
             "src": "/phenix/burger/x/02-burger-debs.sh"
+          },
+          {
+            "description": "burger: static iperf3 3.15",
+            "dst": "/usr/local/bin/iperf3-3.15",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/iperf3-3.15"
           }
         ],
         "network": {
@@ -325,6 +331,12 @@
             "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
             "permissions": "0755",
             "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          },
+          {
+            "description": "burger: static iperf3 3.15",
+            "dst": "/usr/local/bin/iperf3-3.15",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/iperf3-3.15"
           }
         ],
         "network": {

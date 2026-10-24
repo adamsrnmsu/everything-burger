@@ -28,4 +28,3 @@ verify:
   - json: {glob: "iperf_client-*.json", field: start.version, matches: '^iperf 3\.15\b'}
 requires:
   iperf_static: {version: "3.15", nodes: "{route.rtus}"}
-  apps_prs: [165]

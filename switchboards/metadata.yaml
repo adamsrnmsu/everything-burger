@@ -1,5 +1,5 @@
-# #160 metadata models still open: #165 iperf, #166 rtds, #167 pcap, #168 tcpdump,
-# #170 ssh, on main and stock bennu (the rest of #165-#177 and #191 are merged).
+# #160 metadata models still open: #166 rtds and #168 tcpdump, on main and stock
+# bennu (the rest of #165-#177 and #191 are merged).
 # Models no route can run (disruption-dos) are checked offline by
 # phenix-scorch-validate; the rtds, providerdata, collector, iperf and ssh models
 # are validated on their own boards. pcap-alias and tcpdump-alias do the same
@@ -11,9 +11,9 @@
 # Modbus. mm also captures one VM interface with a filter, stops only that
 # interface and converts it. tcpdump converts to JSON. Any logger.error line in
 # a status file fails the item, since these paths log and carry on.
-about: "open #160 metadata models: #165-#168, #170"
+about: "open #160 metadata models: #166, #168"
 route: waterway
-apps: {prs: [165, 166, 167, 168, 170]}
+apps: {prs: [166, 168]}
 items:
   disruption: on
   disruption-dos: on

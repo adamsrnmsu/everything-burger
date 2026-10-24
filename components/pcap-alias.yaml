@@ -12,5 +12,3 @@ stages: [start, stop]
 config:
   vms: [{hostname: "{route.rtus[0]}", interface: 0}]
   convertToJSON: true
-requires:
-  apps_prs: [167]

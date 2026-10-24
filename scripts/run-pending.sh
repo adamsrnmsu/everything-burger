@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run the boards with no live evidence yet: opendss (bennu #64), mtu (bennu #67),
-# ssh (phenix-apps #170). --iperf-322 adds iperf-322 (#165 on iperf3 3.22).
+# ssh. --iperf-322 adds iperf-322 (iperf3 3.22).
 # A failing board is recorded, brought down, and the next one still runs.
 set -u
 cd "$(dirname "$0")/.." || exit 1

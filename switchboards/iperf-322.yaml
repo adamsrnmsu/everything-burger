@@ -1,9 +1,9 @@
-# #165 iperf 3.22 (a static binary burger builds and injects) between two
+# iperf 3.22 (a static binary burger builds and injects) between two
 # waterway RTUs on the ICS network. Same route and items as `iperf`, which runs
-# the low end of #165's range, 3.15.
-about: "#165 iperf 3.22, rtu-2 to rtu-1"
+# the low end of the range #165 claims, 3.15.
+about: "iperf 3.22, rtu-2 to rtu-1"
 route: waterway
-apps: {prs: [165]}
+apps: {prs: []}
 items:
   iperf-322: on
   disruption: on

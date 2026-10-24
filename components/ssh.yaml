@@ -15,4 +15,3 @@ config:
 requires:
   apps: [apps/mgmt_tap]
   env: [BURGER_VM_PASSWORD]
-  apps_prs: [170]

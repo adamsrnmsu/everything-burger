@@ -32,8 +32,8 @@ def test_resolve_reports_all_unset_env(settings, monkeypatch):
 
 
 def test_resolve_missing_pr(settings):
-    with pytest.raises(BurgerError, match="#165"):
-        resolve(board(settings, "iperf", apps_prs=[]), settings)
+    with pytest.raises(BurgerError, match="#168"):
+        resolve(board(settings, "metadata", apps_prs=[166]), settings)
 
 
 def test_switchboard_unknown_route(settings, tmp_path):
@@ -54,7 +54,7 @@ def test_linux_only_skips_windows_items(settings):
 @pytest.mark.usefixtures("vm_password")
 def test_required_app_follows_its_requirer(settings):
     r = resolve(load_switchboard("ssh", settings), settings)
-    assert [i.name for i in r.items][:2] == ["ssh", "mgmt_tap"]
+    assert [i.name for i in r.items][:3] == ["ssh-password", "ssh", "mgmt_tap"]
     assert r.requires.env == ["BURGER_VM_PASSWORD"]
 
 
@@ -178,11 +178,11 @@ def test_bad_sources_are_burger_errors(settings, tmp_path, body, msg):
 
 def test_requires_apps_prs_resolve_against_contains(settings):
     ok = board(
-        settings, "iperf", apps_prs=[165, 191], apps_branch={"branch": "b", "remote": "fork"}
+        settings, "metadata", apps_prs=[166, 168], apps_branch={"branch": "b", "remote": "fork"}
     )
     assert resolve(ok, settings).board.apps_branch
-    with pytest.raises(BurgerError, match="#165"):
-        resolve(board(settings, "iperf", apps_prs=[], apps_branch=ok.apps_branch), settings)
+    with pytest.raises(BurgerError, match="#168"):
+        resolve(board(settings, "metadata", apps_prs=[], apps_branch=ok.apps_branch), settings)
 
 
 def test_branch_names_with_slashes_and_dots_are_fine(settings, tmp_path):
@@ -192,8 +192,8 @@ def test_branch_names_with_slashes_and_dots_are_fine(settings, tmp_path):
 
 def test_requires_message_names_prs_or_contains(settings):
     with pytest.raises(BurgerError, match=r"apps prs$"):
-        resolve(board(settings, "iperf", apps_prs=[]), settings)
-    b = board(settings, "iperf", apps_prs=[], apps_branch={"branch": "b", "remote": "fork"})
+        resolve(board(settings, "metadata", apps_prs=[]), settings)
+    b = board(settings, "metadata", apps_prs=[], apps_branch={"branch": "b", "remote": "fork"})
     with pytest.raises(BurgerError, match="apps contains"):
         resolve(b, settings)
 

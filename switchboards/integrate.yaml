@@ -1,7 +1,7 @@
 # Named `integrate`, not `integration`: ebwes-integration is 17 characters, over
 # phenix's 15-character experiment name limit.
-# Upstream main plus every open phenix-apps PR with code (#165 iperf, #166 rtds,
-# #167 pcap, #168 tcpdump, #170 ssh), merged by burger at sync. PRs no longer
+# Upstream main plus every open phenix-apps PR with code (#166 rtds, #168 tcpdump,
+# #202 snort), merged by burger at sync. PRs no longer
 # edit CHANGELOG.md (releasaurus generates it), so they merge with each other
 # cleanly and no hand-built integration branch is needed. If this passes, the
 # open PRs can merge in any order. When one merges, drop it from `prs`. When
@@ -24,9 +24,9 @@
 # No two items share a component name, so nothing else had to be chosen.
 #
 # bennu is stock: no included item needs a bennu PR.
-about: "main + every open phenix-apps PR (#165-#168, #170) together"
+about: "main + every open phenix-apps PR (#166, #168, #202) together"
 route: waterway
-apps: {prs: [165, 166, 167, 168, 170]}
+apps: {prs: [166, 168, 202]}
 items:
   disruption: on
   disruption-dos: on
@@ -58,8 +58,9 @@ overrides:
   pcap:
     config:
       vms:
-        - {hostname: rtu-1, interface: 0, filter: "not tcp port 502"}
-        - {hostname: rtu-2, interface: 0}
+        # not port 5201: iperf runs rtu-2 to rtu-1 and would fill both captures
+        - {hostname: rtu-1, interface: 0, filter: "not tcp port 502 and not port 5201"}
+        - {hostname: rtu-2, interface: 0, filter: "not port 5201"}
       convert_to_json: true
     verify:
       - log: {glob: "*.json", lacks: "\\] ERROR :"}
@@ -70,7 +71,11 @@ overrides:
       - pcap: {glob: "rtu-2-*.pcap", tcp_port: 502, min_packets: 10, windows: true}
   tcpdump:
     config:
-      vms: [{hostname: monitor, iface: any, filter: "tcp port 502 or ip proto 47"}]
+      # iperf's mirrored traffic arrives in GRE too, and its inner port is out of
+      # BPF's reach; its full-size segments are not: Modbus-in-GRE is small.
+      # No parens: and/or are left-associative, so this is (gre and small) or modbus.
+      # ponytail: size cut, decap or an inner-offset filter if a big GRE packet matters
+      vms: [{hostname: monitor, iface: any, filter: "ip proto 47 and less 600 or tcp port 502"}]
       convert_to_json: true
     verify:
       # a failed kill or conversion is logged as an error and the stage carries on

@@ -293,11 +293,12 @@
                 "convert_to_json": true,
                 "vms": [
                   {
-                    "filter": "not tcp port 502",
+                    "filter": "not tcp port 502 and not port 5201",
                     "hostname": "rtu-1",
                     "interface": 0
                   },
                   {
+                    "filter": "not port 5201",
                     "hostname": "rtu-2",
                     "interface": 0
                   }
@@ -311,7 +312,7 @@
                 "convert_to_json": true,
                 "vms": [
                   {
-                    "filter": "tcp port 502 or ip proto 47",
+                    "filter": "ip proto 47 and less 600 or tcp port 502",
                     "hostname": "monitor",
                     "iface": "any"
                   }

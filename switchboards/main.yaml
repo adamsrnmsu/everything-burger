@@ -2,12 +2,12 @@
 # burger covers, whatever is open. Run it after merges, or any time, to see the
 # state of main.
 #
-# Items are integrate's, minus the ones that still need an open PR: iperf (#165),
-# pcap-alias (#167) and tcpdump-alias (#168). pcap and tcpdump run with their
-# plain configs, since per-VM pcap filters and convert_to_json arrive with #167
-# and #168. When an open PR merges, move its items and overrides here from
+# Items are integrate's, minus the ones that still need an open PR:
+# tcpdump-alias (#168). tcpdump runs without convert_to_json, which arrives with
+# #168. When an open PR merges, move its items and overrides here from
 # integrate. Each override below already works on main:
-#   - tcpdump: harden's monitor VM and "tcp port 502 or ip proto 47" filter;
+#   - pcap: per-VM filters and convert_to_json (#167);
+#   - tcpdump: harden's monitor VM, Modbus + GRE;
 #   - mm: bridge + per-VM captures with conversion (#172);
 #   - vmstats: an explicit VM list (#175); qos: a delay on rtu-2 (#176).
 about: "upstream main, no PRs: every app and component burger covers"
@@ -27,6 +27,8 @@ items:
   vmstats-bad-name: on
   qos-bad-rate: on
   erspan: on
+  iperf: on
+  pcap-alias: on
   snort-conf: on
   snort: on
   cc-empty-output: on
@@ -40,9 +42,27 @@ items:
   bennu/simulink-provider: on
   bennu/modbus-polled: on
 overrides:
+  pcap:
+    config:
+      vms:
+        # not port 5201: iperf runs rtu-2 to rtu-1 and would fill both captures
+        - {hostname: rtu-1, interface: 0, filter: "not tcp port 502 and not port 5201"}
+        - {hostname: rtu-2, interface: 0, filter: "not port 5201"}
+      convert_to_json: true
+    verify:
+      - log: {glob: "*.json", lacks: "\\] ERROR :"}
+      - files: {glob: "rtu-*.pcap", min: 2}
+      - files: {glob: "*.jsonl", min: 1}
+      # rtu-1's own filter applied, and did not carry over to rtu-2
+      - python: {function: rtu1_has_no_modbus, windows: true}
+      - pcap: {glob: "rtu-2-*.pcap", tcp_port: 502, min_packets: 10, windows: true}
   tcpdump:
     config:
-      vms: [{hostname: monitor, iface: any, filter: "tcp port 502 or ip proto 47"}]
+      # iperf's mirrored traffic arrives in GRE too, and its inner port is out of
+      # BPF's reach; its full-size segments are not: Modbus-in-GRE is small.
+      # No parens: and/or are left-associative, so this is (gre and small) or modbus.
+      # ponytail: size cut, decap or an inner-offset filter if a big GRE packet matters
+      vms: [{hostname: monitor, iface: any, filter: "ip proto 47 and less 600 or tcp port 502"}]
     # the mirror delivers GRE: count it as well as plain Modbus, like the filter
     verify:
       - files: {glob: "*.pcap", min: 1}
