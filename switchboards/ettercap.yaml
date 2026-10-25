@@ -1,17 +1,22 @@
-# ettercap ARP MITM on the dedicated `mitm` topology. kali (10.1.1.200) sits on
-# the ICS segment with rtu-1, rtu-2 and the router, and ARP-poisons rtu-1 and
-# the router (10.1.1.1) so the OPC server's Modbus polls to rtu-1 route through
-# kali. mitm-capture sniffs kali's ICS interface for Modbus: kali is not a
-# Modbus endpoint, so any port-502 packets there are the intercepted polls.
+# ettercap ARP MITM on waterway. The ettercap item's requires.attacker injects
+# a kali node (10.1.1.200) onto the ICS segment with rtu-1, rtu-2 and the
+# router; ettercap ARP-poisons rtu-1 and the router (10.1.1.1) so the OPC
+# server's Modbus polls to rtu-1 route through kali. mitm-capture sniffs kali's
+# ICS interface for Modbus: kali is not a Modbus endpoint, so any port-502
+# packets there are the intercepted polls.
 #
-# Its own topology keeps this off waterway: ARP MITM would disturb the Modbus
-# the other boards' items rely on. Uses the ettercap component from #203.
+# This is its own board, so the MITM never disturbs the Modbus the other
+# boards' items rely on. Uses the ettercap component from #203.
 about: "ettercap MITM on the ICS segment; kali intercepts OPC->rtu-1 Modbus"
-route: mitm
+route: waterway
 apps: {prs: [203]}
 items:
   ettercap: on
   mitm-capture: on
+  # confirm the RTUs actually serve Modbus, so there is traffic to intercept
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
 runs:
   - name: mitm
     start: [mitm-capture, ettercap]

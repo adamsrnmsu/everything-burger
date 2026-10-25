@@ -2,11 +2,14 @@ name: ettercap
 kind: scorch
 type: ettercap
 about: >
-  Runs ettercap on the kali attacker to ARP man-in-the-middle rtu-1 and the
-  ICS router (10.1.1.1), so the OPC server's Modbus polls to rtu-1 flow
-  through kali. Pair with mitm-capture, which proves the interception.
-routes: [mitm]
+  Runs ettercap on the injected kali attacker (requires.attacker adds it to
+  the ICS segment) to ARP man-in-the-middle rtu-1 and the ICS router
+  (10.1.1.1), so the OPC server's Modbus polls to rtu-1 flow through kali.
+  Pair with mitm-capture, which proves the interception.
+routes: [waterway]
 stages: [start, stop]
+requires:
+  attacker: true
 config:
   vms:
     - hostname: kali

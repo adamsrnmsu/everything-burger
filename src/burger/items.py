@@ -43,7 +43,8 @@ OPTIONAL_KEYS = {
 _NAME = re.compile(r"[A-Za-z0-9._-]+")
 _SS = {"listening": "-Hltn", "established": "-Htn state established"}
 REQUIRES = set(
-    "debs iperf_static apps apps_prs env monitor mgmt_vlan cc_nodes keep_nodes windows".split()
+    "debs iperf_static apps apps_prs env monitor attacker "
+    "mgmt_vlan cc_nodes keep_nodes windows".split()
 )
 
 

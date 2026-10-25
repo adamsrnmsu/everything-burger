@@ -13,20 +13,32 @@
     "apps": [
       {
         "name": "sceptre",
-        "assetDir": "/phenix/topologies/burger-mitm",
+        "assetDir": "/phenix/topologies/burger-waterway",
         "hosts": [
+          {
+            "hostname": "historian",
+            "metadata": {
+              "type": "historian"
+            }
+          },
+          {
+            "hostname": "hmi",
+            "metadata": {
+              "type": "hmi"
+            }
+          },
           {
             "hostname": "simulink-provider",
             "metadata": {
-              "gt": "/phenix/topologies/burger-mitm/injects/simulinkgt",
-              "gt_template": "/phenix/topologies/burger-mitm/injects/main.tmpl",
+              "gt": "/phenix/topologies/burger-waterway/injects/simulinkgt",
+              "gt_template": "/phenix/topologies/burger-waterway/injects/main.tmpl",
               "labels": [
                 "elk"
               ],
               "publish_endpoint": "udp://*;239.0.0.1:40000",
-              "publish_points": "/phenix/topologies/burger-mitm/injects/publishPoints.txt",
+              "publish_points": "/phenix/topologies/burger-waterway/injects/publishPoints.txt",
               "simulator": "Simulink",
-              "solver": "/phenix/topologies/burger-mitm/injects/simulinksolver",
+              "solver": "/phenix/topologies/burger-waterway/injects/simulinksolver",
               "type": "provider"
             }
           },
@@ -38,6 +50,17 @@
                 "rtu-2"
               ],
               "type": "opc"
+            }
+          },
+          {
+            "hostname": "scada-server",
+            "metadata": {
+              "automation": "/phenix/topologies/burger-waterway/injects/myscada.exe",
+              "labels": [
+                "elk"
+              ],
+              "project": "/phenix/topologies/burger-waterway/injects/waterway.mep",
+              "type": "scada-server"
             }
           },
           {
@@ -123,6 +146,97 @@
         "metadata": {
           "components": [
             {
+              "name": "health",
+              "type": "cc",
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "type": "exec",
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "wait": true,
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "wait": true
+                      },
+                      {
+                        "type": "exec",
+                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "wait": true
+                      },
+                      {
+                        "type": "exec",
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "wait": true
+                      },
+                      {
+                        "type": "exec",
+                        "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-2",
+                    "start": [
+                      {
+                        "type": "exec",
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "wait": true,
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "wait": true
+                      },
+                      {
+                        "type": "exec",
+                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "wait": true
+                      },
+                      {
+                        "type": "exec",
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "wait": true
+                      },
+                      {
+                        "type": "exec",
+                        "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "simulink-provider",
+                    "start": [
+                      {
+                        "type": "exec",
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "wait": true,
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
+                      },
+                      {
+                        "type": "exec",
+                        "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
+                        "wait": true
+                      },
+                      {
+                        "type": "exec",
+                        "args": "pgrep -f '(^|/)simulinksolver( |$)'",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
               "name": "ettercap",
               "type": "ettercap",
               "metadata": {
@@ -150,6 +264,12 @@
             }
           ],
           "runs": [
+            {
+              "name": "health",
+              "start": [
+                "health"
+              ]
+            },
             {
               "name": "mitm",
               "start": [

@@ -91,6 +91,156 @@
       },
       {
         "general": {
+          "description": "Historian server",
+          "hostname": "historian"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "historian.qc2",
+              "inject_partition": 2
+            }
+          ],
+          "memory": 2048,
+          "os_type": "windows"
+        },
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.1.2.60",
+              "gateway": "10.1.2.1",
+              "mask": 24,
+              "name": "IF0",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "SCADA"
+            },
+            {
+              "address": "172.16.2.60",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "general": {
+          "description": "Human machine interface",
+          "hostname": "hmi"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "hmi_win7.qc2"
+            }
+          ],
+          "memory": 2048,
+          "os_type": "windows"
+        },
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.1.2.70",
+              "gateway": "10.1.2.1",
+              "mask": 24,
+              "name": "IF0",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "SCADA"
+            },
+            {
+              "address": "172.16.2.70",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "general": {
+          "description": "SCADA server",
+          "hostname": "scada-server"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "scada.qc2",
+              "inject_partition": 2
+            }
+          ],
+          "memory": 2048,
+          "os_type": "windows"
+        },
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.1.2.71",
+              "gateway": "10.1.2.1",
+              "mask": 24,
+              "name": "IF0",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "SCADA"
+            },
+            {
+              "address": "172.16.2.71",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "general": {
+          "description": "Engineering workstation",
+          "hostname": "engineer-workstation"
+        },
+        "hardware": {
+          "drives": [
+            {
+              "image": "engineer_workstation.qc2"
+            }
+          ],
+          "memory": 2048,
+          "os_type": "windows"
+        },
+        "network": {
+          "interfaces": [
+            {
+              "address": "10.1.2.72",
+              "gateway": "10.1.2.1",
+              "mask": 24,
+              "name": "IF0",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "SCADA"
+            },
+            {
+              "address": "172.16.2.72",
+              "mask": 16,
+              "name": "mgmt",
+              "proto": "static",
+              "type": "ethernet",
+              "vlan": "MGMT"
+            }
+          ]
+        },
+        "type": "VirtualMachine"
+      },
+      {
+        "general": {
           "description": "SCEPTRE RTU",
           "hostname": "rtu-1"
         },
@@ -250,8 +400,8 @@
       },
       {
         "general": {
-          "description": "Kali attacker (ettercap MITM)",
-          "hostname": "kali"
+          "hostname": "kali",
+          "description": "burger ettercap attacker"
         },
         "hardware": {
           "drives": [
@@ -266,25 +416,38 @@
         "network": {
           "interfaces": [
             {
+              "name": "IF0",
+              "vlan": "ICS",
               "address": "10.1.1.200",
               "gateway": "10.1.1.1",
               "mask": 24,
-              "name": "IF0",
               "proto": "static",
-              "type": "ethernet",
-              "vlan": "ICS"
+              "type": "ethernet"
             },
             {
-              "address": "172.16.1.200",
-              "mask": 16,
               "name": "mgmt",
+              "vlan": "MGMT",
+              "address": "172.16.1.201",
+              "mask": 16,
               "proto": "static",
-              "type": "ethernet",
-              "vlan": "MGMT"
+              "type": "ethernet"
             }
           ]
         },
-        "type": "VirtualMachine"
+        "type": "VirtualMachine",
+        "injections": [
+          {
+            "src": "/phenix/burger/x/burger-miniccc",
+            "dst": "/root/burger-miniccc",
+            "description": "burger: miniccc from the minimega container"
+          },
+          {
+            "src": "/phenix/burger/x/01-burger-miniccc.sh",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "description": "burger: install and start miniccc",
+            "permissions": "0755"
+          }
+        ]
       }
     ]
   }
