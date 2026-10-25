@@ -1,0 +1,17 @@
+name: mitm-capture
+kind: scorch
+type: tcpdump
+about: >
+  Captures on the kali attacker's ICS interface, filtered to the Modbus port.
+  kali is not a Modbus endpoint, so any Modbus packets it sees are the OPC
+  server's polls to rtu-1 redirected through it: proof the ettercap MITM
+  intercepted the traffic.
+routes: [mitm]
+stages: [start, stop]
+config:
+  vms: [{hostname: kali, iface: IF0, filter: "tcp port {route.ics_port}"}]
+verify:
+  - files: {glob: "*.pcap", min: 1}
+  # The Modbus polls come from the Windows OPC server, so this is Windows
+  # traffic: skipped under --linux-only, like waterway's own Modbus checks.
+  - pcap: {glob: "*.pcap", tcp_port: "{route.ics_port}", min_packets: 4, windows: true}

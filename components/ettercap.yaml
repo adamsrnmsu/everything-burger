@@ -1,0 +1,14 @@
+name: ettercap
+kind: scorch
+type: ettercap
+about: >
+  Runs ettercap on the kali attacker to ARP man-in-the-middle rtu-1 and the
+  ICS router (10.1.1.1), so the OPC server's Modbus polls to rtu-1 flow
+  through kali. Pair with mitm-capture, which proves the interception.
+routes: [mitm]
+stages: [start, stop]
+config:
+  vms:
+    - hostname: kali
+      iface: IF0
+      targets: "/10.1.1.101// /10.1.1.1//"
