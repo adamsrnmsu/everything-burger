@@ -7,7 +7,7 @@ about: >
   server and `es.info()` comes back empty: the one reply that reaches the line
   #192 changed in connect_elastic. A refused or unreachable server raises
   inside the client with or without #192, so it would test nothing.
-routes: [soap]
+routes: [soap, waterway]
 stages: [start]
 config:
   vms:
