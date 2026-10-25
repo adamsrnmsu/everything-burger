@@ -10,7 +10,7 @@ from burger.routes import Route
 ITEM_FIELDS = {
     *"name kind type about routes stages holds background advisory".split(),
     *"expect_error expect_invalid".split(),
-    *"config hosts requires".split(),
+    *"config hosts requires assets".split(),
     *"verify waterway soap site".split(),
 }
 KINDS = ("scorch", "app", "bennu")
@@ -43,7 +43,8 @@ OPTIONAL_KEYS = {
 _NAME = re.compile(r"[A-Za-z0-9._-]+")
 _SS = {"listening": "-Hltn", "established": "-Htn state established"}
 REQUIRES = set(
-    "debs iperf_static apps apps_prs env monitor mgmt_vlan cc_nodes keep_nodes windows".split()
+    "debs iperf_static apps apps_prs env monitor traffic_gen "
+    "mgmt_vlan cc_nodes keep_nodes windows".split()
 )
 
 
@@ -65,6 +66,7 @@ class Item:
     requires: dict
     verify: list
     path: Path
+    assets: list = field(default_factory=list)  # repo-relative files staged to the host
     unset: list[str] = field(default_factory=list)  # env vars the file uses that are unset
     overrides: dict = field(default_factory=dict)  # per-route blocks: waterway, soap, site
 
@@ -149,6 +151,7 @@ def load_item(ref: str, settings: Settings) -> Item:
         requires=doc.get("requires") or {},
         verify=doc.get("verify") or [],
         path=path,
+        assets=doc.get("assets") or [],
         unset=unset,
         overrides={r: doc[r] for r in _ROUTE_BLOCKS if doc.get(r)},
     )

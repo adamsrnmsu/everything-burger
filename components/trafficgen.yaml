@@ -1,0 +1,28 @@
+name: trafficgen
+kind: scorch
+type: trafficgen
+about: >
+  Generates benign and simulated-malicious traffic to an injected traffic
+  server. requires.traffic_gen adds the traffic-server, background-gen and
+  malware-gen nodes on their own TRAFFIC VLAN (10.1.9.0/24), off the ICS/SCADA
+  segments the other items watch. The three generator scripts are staged from
+  burger's assets/ via {asset_dir}. Uses the trafficgen component from #206.
+routes: [waterway]
+stages: [configure, start, stop, cleanup]
+requires:
+  traffic_gen: true
+assets:
+  - assets/trafficgen/traffic-server.py
+  - assets/trafficgen/background-gen.py
+  - assets/trafficgen/malware-gen.py
+config:
+  scripts:
+    trafficServer: "{asset_dir}/traffic-server.py"
+    backgroundGen: "{asset_dir}/background-gen.py"
+    malwareGen: "{asset_dir}/malware-gen.py"
+  targets:
+    - hostname: traffic-server
+      interface: IF0
+      duration: 20
+      backgroundClient: {hostname: background-gen, rate: 50, probability: 0.5}
+      malwareClient: {hostname: malware-gen, rate: 10, probability: 1.0}

@@ -40,6 +40,7 @@ class Requires:
     debs_packages: list[str]
     debs_nodes: list[str]
     monitor: bool
+    traffic_gen: bool
     env: list[str]
     mgmt_vlan: str | None
     cc_nodes: list[str]
@@ -215,6 +216,7 @@ def resolve(board: Switchboard, settings: Settings, linux_only: bool = False) ->
         debs_packages=_unique(p for d in debs for p in d.get("packages", [])),
         debs_nodes=_unique(n for d in debs for n in d.get("nodes", [])),
         monitor=any(r.get("monitor") for r in req),
+        traffic_gen=any(r.get("traffic_gen") for r in req),
         env=_unique(e for r in req for e in r.get("env", [])),
         mgmt_vlan=next((r["mgmt_vlan"] for r in req if r.get("mgmt_vlan")), None),
         cc_nodes=_unique(n for r in req for n in r.get("cc_nodes", [])),

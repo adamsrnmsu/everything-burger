@@ -33,6 +33,9 @@ items:
   snort: on
   cc-empty-output: on
   cc-output-parsing: on
+  # benign + simulated-malicious traffic on its own TRAFFIC VLAN (10.1.9.0/24),
+  # isolated from the ICS/SCADA segments the Modbus items watch
+  trafficgen: on
   apps/mgmt-vlan-alias: on
   apps/mirror: on
   apps/mgmt_tap: on

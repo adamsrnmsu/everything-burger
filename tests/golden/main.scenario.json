@@ -2,16 +2,17 @@
   "apiVersion": "phenix.sandia.gov/v2",
   "kind": "Scenario",
   "metadata": {
+    "name": "ebwes-main",
+    "created": "",
+    "updated": "",
     "annotations": {
       "topology": "ebwes-main"
-    },
-    "created": "",
-    "name": "ebwes-main",
-    "updated": ""
+    }
   },
   "spec": {
     "apps": [
       {
+        "name": "sceptre",
         "assetDir": "/phenix/topologies/burger-waterway",
         "hosts": [
           {
@@ -65,11 +66,6 @@
           {
             "hostname": "rtu-1",
             "metadata": {
-              "infrastructure": "waterway",
-              "labels": [
-                "elk"
-              ],
-              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
               "modbus": [
                 {
                   "name": "lowerwater",
@@ -96,6 +92,11 @@
                   "type": "boat-sensor"
                 }
               ],
+              "infrastructure": "waterway",
+              "labels": [
+                "elk"
+              ],
+              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
               "provider": "simulink-provider",
               "type": "fd-server"
             }
@@ -103,11 +104,6 @@
           {
             "hostname": "rtu-2",
             "metadata": {
-              "infrastructure": "waterway",
-              "labels": [
-                "elk"
-              ],
-              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
               "modbus": [
                 {
                   "name": "upperwater",
@@ -134,14 +130,19 @@
                   "type": "boat-sensor"
                 }
               ],
+              "infrastructure": "waterway",
+              "labels": [
+                "elk"
+              ],
+              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
               "provider": "simulink-provider",
               "type": "fd-server"
             }
           }
-        ],
-        "name": "sceptre"
+        ]
       },
       {
+        "name": "mirror",
         "hosts": [
           {
             "hostname": "monitor",
@@ -153,62 +154,64 @@
               ]
             }
           }
-        ],
-        "name": "mirror"
+        ]
       },
       {
+        "name": "mgmt_tap",
         "metadata": {
           "subnet": "172.16.0.0/16",
           "vlan": "MGMT"
-        },
-        "name": "mgmt_tap"
+        }
       },
       {
+        "name": "helics",
         "metadata": {
           "broker": {
             "root": "rtu-1|IF0"
           }
-        },
-        "name": "helics"
+        }
       },
       {
+        "name": "scorch",
         "metadata": {
           "components": [
             {
+              "name": "health",
+              "type": "cc",
               "metadata": {
                 "vms": [
                   {
                     "hostname": "rtu-1",
                     "start": [
                       {
+                        "type": "exec",
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "type": "exec",
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
-                        "wait": true
+                        "wait": true,
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
                       },
                       {
+                        "type": "exec",
                         "args": "grep -q -e '--name rtu-1' /etc/phenix/startup/90-helics-broker.sh",
-                        "type": "exec",
                         "wait": true
                       },
                       {
+                        "type": "exec",
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
-                        "type": "exec",
                         "wait": true
                       },
                       {
+                        "type": "exec",
                         "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
-                        "type": "exec",
                         "wait": true
                       },
                       {
+                        "type": "exec",
                         "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
-                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
                         "type": "exec",
+                        "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
                         "wait": true
                       }
                     ]
@@ -217,29 +220,29 @@
                     "hostname": "rtu-2",
                     "start": [
                       {
+                        "type": "exec",
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "type": "exec",
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
-                        "wait": true
+                        "wait": true,
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
                       },
                       {
+                        "type": "exec",
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
-                        "type": "exec",
                         "wait": true
                       },
                       {
+                        "type": "exec",
                         "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
-                        "type": "exec",
                         "wait": true
                       },
                       {
+                        "type": "exec",
                         "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
-                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
                         "type": "exec",
+                        "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
                         "wait": true
                       }
                     ]
@@ -248,19 +251,19 @@
                     "hostname": "simulink-provider",
                     "start": [
                       {
+                        "type": "exec",
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "type": "exec",
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
-                        "wait": true
+                        "wait": true,
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
                       },
                       {
+                        "type": "exec",
                         "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
-                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "args": "pgrep -f '(^|/)simulinksolver( |$)'",
                         "type": "exec",
+                        "args": "pgrep -f '(^|/)simulinksolver( |$)'",
                         "wait": true
                       }
                     ]
@@ -269,76 +272,76 @@
                     "hostname": "monitor",
                     "start": [
                       {
-                        "args": "timeout 30 tcpdump -nn -i any -c 3 'tcp port 502 or ip proto 47'",
                         "type": "exec",
+                        "args": "timeout 30 tcpdump -nn -i any -c 3 'tcp port 502 or ip proto 47'",
                         "wait": true
                       }
                     ]
                   }
                 ]
-              },
-              "name": "health",
-              "type": "cc"
+              }
             },
             {
+              "name": "disruption",
+              "type": "disruption",
               "metadata": {
                 "current_disruption": "baseline",
                 "run_duration": 30
-              },
-              "name": "disruption",
-              "type": "disruption"
+              }
             },
             {
+              "name": "pcap",
+              "type": "pcap",
               "metadata": {
-                "convert_to_json": true,
                 "vms": [
                   {
-                    "filter": "not tcp port 502 and not port 5201",
                     "hostname": "rtu-1",
-                    "interface": 0
+                    "interface": 0,
+                    "filter": "not tcp port 502 and not port 5201"
                   },
                   {
-                    "filter": "not port 5201",
                     "hostname": "rtu-2",
-                    "interface": 0
+                    "interface": 0,
+                    "filter": "not port 5201"
                   }
-                ]
-              },
-              "name": "pcap",
-              "type": "pcap"
+                ],
+                "convert_to_json": true
+              }
             },
             {
+              "name": "tcpdump",
+              "type": "tcpdump",
               "metadata": {
                 "vms": [
                   {
-                    "filter": "ip proto 47 and less 600 or tcp port 502",
                     "hostname": "monitor",
-                    "iface": "any"
+                    "iface": "any",
+                    "filter": "ip proto 47 and less 600 or tcp port 502"
                   }
                 ]
-              },
-              "name": "tcpdump",
-              "type": "tcpdump"
+              }
             },
             {
+              "name": "mm",
+              "type": "mm",
               "metadata": {
                 "start": [
                   {
+                    "type": "start_capture",
                     "capture": {
                       "bridge": "phenix",
                       "filename": "burger-bridge.pcap",
                       "filter": "tcp port 502"
-                    },
-                    "type": "start_capture"
+                    }
                   }
                 ],
                 "stop": [
                   {
+                    "type": "stop_capture",
                     "capture": {
                       "bridge": "phenix",
                       "convert": true
-                    },
-                    "type": "stop_capture"
+                    }
                   }
                 ],
                 "vms": [
@@ -346,167 +349,193 @@
                     "hostname": "simulink-provider",
                     "start": [
                       {
+                        "type": "start_capture",
                         "capture": {
+                          "interface": 0,
                           "filename": "burger-provider.pcap",
-                          "filter": "not tcp port 502",
-                          "interface": 0
-                        },
-                        "type": "start_capture"
+                          "filter": "not tcp port 502"
+                        }
                       }
                     ],
                     "stop": [
                       {
+                        "type": "stop_capture",
                         "capture": {
-                          "convert": true,
-                          "interface": 0
-                        },
-                        "type": "stop_capture"
+                          "interface": 0,
+                          "convert": true
+                        }
                       }
                     ]
                   }
                 ]
-              },
-              "name": "mm",
-              "type": "mm"
+              }
             },
             {
-              "metadata": {
-                "data": "hello-from-burger",
-                "pipe": "burger"
-              },
               "name": "pipe",
-              "type": "pipe"
+              "type": "pipe",
+              "metadata": {
+                "pipe": "burger",
+                "data": "hello-from-burger"
+              }
             },
             {
-              "background": true,
+              "name": "hoststats",
+              "type": "hoststats",
               "metadata": {
                 "pollPeriod": 5
               },
-              "name": "hoststats",
-              "type": "hoststats"
+              "background": true
             },
             {
+              "name": "vmstats",
+              "type": "vmstats",
               "metadata": {
-                "pollPeriod": 1,
                 "vms": [
                   "rtu-1",
                   "rtu-2",
                   "simulink-provider"
-                ]
-              },
-              "name": "vmstats",
-              "type": "vmstats"
+                ],
+                "pollPeriod": 1
+              }
             },
             {
+              "name": "qos",
+              "type": "qos",
               "metadata": {
                 "vms": [
                   {
-                    "delay": 20,
                     "hostname": "rtu-2",
-                    "interface": 0
+                    "interface": 0,
+                    "delay": 20
                   }
                 ]
-              },
-              "name": "qos",
-              "type": "qos"
+              }
             },
             {
+              "name": "erspan",
+              "type": "erspan",
               "metadata": {
                 "local_bridge": "phenix",
                 "local_ip": "192.0.2.1",
                 "remote_ip": "192.0.2.2"
-              },
-              "name": "erspan",
-              "type": "erspan"
+              }
             },
             {
+              "name": "iperf",
+              "type": "iperf",
               "metadata": {
+                "run_duration": 20,
                 "add_client_args": "--omit 2",
                 "bandwidth": 10000000,
+                "iperf_version": "3.15",
                 "iperf_paths": {
                   "linux": "/usr/local/bin/iperf3-3.15"
                 },
-                "iperf_version": "3.15",
-                "run_duration": 20,
                 "servers": [
                   {
+                    "hostname": "rtu-1",
+                    "port_range_start": 5201,
                     "clients": [
                       {
                         "hostname": "rtu-2"
                       }
-                    ],
-                    "hostname": "rtu-1",
-                    "port_range_start": 5201
+                    ]
                   }
                 ]
-              },
-              "name": "iperf",
-              "type": "iperf"
+              }
             },
             {
+              "name": "snort-conf",
+              "type": "cc",
               "metadata": {
                 "vms": [
                   {
+                    "hostname": "rtu-1",
                     "configure": [
                       {
-                        "args": "systemctl disable --now snort >/dev/null 2>&1 || true\ncat > /etc/snort/snort.conf <<'CONF'\nconfig checksum_mode: none\npreprocessor perfmonitor: time 5 file /var/log/snort/snort.stats pktcnt 1\noutput alert_full: alert\noutput log_unified2: filename snort.log, limit 128, nostamp\nalert tcp any any -> any 502 (msg:\"burger modbus\"; sid:1000001; rev:1;)\nCONF\n",
                         "type": "exec",
-                        "wait": true
+                        "wait": true,
+                        "args": "systemctl disable --now snort >/dev/null 2>&1 || true\ncat > /etc/snort/snort.conf <<'CONF'\nconfig checksum_mode: none\npreprocessor perfmonitor: time 5 file /var/log/snort/snort.stats pktcnt 1\noutput alert_full: alert\noutput log_unified2: filename snort.log, limit 128, nostamp\nalert tcp any any -> any 502 (msg:\"burger modbus\"; sid:1000001; rev:1;)\nCONF\n"
                       }
-                    ],
-                    "hostname": "rtu-1"
+                    ]
                   }
                 ]
-              },
-              "name": "snort-conf",
-              "type": "cc"
+              }
             },
             {
+              "name": "snort",
+              "type": "snort",
               "metadata": {
                 "hostname": "rtu-1",
                 "sniffInterface": "IF0",
                 "waitDuration": 20
-              },
-              "name": "snort",
-              "type": "snort"
+              }
             },
             {
-              "metadata": {
-                "vms": [
-                  {
-                    "hostname": "rtu-1",
-                    "start": [
-                      {
-                        "args": "true",
-                        "type": "exec",
-                        "validator": "[ -z \"$(cat)\" ] || { echo \"$1: expected no output\" >&2; exit 1; }",
-                        "wait": true
-                      }
-                    ]
-                  }
-                ]
-              },
               "name": "cc-empty-output",
-              "type": "cc"
-            },
-            {
+              "type": "cc",
               "metadata": {
                 "vms": [
                   {
                     "hostname": "rtu-1",
                     "start": [
                       {
-                        "args": "echo 'warn: x' >&2; echo 'tcp 0 0 0.0.0.0:22 0.0.0.0:* LISTEN 812/sshd'",
                         "type": "exec",
-                        "validator": "out=$(cat); grep -Fxq 'tcp 0 0 0.0.0.0:22 0.0.0.0:* LISTEN 812/sshd' <<<\"$out\" || { echo \"$1: cc stdout came back as: $out\" >&2; exit 1; }",
-                        "wait": true
+                        "args": "true",
+                        "wait": true,
+                        "validator": "[ -z \"$(cat)\" ] || { echo \"$1: expected no output\" >&2; exit 1; }"
                       }
                     ]
                   }
                 ]
-              },
+              }
+            },
+            {
               "name": "cc-output-parsing",
-              "type": "cc"
+              "type": "cc",
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "type": "exec",
+                        "args": "echo 'warn: x' >&2; echo 'tcp 0 0 0.0.0.0:22 0.0.0.0:* LISTEN 812/sshd'",
+                        "wait": true,
+                        "validator": "out=$(cat); grep -Fxq 'tcp 0 0 0.0.0.0:22 0.0.0.0:* LISTEN 812/sshd' <<<\"$out\" || { echo \"$1: cc stdout came back as: $out\" >&2; exit 1; }"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "trafficgen",
+              "type": "trafficgen",
+              "metadata": {
+                "scripts": {
+                  "trafficServer": "/phenix/burger/x/assets/traffic-server.py",
+                  "backgroundGen": "/phenix/burger/x/assets/background-gen.py",
+                  "malwareGen": "/phenix/burger/x/assets/malware-gen.py"
+                },
+                "targets": [
+                  {
+                    "hostname": "traffic-server",
+                    "interface": "IF0",
+                    "duration": 20,
+                    "backgroundClient": {
+                      "hostname": "background-gen",
+                      "rate": 50,
+                      "probability": 0.5
+                    },
+                    "malwareClient": {
+                      "hostname": "malware-gen",
+                      "rate": 10,
+                      "probability": 1.0
+                    }
+                  }
+                ]
+              }
             }
           ],
           "runs": [
@@ -517,19 +546,14 @@
               ]
             },
             {
-              "cleanup": [
-                "disruption",
-                "pipe",
-                "iperf",
-                "snort"
-              ],
+              "name": "main",
               "configure": [
                 "disruption",
                 "iperf",
                 "snort-conf",
-                "snort"
+                "snort",
+                "trafficgen"
               ],
-              "name": "main",
               "start": [
                 "pcap",
                 "tcpdump",
@@ -542,6 +566,7 @@
                 "snort",
                 "cc-empty-output",
                 "cc-output-parsing",
+                "trafficgen",
                 "disruption"
               ],
               "stop": [
@@ -552,21 +577,28 @@
                 "vmstats",
                 "qos",
                 "iperf",
-                "snort"
+                "snort",
+                "trafficgen"
+              ],
+              "cleanup": [
+                "disruption",
+                "pipe",
+                "iperf",
+                "snort",
+                "trafficgen"
               ]
             },
             {
-              "cleanup": [
-                "erspan"
-              ],
+              "name": "extras-erspan",
               "configure": [
                 "erspan"
               ],
-              "name": "extras-erspan"
+              "cleanup": [
+                "erspan"
+              ]
             }
           ]
-        },
-        "name": "scorch"
+        }
       }
     ]
   }
