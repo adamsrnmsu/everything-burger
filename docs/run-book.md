@@ -32,8 +32,9 @@ kills the SCORCH run (`pkill -f 'experiment scorch'` and any leftover
 failed attempt and the retry loop takes over. Before the health run, burger
 waits for every VM's cc client to register, so a command is not lost to a
 client that is still booting. Each attempt's SCORCH output goes to
-`work/<switchboard>/results/run-<i>-attempt-<n>.log`; the console shows it
-only when the run finally fails.
+`work/<switchboard>/results/run-<i>-attempt-<n>.log`; when the run finally
+fails, the console names the failing check and that log in one line. On a
+terminal the attempts and retries show as one live status line.
 
 `run` stops at the first failing step and leaves the experiment up for
 debugging; after `verify` it deletes the experiment unless you pass `--keep`.
