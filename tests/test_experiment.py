@@ -247,7 +247,7 @@ def test_first_attempt_cap_kills_scorch_and_retry_takes_over(settings, monkeypat
     assert (results / "run-0-attempt-2.log").is_file()
 
 
-def test_retry_lines_and_final_failure_output(settings, monkeypatch, messages):
+def test_retry_lines_and_one_line_final_failure(settings, monkeypatch, messages):
     _up(settings, monkeypatch, [True] * 9)
     clock = FakeClock()
 
@@ -262,8 +262,10 @@ def test_retry_lines_and_final_failure_output(settings, monkeypatch, messages):
     retries = [m for lvl, m in messages if "not healthy yet" in m]
     assert "attempt 1" in retries[0] and "settle 400 s left" in retries[0]
     assert "~2 more attempt(s)" in retries[0]  # 400 // (60 + 100)
-    spew = [m for lvl, m in messages if "SCORCH output" in m]
-    assert len(spew) == 1 and "out-text" in spew[0]  # console output only on the final failure
+    final = [m for lvl, m in messages if lvl == "WARNING" and "failed:" in m]
+    # one line on the final failure, pointing at the attempt log; the output is not dumped
+    assert len(final) == 1 and "run-0-attempt-" in final[0] and "out-text" not in final[0]
+    assert not any("out-text" in m for _, m in messages)
     log = settings.work / "baseline" / "results" / "run-0-attempt-1.log"
     assert log.read_text() == "out-text\nerr-text\n"
 

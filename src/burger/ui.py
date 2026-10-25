@@ -1,4 +1,5 @@
 import sys
+from contextlib import contextmanager
 from importlib.resources import files
 from pathlib import Path
 
@@ -44,6 +45,28 @@ def results_table(rows: list[Row]) -> Table:
 
 def setup_logging(work_dir: Path | None, verbose: bool) -> None:
     logger.remove()
-    logger.add(sys.stderr, level="DEBUG" if verbose else "INFO")
+    # sys.stderr looked up per message, so a live spinner's redirect keeps log lines above it
+    logger.add(
+        lambda m: sys.stderr.write(m),
+        level="DEBUG" if verbose else "INFO",
+        colorize=sys.stderr.isatty(),
+    )
     if work_dir:
         logger.add(Path(work_dir) / "burger.log", level="DEBUG")
+
+
+@contextmanager
+def spinner():
+    """Yield say(msg, *args) for a loop that would print a line per pass. On a
+    terminal it is one live status line (the text also goes to the log file at
+    debug); elsewhere each call is an info line."""
+    if not sys.stderr.isatty():
+        yield logger.info
+        return
+    with Console(stderr=True).status("") as status:
+
+        def say(msg, *args):
+            logger.debug(msg, *args)
+            status.update(msg.format(*args))
+
+        yield say
