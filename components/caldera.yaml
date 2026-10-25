@@ -1,0 +1,16 @@
+name: caldera
+kind: scorch
+type: caldera
+about: >
+  caldera metadata, validated offline (phenix-scorch-validate). No live run yet:
+  it needs a Caldera server VM with the REST API. requires.apps_prs ties it to
+  #207 so the new pydantic model is validated.
+routes: []
+stages: [configure, start, stop, cleanup]
+requires:
+  apps_prs: [207]
+config:
+  server: mallory
+  adversary: superbad
+  facts: recon
+  planner: atomic
