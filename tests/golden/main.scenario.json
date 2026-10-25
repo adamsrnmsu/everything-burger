@@ -534,6 +534,34 @@
                   }
                 ]
               }
+            },
+            {
+              "name": "trafficgen",
+              "type": "trafficgen",
+              "metadata": {
+                "scripts": {
+                  "trafficServer": "/phenix/burger/x/assets/traffic-server.py",
+                  "backgroundGen": "/phenix/burger/x/assets/background-gen.py",
+                  "malwareGen": "/phenix/burger/x/assets/malware-gen.py"
+                },
+                "targets": [
+                  {
+                    "hostname": "traffic-server",
+                    "interface": "IF0",
+                    "duration": 20,
+                    "backgroundClient": {
+                      "hostname": "background-gen",
+                      "rate": 50,
+                      "probability": 0.5
+                    },
+                    "malwareClient": {
+                      "hostname": "malware-gen",
+                      "rate": 10,
+                      "probability": 1.0
+                    }
+                  }
+                ]
+              }
             }
           ],
           "runs": [
@@ -591,6 +619,21 @@
               "stop": [
                 "ettercap",
                 "mitm-capture"
+              ]
+            },
+            {
+              "name": "trafficgen",
+              "configure": [
+                "trafficgen"
+              ],
+              "start": [
+                "trafficgen"
+              ],
+              "stop": [
+                "trafficgen"
+              ],
+              "cleanup": [
+                "trafficgen"
               ]
             },
             {

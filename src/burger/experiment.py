@@ -144,6 +144,19 @@ def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
     (out / "scenario.json").write_text(json.dumps(scen, indent=2))
     (rd / "state.json").write_text(json.dumps({"linux_only": res.linux_only}))
 
+    # Stage any item-declared asset files (e.g. the trafficgen generators) into
+    # the render output so host.put carries them to {stage_dir}/assets, where the
+    # {asset_dir} token in item config resolves.
+    assets = {a for i in res.items for a in i.assets}
+    if assets:
+        adir = out / "assets"
+        adir.mkdir(exist_ok=True)
+        for rel in sorted(assets):
+            src = settings.root / rel
+            if not src.is_file():
+                raise BurgerError(f"item asset not found: {rel}")
+            shutil.copy2(src, adir / Path(rel).name)
+
     down(res, host)
     if topo_dir:  # the site route's assets are already where its scenario says
         topo_name = res.route.topology_dir

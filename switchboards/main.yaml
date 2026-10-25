@@ -38,6 +38,9 @@ items:
   # injects the kali node onto the ICS segment.
   ettercap: on
   mitm-capture: on
+  # benign + simulated-malicious traffic on its own TRAFFIC VLAN (10.1.9.0/24),
+  # isolated from the ICS/SCADA segments the Modbus items watch (own run below)
+  trafficgen: on
   apps/mgmt-vlan-alias: on
   apps/mirror: on
   apps/mgmt_tap: on
@@ -104,3 +107,10 @@ runs:
   - name: mitm
     start: [mitm-capture, ettercap]
     stop: [ettercap, mitm-capture]
+  # trafficgen, its own run; traffic stays on the TRAFFIC VLAN so it is
+  # independent of the Modbus items, but a separate run keeps timing clean.
+  - name: trafficgen
+    configure: [trafficgen]
+    start: [trafficgen]
+    stop: [trafficgen]
+    cleanup: [trafficgen]

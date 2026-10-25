@@ -82,6 +82,52 @@ KALI_NODE = {
 }
 
 
+def _traffic_node(hostname: str, description: str, ics: str, mgmt: str) -> dict:
+    return {
+        "general": {"hostname": hostname, "description": description},
+        "hardware": {
+            "drives": [{"image": "ubuntu.qc2"}],
+            "memory": 2048,
+            "os_type": "linux",
+            "vcpus": 2,
+        },
+        "network": {
+            "interfaces": [
+                {
+                    "name": "IF0",
+                    "vlan": "TRAFFIC",
+                    "address": ics,
+                    "mask": 24,
+                    "proto": "static",
+                    "type": "ethernet",
+                },
+                {
+                    "name": "mgmt",
+                    "vlan": "MGMT",
+                    "address": mgmt,
+                    "mask": 16,
+                    "proto": "static",
+                    "type": "ethernet",
+                },
+            ]
+        },
+        "type": "VirtualMachine",
+    }
+
+
+# The trafficgen component's three hosts, injected when an item requires them
+# (requires.traffic_gen). They share their own TRAFFIC VLAN (10.1.9.0/24) so the
+# generated traffic stays off the ICS/SCADA segments the other items watch; the
+# background and malware clients target the traffic-server on that VLAN.
+TRAFFIC_NODES = [
+    _traffic_node("traffic-server", "burger trafficgen server", "10.1.9.10", "172.16.1.210"),
+    _traffic_node(
+        "background-gen", "burger trafficgen background client", "10.1.9.20", "172.16.1.211"
+    ),
+    _traffic_node("malware-gen", "burger trafficgen malware client", "10.1.9.30", "172.16.1.212"),
+]
+
+
 # On the rig tested, older bennu VMs had no miniccc binary and no virtio_console
 # loaded, so they never registered with cc (an image built without `phenix image
 # inject-miniexe`). The install path below stays as the rescue for such images:
@@ -201,6 +247,8 @@ def render(
         nodes.append(copy.deepcopy(MONITOR_NODE))
     if req.attacker:
         nodes.append(copy.deepcopy(KALI_NODE))
+    if req.traffic_gen:
+        nodes.extend(copy.deepcopy(TRAFFIC_NODES))
     if req.mgmt_vlan:  # exercise case-insensitive mgmt VLAN matching (#158)
         for n in nodes:
             for iface in n["network"]["interfaces"]:
@@ -227,6 +275,7 @@ def render(
             set(req.cc_nodes or route.bennu_nodes)
             | ({"monitor"} if req.monitor else set())
             | ({"kali"} if req.attacker else set())
+            | ({n["general"]["hostname"] for n in TRAFFIC_NODES} if req.traffic_gen else set())
         )
         for n in nodes:
             if n["general"]["hostname"] in cc_hosts and n["hardware"].get("os_type") != "windows":
@@ -254,6 +303,11 @@ def render(
     scen["spec"]["apps"].append(
         {"name": "scorch", "metadata": {"components": components, "runs": runs}}
     )
+
+    # Items that stage assets (requires-free `assets:`) reference them with the
+    # {asset_dir} token; it resolves to where `up` puts them under the stage dir.
+    asset_dir = f"{stage_dir}/assets"
+    scen = json.loads(json.dumps(scen).replace("{asset_dir}", asset_dir))
 
     if base:  # its assets are already where its scenario says
         return topo, scen

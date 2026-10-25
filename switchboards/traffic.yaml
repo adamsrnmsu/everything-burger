@@ -1,0 +1,14 @@
+# trafficgen on waterway: requires.traffic_gen injects the traffic-server,
+# background-gen and malware-gen nodes on their own TRAFFIC VLAN (10.1.9.0/24),
+# and the generator scripts are staged from burger's assets/ via {asset_dir}.
+# The traffic stays on that VLAN, off the ICS/SCADA segments, so this is a
+# self-contained benign + simulated-malicious traffic run. Uses #206.
+about: "trafficgen: benign + simulated-malicious traffic on an isolated VLAN"
+route: waterway
+apps: {prs: [206]}
+items:
+  trafficgen: on
+  # waterway base-health items (the rig is healthy before the traffic run)
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
