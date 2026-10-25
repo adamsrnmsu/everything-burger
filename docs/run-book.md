@@ -49,6 +49,7 @@ To debug, run the steps by hand:
 ./burger verify metadata      # report: work/metadata/report.md
 ./burger down metadata
 ./burger bennu-check bennu    # bennu's own docker harness on the board's bennu PR
+./burger mm-check main        # minimega #1684's cc_filtered, while ebwes-main is up (--keep)
 ```
 
 Every switchboard also gets a `health` run: a SCORCH `cc` component whose

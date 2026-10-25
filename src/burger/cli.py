@@ -17,6 +17,7 @@ from burger.checks import Row
 from burger.compose import compose
 from burger.config import REPOS, BurgerError, Settings
 from burger.items import all_items, load_item
+from burger.mmcheck import mm_check
 from burger.render import render
 from burger.routes import load_route
 from burger.shell import Host
@@ -82,6 +83,8 @@ def _one(args, s, host, name: str) -> int:
         if not vcs.load_manifest(s, name)["bennu"]:
             raise BurgerError(f"switchboard '{name}' has no bennu build")
         bennu_check(host, vcs.board_dir(s, name) / "bennu")
+    elif cmd == "mm-check":
+        mm_check(host, s, res.board.exp, res.route.values.get("rtus", []))
     return 0
 
 
@@ -416,6 +419,7 @@ def _parser() -> argparse.ArgumentParser:
     add("verify", "check install, experiment, models and SCORCH results")
     add("down", "delete the experiment and configs")
     add("bennu-check", "run bennu's docker test harness on the board's bennu PR")
+    add("mm-check", "minimega #1684's cc_filtered in the board's running experiment")
     add("preflight", "check the phēnix host can run the boards", lo, fn=_preflight, board=None)
     add("prs", "my open PRs, the boards that carry them, stale syncs",
         ("--author", {"default": "@me"}), fn=_prs, board=None)  # fmt: skip
