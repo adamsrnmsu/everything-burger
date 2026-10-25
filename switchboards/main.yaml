@@ -33,6 +33,11 @@ items:
   snort: on
   cc-empty-output: on
   cc-output-parsing: on
+  # ettercap ARP MITM, isolated in its own run (see `runs` below) so the
+  # poisoning never overlaps the Modbus-dependent checks above. requires.attacker
+  # injects the kali node onto the ICS segment.
+  ettercap: on
+  mitm-capture: on
   apps/mgmt-vlan-alias: on
   apps/mirror: on
   apps/mgmt_tap: on
@@ -86,3 +91,16 @@ overrides:
       - pcap: {glob: "burger-bridge.pcap", tcp_port: 502, min_packets: 10, windows: true}
   vmstats: {config: {vms: [rtu-1, rtu-2, simulink-provider]}}
   qos: {config: {vms: [{hostname: rtu-2, interface: 0, delay: 20}]}}
+runs:
+  # main's normal pipeline, unchanged from the implicit run burger built before
+  # (erspan is advisory and still runs in its own extras run).
+  - name: main
+    configure: [disruption, iperf, snort-conf, snort]
+    start: [pcap, tcpdump, mm, pipe, hoststats, vmstats, qos, iperf, snort, cc-empty-output, cc-output-parsing, disruption]
+    stop: [pcap, tcpdump, mm, hoststats, vmstats, qos, iperf, snort]
+    cleanup: [disruption, pipe, iperf, snort]
+  # ettercap MITM, isolated after the main run so the poisoning never overlaps
+  # the Modbus checks above; ettercap heals the ARP tables on stop.
+  - name: mitm
+    start: [mitm-capture, ettercap]
+    stop: [ettercap, mitm-capture]
