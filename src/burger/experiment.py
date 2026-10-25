@@ -159,13 +159,15 @@ def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
 
 def wait_running(host, exp: str, timeout: int) -> None:
     deadline = time.time() + timeout
-    while True:
-        bad = not_running(host, exp)
-        if not bad:
-            return
-        if time.time() > deadline:
-            raise BurgerError(f"{exp} not running after {timeout}s: {bad}")
-        time.sleep(10)
+    with spinner(logger.debug) as say:
+        while True:
+            bad = not_running(host, exp)
+            if not bad:
+                return
+            if time.time() > deadline:
+                raise BurgerError(f"{exp} not running after {timeout}s: {bad}")
+            say("up {}: waiting for VMs: {}", exp, bad)
+            time.sleep(10)
 
 
 def not_running(host, exp: str) -> str:
@@ -286,16 +288,23 @@ def wait_for_cc(host, settings: Settings, exp: str, timeout: int = 300, clock=ti
     if not want:
         return
     deadline = clock.time() + timeout
-    while True:
-        uuids = vm_uuids(host, exp, want, timeout=-1)  # one look, no retry of its own
-        registered = cc_registered(host, exp)
-        missing = sorted(n for n in want if uuids.get(n) not in registered)
-        if not missing:
-            return
-        if clock.time() > deadline:
-            logger.warning("cc clients not registered after {} s: {}", timeout, ", ".join(missing))
-            return
-        clock.sleep(5)
+    with spinner(logger.debug) as say:
+        while True:
+            uuids = vm_uuids(host, exp, want, timeout=-1)  # one look, no retry of its own
+            registered = cc_registered(host, exp)
+            missing = sorted(n for n in want if uuids.get(n) not in registered)
+            if not missing:
+                return
+            if clock.time() > deadline:
+                logger.warning(
+                    "cc clients not registered after {} s: {}", timeout, ", ".join(missing)
+                )
+                return
+            say(
+                "{}: waiting for cc clients ({} of {}): {}",
+                exp, len(want) - len(missing), len(want), ", ".join(missing),
+            )  # fmt: skip
+            clock.sleep(5)
 
 
 def _kill_scorch(host) -> None:

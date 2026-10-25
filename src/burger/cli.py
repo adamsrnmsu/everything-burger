@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import sys
+import time
 import urllib.error
 from pathlib import Path
 
@@ -23,7 +24,7 @@ from burger.routes import load_route
 from burger.shell import Host
 from burger.site import load_site, probe, redact
 from burger.switchboard import Resolved, all_switchboards, load_switchboard, resolve
-from burger.ui import banner, results_table, setup_logging
+from burger.ui import banner, results_table, setup_logging, summary_panel
 from burger.verify import models_yaml
 
 TEMPLATES = Path(__file__).parent / "templates"
@@ -93,25 +94,35 @@ def _step(args, s, host) -> int:
     return max(_one(args, s, host, n) for n in names)
 
 
-def _verify(res: Resolved, s, host) -> int:
+def _verify(res: Resolved, s, host, timings=None, keep=None) -> int:
+    began = time.monotonic()
     rows = verify.verify(res, s, host)
+    if timings is not None:
+        timings = timings | {"verify": time.monotonic() - began}
     out.print(results_table(rows))
-    bad = sum(r.verdict == "FAIL" for r in rows)
-    out.print(f"report: {vcs.board_dir(s, res.board.name) / 'report.md'}")
+    bad = any(r.verdict == "FAIL" for r in rows)
+    report = vcs.board_dir(s, res.board.name) / "report.md"
+    left_up = None if keep is None else bad or keep  # a failing switchboard stays up to debug
+    out.print(summary_panel(res.board.name, rows, report, timings, left_up))
     return 1 if bad else 0
 
 
 def _run(args, s, host) -> int:
     name = args.board
+    timings: dict[str, float] = {}
     for cmd in ("sync", "build", "install", "up", "scorch"):
+        out.rule(f"{cmd} {name}", style="dim")
+        began = time.monotonic()
         step = argparse.Namespace(**{**vars(args), "cmd": cmd, "run": None})
         _one(step, s, host, name)
+        timings[cmd] = time.monotonic() - began
         if cmd == "sync":  # render and compose offline first: hostname/run errors before docker
             res, rd = _board(s, name, args.linux_only), vcs.board_dir(s, name)
             topo = res.route.topology_dir
             stage = f"{s.phenix_dir}/burger/{name}"
             render(res, vcs.load_manifest(s, name), rd / topo if topo else None, stage, s)
-    code = _verify(_board(s, name, args.linux_only), s, host)
+    out.rule(f"verify {name}", style="dim")
+    code = _verify(_board(s, name, args.linux_only), s, host, timings, args.keep)
     if code == 0 and not args.keep:  # a failing switchboard stays up to debug
         _one(argparse.Namespace(cmd="down"), s, host, name)
     return code

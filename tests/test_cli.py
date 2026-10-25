@@ -417,3 +417,18 @@ def test_preflight_clean_or_ovs_less_host_has_no_leftover_row(monkeypatch):
     host = FakeHost({"ovs-vsctl": subprocess.CompletedProcess([], 127, "", "not found")})
     cli._leftover_rows(host, rows)
     assert rows == []
+
+
+def test_summary_panel_counts_steps_and_no_yellow_without_warnings():
+    from rich.console import Console
+
+    from burger.checks import Row
+    from burger.ui import summary_panel
+
+    rows = [Row("a", "x", "ok", "", []), Row("b", "y", "FAIL", "bad", [])]
+    con = Console(width=120, record=True)
+    con.print(summary_panel("main", rows, "work/main/report.md", {"sync": 12, "up": 130}, True))
+    text = con.export_text()
+    assert "1 ok" in text and "1 FAIL" in text and "WARN" not in text
+    assert "sync 0:12 · up 2:10   total 2:22" in text
+    assert "experiment left up" in text
