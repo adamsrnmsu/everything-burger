@@ -44,6 +44,44 @@ MONITOR_NODE = {
 }
 
 
+# A Kali attacker on the ICS segment, injected when an item requires it (the
+# ettercap MITM item). Sits with the RTUs and the router on ICS (10.1.1.0/24)
+# so it can ARP man-in-the-middle any pair of them, and keeps a MGMT address
+# so burger can cc into it. Added like MONITOR_NODE rather than committing a
+# whole topology, so any route with an ICS segment can host the attack.
+KALI_NODE = {
+    "general": {"hostname": "kali", "description": "burger ettercap attacker"},
+    "hardware": {
+        "drives": [{"image": "kali.qc2"}],
+        "memory": 4096,
+        "os_type": "linux",
+        "vcpus": 2,
+    },
+    "network": {
+        "interfaces": [
+            {
+                "name": "IF0",
+                "vlan": "ICS",
+                "address": "10.1.1.200",
+                "gateway": "10.1.1.1",
+                "mask": 24,
+                "proto": "static",
+                "type": "ethernet",
+            },
+            {
+                "name": "mgmt",
+                "vlan": "MGMT",
+                "address": "172.16.1.201",
+                "mask": 16,
+                "proto": "static",
+                "type": "ethernet",
+            },
+        ]
+    },
+    "type": "VirtualMachine",
+}
+
+
 # On the rig tested, older bennu VMs had no miniccc binary and no virtio_console
 # loaded, so they never registered with cc (an image built without `phenix image
 # inject-miniexe`). The install path below stays as the rescue for such images:
@@ -161,6 +199,8 @@ def render(
         scen["spec"]["apps"] = apps
     if req.monitor:
         nodes.append(copy.deepcopy(MONITOR_NODE))
+    if req.attacker:
+        nodes.append(copy.deepcopy(KALI_NODE))
     if req.mgmt_vlan:  # exercise case-insensitive mgmt VLAN matching (#158)
         for n in nodes:
             for iface in n["network"]["interfaces"]:
@@ -183,7 +223,11 @@ def render(
         if n["general"]["hostname"] in bennu_nodes:
             n.setdefault("injections", []).extend(bennu_injections(man, stage_dir))
     if settings.mm_ctr:  # Windows images carry their own working miniccc
-        cc_hosts = set(req.cc_nodes or route.bennu_nodes) | ({"monitor"} if req.monitor else set())
+        cc_hosts = (
+            set(req.cc_nodes or route.bennu_nodes)
+            | ({"monitor"} if req.monitor else set())
+            | ({"kali"} if req.attacker else set())
+        )
         for n in nodes:
             if n["general"]["hostname"] in cc_hosts and n["hardware"].get("os_type") != "windows":
                 n.setdefault("injections", []).extend(miniccc_injections(stage_dir))
