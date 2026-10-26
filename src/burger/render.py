@@ -128,6 +128,46 @@ TRAFFIC_NODES = [
 ]
 
 
+# A Caldera C2 server on the ICS segment, injected when an item requires it (the
+# caldera component). It sits with the RTUs so operations can reach them, keeps a
+# MGMT address so burger can cc into it, and runs the Caldera server the
+# component drives over its REST API (via cc). Needs a caldera.qc2 image with
+# Caldera installed and the adversary/fact source the board names already loaded;
+# built like KALI_NODE rather than committing a topology, so any ICS route hosts
+# it.
+CALDERA_NODE = {
+    "general": {"hostname": "caldera", "description": "burger Caldera C2 server"},
+    "hardware": {
+        "drives": [{"image": "caldera.qc2"}],
+        "memory": 4096,
+        "os_type": "linux",
+        "vcpus": 2,
+    },
+    "network": {
+        "interfaces": [
+            {
+                "name": "IF0",
+                "vlan": "ICS",
+                "address": "10.1.1.210",
+                "gateway": "10.1.1.1",
+                "mask": 24,
+                "proto": "static",
+                "type": "ethernet",
+            },
+            {
+                "name": "mgmt",
+                "vlan": "MGMT",
+                "address": "172.16.1.220",
+                "mask": 16,
+                "proto": "static",
+                "type": "ethernet",
+            },
+        ]
+    },
+    "type": "VirtualMachine",
+}
+
+
 # On the rig tested, older bennu VMs had no miniccc binary and no virtio_console
 # loaded, so they never registered with cc (an image built without `phenix image
 # inject-miniexe`). The install path below stays as the rescue for such images:
@@ -205,6 +245,20 @@ def iperf_injections(stage_dir, version):
     ]
 
 
+def goart_injections(stage_dir):
+    # The art component expects goart already on the VM at /phenix/art/goart
+    # (its default goartPath), so burger injects the binary rather than the
+    # component sending it. The binary is staged from assets/art/goart.
+    return [
+        {
+            "src": f"{stage_dir}/goart",
+            "dst": "/phenix/art/goart",
+            "description": "burger: goart (Atomic Red Team runner) for the art component",
+            "permissions": "0755",
+        }
+    ]
+
+
 def _load(path) -> dict:
     try:
         return yaml.safe_load(Path(path).read_text())
@@ -249,6 +303,8 @@ def render(
         nodes.append(copy.deepcopy(KALI_NODE))
     if req.traffic_gen:
         nodes.extend(copy.deepcopy(TRAFFIC_NODES))
+    if req.caldera_server:
+        nodes.append(copy.deepcopy(CALDERA_NODE))
     if req.mgmt_vlan:  # exercise case-insensitive mgmt VLAN matching (#158)
         for n in nodes:
             for iface in n["network"]["interfaces"]:
@@ -261,6 +317,7 @@ def render(
         ("cc_nodes", req.cc_nodes),
         ("debs nodes", req.debs_nodes),
         ("iperf_static nodes", req.iperf_nodes),
+        ("goart nodes", req.goart_nodes),
     ):
         missing = [h for h in want if h not in hosts]
         if missing:
@@ -276,6 +333,7 @@ def render(
             | ({"monitor"} if req.monitor else set())
             | ({"kali"} if req.attacker else set())
             | ({n["general"]["hostname"] for n in TRAFFIC_NODES} if req.traffic_gen else set())
+            | ({"caldera"} if req.caldera_server else set())
         )
         for n in nodes:
             if n["general"]["hostname"] in cc_hosts and n["hardware"].get("os_type") != "windows":
@@ -285,6 +343,8 @@ def render(
             n.setdefault("injections", []).extend(debs_injections(stage_dir))
         if req.iperf_static and n["general"]["hostname"] in req.iperf_nodes:
             n.setdefault("injections", []).extend(iperf_injections(stage_dir, req.iperf_static))
+        if n["general"]["hostname"] in req.goart_nodes:
+            n.setdefault("injections", []).extend(goart_injections(stage_dir))
 
     components, runs = compose(res, man)
     extra = []

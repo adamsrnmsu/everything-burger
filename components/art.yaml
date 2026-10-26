@@ -1,0 +1,19 @@
+name: art
+kind: scorch
+type: art
+about: >
+  Runs an Atomic Red Team technique on a waterway node via goart. requires.goart
+  injects the goart binary to /phenix/art/goart on the target (rtu-2), where the
+  art component expects it. The default is T1082 test 0 (System Information
+  Discovery): benign recon, no payload; set your own technique and test. Uses
+  the art component from #208.
+routes: [waterway]
+stages: [start]
+config:
+  technique: T1082
+  testIndex: 0
+  vms:
+    - hostname: rtu-2
+requires:
+  goart:
+    nodes: [rtu-2]
