@@ -2,17 +2,16 @@
   "apiVersion": "phenix.sandia.gov/v2",
   "kind": "Scenario",
   "metadata": {
-    "name": "ebwes-caldera",
-    "created": "",
-    "updated": "",
     "annotations": {
       "topology": "ebwes-caldera"
-    }
+    },
+    "created": "",
+    "name": "ebwes-caldera",
+    "updated": ""
   },
   "spec": {
     "apps": [
       {
-        "name": "sceptre",
         "assetDir": "/phenix/topologies/burger-waterway",
         "hosts": [
           {
@@ -66,6 +65,11 @@
           {
             "hostname": "rtu-1",
             "metadata": {
+              "infrastructure": "waterway",
+              "labels": [
+                "elk"
+              ],
+              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
               "modbus": [
                 {
                   "name": "lowerwater",
@@ -92,11 +96,6 @@
                   "type": "boat-sensor"
                 }
               ],
-              "infrastructure": "waterway",
-              "labels": [
-                "elk"
-              ],
-              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
               "provider": "simulink-provider",
               "type": "fd-server"
             }
@@ -104,6 +103,11 @@
           {
             "hostname": "rtu-2",
             "metadata": {
+              "infrastructure": "waterway",
+              "labels": [
+                "elk"
+              ],
+              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
               "modbus": [
                 {
                   "name": "upperwater",
@@ -130,53 +134,46 @@
                   "type": "boat-sensor"
                 }
               ],
-              "infrastructure": "waterway",
-              "labels": [
-                "elk"
-              ],
-              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
               "provider": "simulink-provider",
               "type": "fd-server"
             }
           }
-        ]
+        ],
+        "name": "sceptre"
       },
       {
-        "name": "scorch",
         "metadata": {
           "components": [
             {
-              "name": "health",
-              "type": "cc",
               "metadata": {
                 "vms": [
                   {
                     "hostname": "rtu-1",
                     "start": [
                       {
-                        "type": "exec",
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "wait": true,
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
+                        "type": "exec",
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
+                        "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
+                        "type": "exec",
                         "wait": true
                       }
                     ]
@@ -185,29 +182,29 @@
                     "hostname": "rtu-2",
                     "start": [
                       {
-                        "type": "exec",
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "wait": true,
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
+                        "type": "exec",
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
+                        "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
+                        "type": "exec",
                         "wait": true
                       }
                     ]
@@ -216,34 +213,36 @@
                     "hostname": "simulink-provider",
                     "start": [
                       {
-                        "type": "exec",
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "wait": true,
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
-                      },
-                      {
                         "type": "exec",
-                        "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
                         "wait": true
                       },
                       {
+                        "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
                         "type": "exec",
+                        "wait": true
+                      },
+                      {
                         "args": "pgrep -f '(^|/)simulinksolver( |$)'",
+                        "type": "exec",
                         "wait": true
                       }
                     ]
                   }
                 ]
-              }
+              },
+              "name": "health",
+              "type": "cc"
             },
             {
-              "name": "caldera",
-              "type": "caldera",
               "metadata": {
-                "server": "caldera",
                 "adversary": "burger-adversary",
-                "facts": "burger-facts"
-              }
+                "facts": "burger-facts",
+                "server": "caldera"
+              },
+              "name": "caldera",
+              "type": "caldera"
             }
           ],
           "runs": [
@@ -254,22 +253,23 @@
               ]
             },
             {
-              "name": "caldera",
+              "cleanup": [
+                "caldera"
+              ],
               "configure": [
                 "caldera"
               ],
+              "name": "caldera",
               "start": [
                 "caldera"
               ],
               "stop": [
                 "caldera"
-              ],
-              "cleanup": [
-                "caldera"
               ]
             }
           ]
-        }
+        },
+        "name": "scorch"
       }
     ]
   }
