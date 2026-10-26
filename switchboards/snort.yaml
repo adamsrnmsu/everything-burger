@@ -1,0 +1,14 @@
+# snort on waterway: runs Snort 2.9 on the first RTU, sniffing its ICS
+# interface (IF0) while the field devices are polled, and checks it alerted on
+# the Modbus traffic and turned its stats into JSON. snort-conf writes the
+# config; the snort item pulls jammy's snort package onto the RTU. The bennu
+# items give the waterway health run so there is Modbus for Snort to see.
+# Uses the snort component from #204.
+about: "snort: alert on Modbus and convert stats to JSON on the ICS segment"
+route: waterway
+apps: {prs: [204]}
+items:
+  snort: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on

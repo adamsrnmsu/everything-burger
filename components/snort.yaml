@@ -11,7 +11,7 @@ routes: [waterway]
 stages: [configure, start, stop, cleanup]
 config:
   hostname: "{route.rtus[0]}"
-  sniffInterface: IF0
+  interface: IF0
   # stop waits this long before stopping snort: the polls it alerts on
   waitDuration: 20
 verify:

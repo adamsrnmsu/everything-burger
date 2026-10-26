@@ -1,0 +1,14 @@
+# cc component with the #209 pydantic metadata model. Exercises the two cc
+# cases on waterway: cc-empty-output (a validator on a command that prints
+# nothing) and cc-output-parsing (stderr before stdout, '/' and ':' in the
+# output), so #209's metadata validation is parsed and the stage commands run
+# for real. The bennu items give the waterway health run.
+about: "cc with the #209 metadata model: empty output and output parsing"
+route: waterway
+apps: {prs: [209]}
+items:
+  cc-empty-output: on
+  cc-output-parsing: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on

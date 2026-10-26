@@ -73,7 +73,7 @@ def test_experiment_name_too_long(settings):
 @pytest.mark.usefixtures("site_env")
 def test_every_switchboard_resolves(settings):
     names = all_switchboards(settings)
-    assert len(names) == 22
+    assert len(names) == 24
     for name in names:
         resolve(load_switchboard(name, settings), settings)
 
