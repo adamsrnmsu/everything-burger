@@ -1,0 +1,19 @@
+name: opcexport-live
+kind: scorch
+type: opcexport
+about: >
+  Live opcexport: dumps OPC data from the Windows opc server to an
+  Elasticsearch sink. The sink is es-stub (fake Elasticsearch on the provider,
+  172.16.1.2:9200). opcexport ships its own Python 3.8 + pip packages, so no
+  network install is needed. requires.apps_prs ties it to #205.
+  SCAFFOLD: not yet run live. It assumes opc.qc2 serves an OPC-UA endpoint at
+  :4840 and the sceptre app emits opc.xml for the opc host; both are verified
+  on the rig, not offline.
+routes: [waterway]
+stages: [configure, start, stop, cleanup]
+requires:
+  apps_prs: [205]
+config:
+  opc_hostname: opc
+  elastic_ip: 172.16.1.2
+  elastic_port: 9200
