@@ -46,10 +46,8 @@ items:
   iperf: on
   cc-empty-output: on
   cc-output-parsing: on
-  # validate-only (routes: []) — new #160 models exercised offline; no infra yet
+  # validate-only (routes: []); caldera and art run live on their own boards
   opcexport: on
-  caldera: on
-  art: on
   apps/mgmt-vlan-alias: on
   apps/mirror: on
   apps/mgmt_tap: on

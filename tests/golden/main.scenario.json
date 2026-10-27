@@ -467,7 +467,7 @@
               "type": "snort",
               "metadata": {
                 "hostname": "rtu-1",
-                "sniffInterface": "IF0",
+                "interface": "IF0",
                 "waitDuration": 20
               }
             },

@@ -2,15 +2,19 @@ name: art
 kind: scorch
 type: art
 about: >
-  Atomic Red Team metadata, validated offline (phenix-scorch-validate). No live
-  run yet: it needs the goart binary injected into the target VM.
-  requires.apps_prs ties it to #208 so the new pydantic model is validated.
-routes: []
+  Runs an Atomic Red Team technique on a waterway node via goart. requires.goart
+  injects the goart binary to /phenix/art/goart on the target (rtu-2), where the
+  art component expects it. The default is T1082 test 0 (System Information
+  Discovery): benign recon, no payload; set your own technique and test. Uses
+  the art component from #208.
+routes: [waterway]
 stages: [start]
-requires:
-  apps_prs: [208]
 config:
-  technique: T1003
+  technique: T1082
   testIndex: 0
   vms:
-    - hostname: target
+    - hostname: rtu-2
+requires:
+  goart:
+    nodes: [rtu-2]
+  apps_prs: [208]

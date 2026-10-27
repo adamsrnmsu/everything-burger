@@ -48,6 +48,8 @@ class Requires:
     keep_nodes: list[str]
     iperf_static: str | None = None  # version of the static iperf3 to inject
     iperf_nodes: list[str] = field(default_factory=list)
+    caldera_server: bool = False  # inject a Caldera C2 server VM
+    goart_nodes: list[str] = field(default_factory=list)  # inject the goart binary here
 
 
 @dataclass
@@ -225,5 +227,7 @@ def resolve(board: Switchboard, settings: Settings, linux_only: bool = False) ->
         keep_nodes=_unique(n for r in req for n in r.get("keep_nodes", [])),
         iperf_static=next((s["version"] for r in req if (s := r.get("iperf_static"))), None),
         iperf_nodes=_unique(n for r in req for n in r.get("iperf_static", {}).get("nodes", [])),
+        caldera_server=any(r.get("caldera_server") for r in req),
+        goart_nodes=_unique(n for r in req for n in r.get("goart", {}).get("nodes", [])),
     )
     return Resolved(board, route, items, validate_only, requires, linux_only)

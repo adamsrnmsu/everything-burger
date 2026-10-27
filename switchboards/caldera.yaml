@@ -1,0 +1,15 @@
+# caldera on waterway: the caldera component (#207) runs a Caldera operation
+# from an injected Caldera C2 server (requires.caldera_server adds a `caldera`
+# VM on the ICS segment). The adversary and fact source must already be loaded
+# in that server. The bennu items give the waterway health run around it.
+#
+# Scaffold: needs a caldera.qc2 image with Caldera installed and the named
+# adversary/facts loaded. See components/caldera.yaml.
+about: "caldera: run a Caldera operation from an injected C2 server (#207)"
+route: waterway
+apps: {prs: [207]}
+items:
+  caldera: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on

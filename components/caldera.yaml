@@ -2,15 +2,18 @@ name: caldera
 kind: scorch
 type: caldera
 about: >
-  caldera metadata, validated offline (phenix-scorch-validate). No live run yet:
-  it needs a Caldera server VM with the REST API. requires.apps_prs ties it to
-  #207 so the new pydantic model is validated.
-routes: []
+  Runs a Caldera operation against the environment, driving the Caldera server's
+  REST API over minimega cc. requires.caldera_server injects a `caldera` VM
+  (caldera.qc2) on the ICS segment with a MGMT address burger can cc into. The
+  adversary and fact source named below must already be loaded in that Caldera
+  server (build them into caldera.qc2 or load them via an injection). Uses the
+  caldera component from #207.
+routes: [waterway]
 stages: [configure, start, stop, cleanup]
-requires:
-  apps_prs: [207]
 config:
-  server: mallory
-  adversary: superbad
-  facts: recon
-  planner: atomic
+  server: caldera
+  adversary: burger-adversary
+  facts: burger-facts
+requires:
+  caldera_server: true
+  apps_prs: [207]

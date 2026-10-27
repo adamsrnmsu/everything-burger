@@ -1,0 +1,18 @@
+# cc on a Windows VM (opc), sceptre-phenix-apps #210: Windows commands are
+# judged by exit code through `powershell -File`, with a warn-not-fail
+# transition from the old "any STDERR fails" rule. cc-windows-exit-code passes
+# only with #210 (on main its STDERR exec fails the stage) and checks both
+# transition warnings fired; cc-windows-failure is the guard that a real Windows
+# failure still fails, on main or #210. The expected failure is listed last so
+# it cannot stop the other. Needs the Windows images: under --linux-only both
+# items drop out. The bennu items give the waterway health run, which also
+# waits out Windows boot.
+about: "#210 cc on Windows: exit codes through powershell -File, warn-not-fail transition"
+route: waterway
+apps: {prs: [210]}
+items:
+  cc-windows-exit-code: on
+  cc-windows-failure: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on

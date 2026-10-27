@@ -78,6 +78,17 @@ def build(res: Resolved, settings: Settings, host) -> None:
     if res.requires.iperf_static:
         build_iperf(host, settings, res.requires.iperf_static, out, uid)
 
+    if res.requires.goart_nodes:
+        # goart is a prebuilt Atomic Red Team runner, not built here; drop the
+        # binary at assets/art/goart and burger stages it for the injection.
+        src = settings.root / "assets" / "art" / "goart"
+        if not src.is_file():
+            raise BurgerError(
+                "requires.goart needs the goart binary at assets/art/goart "
+                "(not committed; add the Atomic Red Team goart build there)"
+            )
+        shutil.copy2(src, out / "goart")
+
     if man["bennu"]:
         spec = res.board.bennu or {}
         build_bennu(host, rd / "bennu", out, man, spec.get("install", ["deb"]), spec.get("pip", []))

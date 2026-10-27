@@ -1,0 +1,15 @@
+# art on waterway: the art component (#208) runs an Atomic Red Team technique
+# on rtu-2 via goart. requires.goart injects the goart binary onto rtu-2, where
+# the component expects it. The default technique (T1082 test 0) is benign
+# recon. The bennu items give the waterway health run around it.
+#
+# Scaffold: needs the goart binary at assets/art/goart (not committed). See
+# components/art.yaml.
+about: "art: run an Atomic Red Team technique on an RTU via goart (#208)"
+route: waterway
+apps: {prs: [208]}
+items:
+  art: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
