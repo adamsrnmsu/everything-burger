@@ -1,0 +1,30 @@
+name: cc-windows-exit-code
+kind: scorch
+type: cc
+about: >
+  cc on a Windows VM (opc), where a command runs as `powershell -File`. Two
+  execs whose outcome changed when Windows commands moved from "any STDERR
+  fails" to exit codes: a native command that writes STDERR and exits 0 (failed
+  on main, passes now with a warning), and one that exits 3 without STDERR
+  (passed on main only because `powershell -File` dropped the exit code; now
+  the code reaches cc and, during the transition, passes with a warning). The
+  log checks prove both warnings fired, so the exit code made it through
+  PowerShell.
+routes: [waterway]
+stages: [start]
+config:
+  vms:
+    - hostname: opc
+      start:
+        - type: exec
+          args: 'cmd /c "echo burger-noise 1>&2"'
+          wait: true
+        - type: exec
+          args: "cmd /c exit 3"
+          wait: true
+verify:
+  - log: {glob: "start-*.json", contains: "no longer fail on STDERR alone"}
+  - log: {glob: "start-*.json", contains: "exited 3 without writing to STDERR"}
+requires:
+  windows: true
+  apps_prs: [210]

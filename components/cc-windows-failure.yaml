@@ -1,0 +1,19 @@
+name: cc-windows-failure
+kind: scorch
+type: cc
+about: >
+  A Windows command that writes STDERR and exits non-zero fails the stage, on
+  main and with the exit-code change: the guard that real Windows failures are
+  not swallowed by the transition.
+routes: [waterway]
+stages: [start]
+expect_error: "failed on Windows"
+config:
+  vms:
+    - hostname: opc
+      start:
+        - type: exec
+          args: 'cmd /c "echo burger-boom 1>&2 & exit 2"'
+          wait: true
+requires:
+  windows: true
