@@ -26,7 +26,7 @@
 # bennu is stock: no included item needs a bennu PR.
 about: "main + every open phenix-apps PR (#166, #168, #202) together"
 route: waterway
-apps: {prs: [166, 168, 202]}
+apps: {prs: [166, 168, 202, 205, 207, 208]}
 items:
   disruption: on
   disruption-dos: on
@@ -46,6 +46,8 @@ items:
   iperf: on
   cc-empty-output: on
   cc-output-parsing: on
+  # validate-only (routes: []); caldera and art run live on their own boards
+  opcexport: on
   apps/mgmt-vlan-alias: on
   apps/mirror: on
   apps/mgmt_tap: on

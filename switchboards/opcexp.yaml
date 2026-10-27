@@ -1,0 +1,24 @@
+# opcexport live, on waterway. es-stub stands up a fake Elasticsearch on the
+# provider (172.16.1.2:9200); opcexport (on the Windows opc server) reads the
+# sceptre-generated opc.xml, installs its bundled Python, connects to the local
+# OPC-UA server and posts to es-stub. Windows-only (the opc server), so this is
+# not a --linux-only board.
+#
+# SCAFFOLD: renders and resolves offline, but a live pass depends on opc.qc2
+# serving OPC-UA at :4840 and the sceptre app emitting opc.xml for `opc` -
+# both only checkable on the rig. Uses opcexport component #205.
+about: "opcexport: OPC server -> es-stub Elasticsearch (waterway)"
+route: waterway
+apps: {prs: [205]}
+items:
+  es-stub: on
+  opcexport-live: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+runs:
+  - name: opcexport
+    configure: [opcexport-live]
+    start: [es-stub, opcexport-live]
+    stop: [opcexport-live]
+    cleanup: [opcexport-live]

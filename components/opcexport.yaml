@@ -1,0 +1,15 @@
+name: opcexport
+kind: scorch
+type: opcexport
+about: >
+  opcexport metadata, validated offline (phenix-scorch-validate). No live run
+  yet: it needs an OPC server + Elasticsearch stack. requires.apps_prs ties it
+  to #205 so the new pydantic model is what gets validated.
+routes: []
+stages: [configure, start, stop, cleanup]
+requires:
+  apps_prs: [205]
+config:
+  opc_hostname: opc
+  elastic_ip: 172.16.111.1
+  elastic_port: 9200
