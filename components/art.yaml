@@ -1,0 +1,16 @@
+name: art
+kind: scorch
+type: art
+about: >
+  Atomic Red Team metadata, validated offline (phenix-scorch-validate). No live
+  run yet: it needs the goart binary injected into the target VM.
+  requires.apps_prs ties it to #208 so the new pydantic model is validated.
+routes: []
+stages: [start]
+requires:
+  apps_prs: [208]
+config:
+  technique: T1003
+  testIndex: 0
+  vms:
+    - hostname: target
