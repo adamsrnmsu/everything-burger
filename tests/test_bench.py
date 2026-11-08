@@ -2,9 +2,8 @@ import json
 
 from burger.checks.base import CheckContext
 from burger.checks.hook import load
-from burger.compose import compose
 from burger.items import load_item
-from burger.switchboard import load_switchboard, resolve
+from tests.conftest import assert_one_cc_component
 
 
 def result(**kw):
@@ -58,9 +57,4 @@ def test_tunables_come_from_env(settings, monkeypatch):
 
 
 def test_bench_board_renders_one_cc_component(settings):
-    res = resolve(load_switchboard("bench", settings), settings)
-    comps, runs = compose(res, {"bennu": {"deb_version": "1"}})
-    bench = next(c for c in comps if c["name"] == "field-device-bench")
-    assert bench["type"] == "cc"
-    assert bench["metadata"]["vms"][0]["hostname"] == "rtu-1"
-    assert any(r.get("start") == ["field-device-bench"] for r in runs)
+    assert_one_cc_component(settings, "bench", "field-device-bench", "rtu-1")

@@ -1,0 +1,8 @@
+# Control on the arm64 rig: upstream main apps, the range's own bennu image.
+about: upstream main on the arm64 waterway range
+route: waterway-arm64
+apps: {prs: []}
+items:
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on

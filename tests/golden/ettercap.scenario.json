@@ -13,32 +13,20 @@
     "apps": [
       {
         "name": "sceptre",
-        "assetDir": "/phenix/topologies/burger-waterway",
+        "assetDir": "/phenix/topologies/burger-mitm",
         "hosts": [
-          {
-            "hostname": "historian",
-            "metadata": {
-              "type": "historian"
-            }
-          },
-          {
-            "hostname": "hmi",
-            "metadata": {
-              "type": "hmi"
-            }
-          },
           {
             "hostname": "simulink-provider",
             "metadata": {
-              "gt": "/phenix/topologies/burger-waterway/injects/simulinkgt",
-              "gt_template": "/phenix/topologies/burger-waterway/injects/main.tmpl",
+              "gt": "/phenix/topologies/burger-mitm/injects/simulinkgt",
+              "gt_template": "/phenix/topologies/burger-mitm/injects/main.tmpl",
               "labels": [
                 "elk"
               ],
               "publish_endpoint": "udp://*;239.0.0.1:40000",
-              "publish_points": "/phenix/topologies/burger-waterway/injects/publishPoints.txt",
+              "publish_points": "/phenix/topologies/burger-mitm/injects/publishPoints.txt",
               "simulator": "Simulink",
-              "solver": "/phenix/topologies/burger-waterway/injects/simulinksolver",
+              "solver": "/phenix/topologies/burger-mitm/injects/simulinksolver",
               "type": "provider"
             }
           },
@@ -50,17 +38,6 @@
                 "rtu-2"
               ],
               "type": "opc"
-            }
-          },
-          {
-            "hostname": "scada-server",
-            "metadata": {
-              "automation": "/phenix/topologies/burger-waterway/injects/myscada.exe",
-              "labels": [
-                "elk"
-              ],
-              "project": "/phenix/topologies/burger-waterway/injects/waterway.mep",
-              "type": "scada-server"
             }
           },
           {
@@ -155,12 +132,6 @@
                     "start": [
                       {
                         "type": "exec",
-                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "wait": true,
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
-                      },
-                      {
-                        "type": "exec",
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
                         "wait": true
                       },
@@ -186,12 +157,6 @@
                     "start": [
                       {
                         "type": "exec",
-                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "wait": true,
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
-                      },
-                      {
-                        "type": "exec",
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
                         "wait": true
                       },
@@ -215,12 +180,6 @@
                   {
                     "hostname": "simulink-provider",
                     "start": [
-                      {
-                        "type": "exec",
-                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "wait": true,
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
-                      },
                       {
                         "type": "exec",
                         "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",

@@ -153,8 +153,10 @@ def _preflight(args, s, host) -> int:
         chk(f"REST API {s.api}", True)
     except (OSError, urllib.error.URLError) as e:
         chk(f"REST API {s.api}", False, f"{e}; set BURGER_API / BURGER_TOKEN")
-    windows = load_route("waterway", s).windows_images
-    for img in ["bennu.qc2", "minirouter.qc2", *([] if args.linux_only else windows)]:
+    route = load_route(args.route, s)
+    windows = route.windows_images
+    stock = route.images or ["bennu.qc2", "minirouter.qc2"]
+    for img in [*stock, *([] if args.linux_only else windows)]:
         rc = host.ctr(
             "timeout", "60", "bash", "-c", READ_PROBE, "probe",
             f"{s.phenix_dir}/images/{img}", check=False,
@@ -431,7 +433,14 @@ def _parser() -> argparse.ArgumentParser:
     add("down", "delete the experiment and configs")
     add("bennu-check", "run bennu's docker test harness on the board's bennu PR")
     add("mm-check", "minimega #1684's cc_filtered in the board's running experiment")
-    add("preflight", "check the phēnix host can run the boards", lo, fn=_preflight, board=None)
+    add(
+        "preflight",
+        "check the phēnix host can run the boards",
+        lo,
+        ("--route", {"default": "waterway", "help": "route whose images to check"}),
+        fn=_preflight,
+        board=None,
+    )
     add("prs", "my open PRs, the boards that carry them, stale syncs",
         ("--author", {"default": "@me"}), fn=_prs, board=None)  # fmt: skip
     add("list", "switchboards and items", fn=_list, board=None)

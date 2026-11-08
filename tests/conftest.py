@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from burger.checks import CheckContext
+from burger.compose import compose
 from burger.config import Settings
 from burger.items import load_item
 from burger.routes import load_route
@@ -39,6 +40,20 @@ def make_ctx(settings, tmp_path, item=None, **over):
     return CheckContext(item, [loop], load_route("soap", settings), {}, tmp_path), loop
 
 
+def assert_one_cc_component(settings, board, item, hostname):
+    """The board renders `item` as a cc component on `hostname`, wired into a run.
+
+    Returns the component so callers can assert on its rendered config.
+    """
+    res = resolve(load_switchboard(board, settings), settings)
+    comps, runs = compose(res, {"bennu": {"deb_version": "1"}})
+    comp = next(c for c in comps if c["name"] == item)
+    assert comp["type"] == "cc"
+    assert comp["metadata"]["vms"][0]["hostname"] == hostname
+    assert any(r.get("start") == [item] for r in runs)
+    return comp
+
+
 @pytest.fixture
 def vm_password(monkeypatch):
     monkeypatch.setenv("BURGER_VM_PASSWORD", "lab")  # ssh's scenario needs it
@@ -51,6 +66,7 @@ def site_env(monkeypatch):
     monkeypatch.setenv("BURGER_SITE_TOPOLOGY", str(GOLDEN / "site-topology.yaml"))
     monkeypatch.setenv("BURGER_SITE_SCENARIO", str(GOLDEN / "site-scenario.yaml"))
     monkeypatch.setenv("BURGER_SITE_PROVIDER", "pp1")
+    monkeypatch.setenv("BURGER_ARM64_RANGE", str(GOLDEN / "arm64-range"))
 
 
 @pytest.fixture

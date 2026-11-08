@@ -17,7 +17,7 @@ for `minirouter.qc2`). The Windows images are not public: without them, pass
 `--linux-only` to `preflight`, `run` and the step commands.
 
 `./burger` is a shim that runs `.venv/bin/burger`, and says what to do when the
-venv is missing. It works from any directory: `work/` and the item folders are
+venv is missing. `BURGER_VENV` points it at another venv (the Lima VM uses `.venv-lima`). It works from any directory: `work/` and the item folders are
 found in the checkout burger was installed from.
 
 `make` with no target lists the shortcuts: `install`, `list`, `dry-run` and `run`
