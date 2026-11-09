@@ -7,7 +7,7 @@ about: >
   malware-gen nodes on their own TRAFFIC VLAN (10.1.9.0/24), off the ICS/SCADA
   segments the other items watch. The three generator scripts are staged from
   burger's assets/ via {asset_dir}. Uses the trafficgen component from #206.
-routes: [waterway]
+routes: [waterway, waterway-arm64]
 stages: [configure, start, stop, cleanup]
 requires:
   traffic_gen: true

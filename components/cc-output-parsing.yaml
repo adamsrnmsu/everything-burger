@@ -6,7 +6,7 @@ about: >
   and '/', with a validator that wants that exact stdout line. phenix-apps main
   splits cc responses on '/' and ':', so stdout is lost or cut short; #183
   splits on whole response header lines instead.
-routes: [waterway, soap]
+routes: [waterway, soap, waterway-arm64]
 stages: [start]
 config:
   vms:
