@@ -9,7 +9,7 @@ about: >
 routes: [waterway, mitm, waterway-arm64, mitm-arm64]
 stages: [start, stop]
 config:
-  vms: [{hostname: kali, iface: IF0, filter: "tcp port {route.ics_port}"}]
+  vms: [{hostname: kali, iface: "{route.ics_iface}", filter: "tcp port {route.ics_port}"}]
 verify:
   - files: {glob: "*.pcap", min: 1}
   # The Modbus polls come from the Windows OPC server, so this is Windows

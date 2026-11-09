@@ -6,6 +6,8 @@ base:
 rtus: [rtu-1, rtu-2]
 provider: waterway-provider
 ics_port: 502
+# arm64 images keep kernel NIC names (eth0 = first NIC), not the topology name IF0
+ics_iface: eth0
 bennu_nodes: [rtu-1, rtu-2, waterway-provider]
 images:
   - bennu-arm64.qc2

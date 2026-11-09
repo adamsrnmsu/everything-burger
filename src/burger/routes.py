@@ -6,7 +6,17 @@ from burger.loader import load_yaml
 
 ROUTES_DIR = Path(__file__).resolve().parents[2] / "routes"
 _LISTS = ("bennu_nodes", "drop_nodes", "windows_images", "images")
-_FIELDS = {"topology_dir", "files", "base", "rtus", "provider", "ics_port", "image_map", *_LISTS}
+_FIELDS = {
+    "topology_dir",
+    "files",
+    "base",
+    "rtus",
+    "provider",
+    "ics_port",
+    "ics_iface",
+    "image_map",
+    *_LISTS,
+}
 
 
 @dataclass
@@ -42,7 +52,7 @@ def load_route(name: str, settings: Settings) -> Route:
         topology_dir=doc.get("topology_dir"),
         files=tuple(files) if files else None,
         base=doc.get("base"),
-        values={k: doc[k] for k in ("rtus", "provider", "ics_port") if k in doc},
+        values={k: doc[k] for k in ("rtus", "provider", "ics_port", "ics_iface") if k in doc},
         image_map=doc.get("image_map") or {},
         unset=unset,
         **{k: doc.get(k) or [] for k in _LISTS},

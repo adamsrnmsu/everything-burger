@@ -6,5 +6,6 @@ files: [mitm-topology.yaml, mitm-scenario.yaml]
 rtus: [rtu-1, rtu-2]
 provider: simulink-provider
 ics_port: 502
+ics_iface: IF0
 bennu_nodes: [rtu-1, rtu-2, simulink-provider]
 windows_images: [opc.qc2]

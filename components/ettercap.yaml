@@ -13,5 +13,5 @@ requires:
 config:
   vms:
     - hostname: kali
-      iface: IF0
+      iface: "{route.ics_iface}"
       targets: "/10.1.1.101// /10.1.1.1//"
