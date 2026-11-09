@@ -259,6 +259,22 @@ def goart_injections(stage_dir):
     ]
 
 
+def arm64_node(node: dict, image_map: dict) -> None:
+    """Make an injected node boot on an arm64 range: the mapped image and the
+    hardware block the range's own topologies use (UEFI firmware, virt machine,
+    xhci in place of the PCI USB bus, partition 2 for phenix's file injection)."""
+    node["hardware"]["cpu"] = "host"
+    for d in node["hardware"]["drives"]:
+        d["image"] = image_map.get(d["image"], d["image"])
+        d.update(interface="virtio", inject_partition=2)
+    node["advanced"] = {
+        "machine": "virt",
+        "vga": "virtio",
+        "qemu-append": "-bios /usr/share/AAVMF/AAVMF_CODE.fd",
+    }
+    node["overrides"] = {"bus=usb-bus.0": "bus=xhci.0"}
+
+
 def _load(path) -> dict:
     try:
         return yaml.safe_load(Path(path).read_text())
@@ -297,15 +313,20 @@ def render(
                     continue
             apps.append(app)
         scen["spec"]["apps"] = apps
+    injected = []
     if req.monitor:
-        nodes.append(copy.deepcopy(MONITOR_NODE))
+        injected.append(copy.deepcopy(MONITOR_NODE))
     has_kali = any(n["general"]["hostname"] == "kali" for n in nodes)  # the mitm topology has one
     if req.attacker and not has_kali:
-        nodes.append(copy.deepcopy(KALI_NODE))
+        injected.append(copy.deepcopy(KALI_NODE))
     if req.traffic_gen:
-        nodes.extend(copy.deepcopy(TRAFFIC_NODES))
+        injected.extend(copy.deepcopy(TRAFFIC_NODES))
     if req.caldera_server:
-        nodes.append(copy.deepcopy(CALDERA_NODE))
+        injected.append(copy.deepcopy(CALDERA_NODE))
+    if route.arm64:
+        for n in injected:
+            arm64_node(n, route.image_map)
+    nodes.extend(injected)
     if req.mgmt_vlan:  # exercise case-insensitive mgmt VLAN matching (#158)
         for n in nodes:
             for iface in n["network"]["interfaces"]:

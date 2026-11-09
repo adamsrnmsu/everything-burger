@@ -10,6 +10,19 @@ can ask of it.
 | `mitm` | topologies repo, `mitm/` | lean waterway derivative with its own `kali`; the `ettercap` board runs here. Needs the topologies PR that adds `mitm/` merged to main (sync archives main) |
 | `site` | `BURGER_SITE_TOPOLOGY` and `BURGER_SITE_SCENARIO` | your own rig; never rewritten or copied |
 | `waterway-arm64` | `BURGER_ARM64_RANGE` (default `/Users/ryanadams/git/phenix-waterway-range`), `topologies/waterway-arm64/` | Apple Silicon rig; never rewritten or copied; images are the route's `images` list, so use `burger preflight --route waterway-arm64 --linux-only`; board `arm64` |
+| `mitm-arm64` | `BURGER_ARM64_RANGE`, `topologies/mitm-arm64/` | the `mitm` route on the arm64 range (kali-arm64 attacker; the Malcolm `blue` node is dropped); run a board on it with `burger check ettercap --route mitm-arm64` |
+
+## arm64 routes
+
+A route with an `image_map` is an arm64 range. Nodes burger injects (attacker,
+monitor, trafficgen, caldera) get the mapped image (`kali.qc2` to
+`kali-arm64.qc2`, and so on) and the hardware block the range's topologies use
+(`cpu: host`, `machine: virt`, AAVMF firmware, xhci USB, `inject_partition: 2`).
+Every board command takes `--route <name>` to run the board on a route other
+than its own (the item must list the route in `routes:`); pass it on each step
+you run by hand. `goart` comes from `assets/art/goart-arm64` on these routes
+(`scripts/build-goart.sh arm64` builds it). A bennu PR build is not supported on
+an arm64 route yet (the deb is built for amd64): such a board fails to resolve.
 
 Topology asset paths `/phenix/topologies/<dir>` in the waterway and soap
 documents are rewritten to `<phenix dir>/topologies/burger-<dir>`, so your own

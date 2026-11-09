@@ -4,7 +4,7 @@ type: field-device
 about: >
   The C++ field device on each RTU serves Modbus and gets its values from the
   provider.
-routes: [waterway, waterway-arm64, mitm, soap]
+routes: [waterway, waterway-arm64, mitm, mitm-arm64, soap]
 verify:
   - port: {host: "{route.rtus}", port: 502}
   - vm:

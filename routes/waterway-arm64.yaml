@@ -15,3 +15,10 @@ images:
   - historian-arm64.qc2
   - hmi-arm64.qc2
   - engineer-arm64.qc2
+# Images of the nodes burger injects (attacker, monitor, trafficgen, caldera), and the
+# reason this is an arm64 route: those nodes also get the range's arm64 hardware block.
+image_map:
+  kali.qc2: kali-arm64.qc2
+  ubuntu.qc2: ubuntu-arm64.qc2
+  bennu.qc2: bennu-arm64.qc2
+  caldera.qc2: caldera-arm64.qc2

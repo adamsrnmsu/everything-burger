@@ -6,7 +6,7 @@ from burger.loader import load_yaml
 
 ROUTES_DIR = Path(__file__).resolve().parents[2] / "routes"
 _LISTS = ("bennu_nodes", "drop_nodes", "windows_images", "images")
-_FIELDS = {"topology_dir", "files", "base", "rtus", "provider", "ics_port", *_LISTS}
+_FIELDS = {"topology_dir", "files", "base", "rtus", "provider", "ics_port", "image_map", *_LISTS}
 
 
 @dataclass
@@ -20,7 +20,14 @@ class Route:
     drop_nodes: list[str] = field(default_factory=list)
     windows_images: list[str] = field(default_factory=list)
     images: list[str] = field(default_factory=list)  # empty: bennu.qc2, minirouter.qc2
+    # image_map renames the images of nodes burger injects (kali.qc2 -> kali-arm64.qc2); a
+    # route with one is an arm64 range, so those nodes also get the arm64 hardware block.
+    image_map: dict[str, str] = field(default_factory=dict)
     unset: list[str] = field(default_factory=list)
+
+    @property
+    def arm64(self) -> bool:
+        return bool(self.image_map)
 
 
 def load_route(name: str, settings: Settings) -> Route:
@@ -36,6 +43,7 @@ def load_route(name: str, settings: Settings) -> Route:
         files=tuple(files) if files else None,
         base=doc.get("base"),
         values={k: doc[k] for k in ("rtus", "provider", "ics_port") if k in doc},
+        image_map=doc.get("image_map") or {},
         unset=unset,
         **{k: doc.get(k) or [] for k in _LISTS},
     )

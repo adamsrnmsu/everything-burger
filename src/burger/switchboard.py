@@ -157,10 +157,12 @@ def _unique(seq) -> list:
     return list(dict.fromkeys(seq))
 
 
-def resolve(board: Switchboard, settings: Settings, linux_only: bool = False) -> Resolved:
+def resolve(
+    board: Switchboard, settings: Settings, linux_only: bool = False, route_name: str | None = None
+) -> Resolved:
     """Check everything that can fail before a build, and raise it all in one BurgerError."""
     linux_only = linux_only or board.linux_only
-    route = load_route(board.route, settings)
+    route = load_route(route_name or board.route, settings)
     problems: list[str] = []
     unset = [*board.unset, *route.unset]
     items: list[Item] = []
@@ -170,6 +172,10 @@ def resolve(board: Switchboard, settings: Settings, linux_only: bool = False) ->
             f"experiment name '{board.exp}' is {len(board.exp)} characters, "
             f"over the {MAX_EXP_NAME} limit"
         )
+    if route.arm64 and board.bennu:
+        # ponytail: bennu.py builds the PR deb for amd64 only; the range's bennu-arm64
+        # Dockerfile recipe is not wired in (ww-90o.1 follow-up). Fail now, not at install.
+        problems.append("a bennu PR build is not supported on arm64 routes yet")
     refs = [ref for ref, on in board.items.items() if on]
     for key in board.overrides:
         if key not in refs:

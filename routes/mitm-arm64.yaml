@@ -1,0 +1,23 @@
+# The MITM derivative of the arm64 waterway range (topologies/mitm-arm64 in the
+# phenix-waterway-range checkout, like waterway-arm64): rtu-1, rtu-2, router, opc,
+# simulink-provider and a kali-arm64 attacker on the ICS segment. The ettercap board
+# runs here (burger check ettercap --route mitm-arm64). The range topology also has
+# a 24 GiB "blue" Kali Purple + Malcolm node, which no board uses: dropped.
+base:
+  topology: ${BURGER_ARM64_RANGE:-/Users/ryanadams/git/phenix-waterway-range}/topologies/mitm-arm64/mitm-topology.yaml
+  scenario: ${BURGER_ARM64_RANGE:-/Users/ryanadams/git/phenix-waterway-range}/topologies/mitm-arm64/mitm-scenario.yaml
+rtus: [rtu-1, rtu-2]
+provider: simulink-provider
+ics_port: 502
+bennu_nodes: [rtu-1, rtu-2, simulink-provider]
+drop_nodes: [blue]
+images:
+  - bennu-arm64.qc2
+  - minirouter-arm64.qc2
+  - opc-arm64.qc2
+  - kali-arm64.qc2
+image_map:
+  kali.qc2: kali-arm64.qc2
+  ubuntu.qc2: ubuntu-arm64.qc2
+  bennu.qc2: bennu-arm64.qc2
+  caldera.qc2: caldera-arm64.qc2

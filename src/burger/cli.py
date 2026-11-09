@@ -44,13 +44,15 @@ READ_PROBE = (
 out = Console()
 
 
-def _board(s: Settings, name: str, linux_only: bool = False, log: bool = True) -> Resolved:
+def _board(
+    s: Settings, name: str, linux_only: bool = False, log: bool = True, route: str | None = None
+) -> Resolved:
     """Load and resolve a switchboard by a name that must be one of the existing ones."""
     if name not in all_switchboards(s):
         raise BurgerError(f"no switchboard '{name}' (known: {', '.join(all_switchboards(s))})")
     if log:
         setup_logging(vcs.board_dir(s, name), _VERBOSE)
-    return resolve(load_switchboard(name, s), s, linux_only)
+    return resolve(load_switchboard(name, s), s, linux_only, route)
 
 
 def _state_linux_only(s: Settings, name: str) -> bool:
@@ -65,7 +67,7 @@ def _one(args, s, host, name: str) -> int:
         lo = _state_linux_only(s, name)
     else:
         lo = getattr(args, "linux_only", False)
-    res = _board(s, name, lo)
+    res = _board(s, name, lo, route=getattr(args, "route", None))
     if cmd == "sync":
         vcs.sync(res, s, host)
     elif cmd == "build":
@@ -117,12 +119,12 @@ def _run(args, s, host) -> int:
         _one(step, s, host, name)
         timings[cmd] = time.monotonic() - began
         if cmd == "sync":  # render and compose offline first: hostname/run errors before docker
-            res, rd = _board(s, name, args.linux_only), vcs.board_dir(s, name)
+            res, rd = _board(s, name, args.linux_only, route=args.route), vcs.board_dir(s, name)
             topo = res.route.topology_dir
             stage = f"{s.phenix_dir}/burger/{name}"
             render(res, vcs.load_manifest(s, name), rd / topo if topo else None, stage, s)
     out.rule(f"verify {name}", style="dim")
-    code = _verify(_board(s, name, args.linux_only), s, host, timings, args.keep)
+    code = _verify(_board(s, name, args.linux_only, route=args.route), s, host, timings, args.keep)
     if code == 0 and not args.keep:  # a failing switchboard stays up to debug
         _one(argparse.Namespace(cmd="down"), s, host, name)
     return code
@@ -343,7 +345,7 @@ def _synthetic_manifest(board) -> dict:
 
 
 def _check(args, s, host) -> int:
-    res = _board(s, args.board, args.linux_only, log=False)
+    res = _board(s, args.board, args.linux_only, log=False, route=args.route)
     rd = vcs.board_dir(s, args.board)
     man = vcs.load_manifest(s, args.board) if (rd / "manifest.json").is_file() else None
     man = man or _synthetic_manifest(res.board)
@@ -401,6 +403,7 @@ def _parser() -> argparse.ArgumentParser:
         sp.set_defaults(fn=fn)
         if board:
             sp.add_argument(board, nargs="+" if name == "sync" else None, metavar="board")
+            sp.add_argument("--route", help="run the board on this route, not its own")
         for f, k in flags:
             sp.add_argument(f, **k)
         return sp

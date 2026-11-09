@@ -6,7 +6,7 @@ about: >
   kali is not a Modbus endpoint, so any Modbus packets it sees are the OPC
   server's polls to rtu-1 redirected through it: proof the ettercap MITM
   intercepted the traffic.
-routes: [waterway, mitm]
+routes: [waterway, mitm, waterway-arm64, mitm-arm64]
 stages: [start, stop]
 config:
   vms: [{hostname: kali, iface: IF0, filter: "tcp port {route.ics_port}"}]
