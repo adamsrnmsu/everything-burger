@@ -1,0 +1,17 @@
+# Apple Silicon rig: the phenix-waterway-range arm64 topology, read from that
+# checkout (never rewritten or copied, like the site route). Linux images only.
+base:
+  topology: ${BURGER_ARM64_RANGE:-/Users/ryanadams/git/phenix-waterway-range}/topologies/waterway-arm64/waterway-topology.yaml
+  scenario: ${BURGER_ARM64_RANGE:-/Users/ryanadams/git/phenix-waterway-range}/topologies/waterway-arm64/waterway-scenario.yaml
+rtus: [rtu-1, rtu-2]
+provider: waterway-provider
+ics_port: 502
+bennu_nodes: [rtu-1, rtu-2, waterway-provider]
+images:
+  - bennu-arm64.qc2
+  - minirouter-arm64.qc2
+  - opc-arm64.qc2
+  - scada-arm64.qc2
+  - historian-arm64.qc2
+  - hmi-arm64.qc2
+  - engineer-arm64.qc2

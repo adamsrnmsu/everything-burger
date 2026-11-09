@@ -2,7 +2,7 @@ name: simulink-provider
 kind: bennu
 type: simulink-provider
 about: The Simulink provider and its solver run on the provider VM.
-routes: [waterway]
+routes: [waterway, waterway-arm64, mitm]
 verify:
   - vm:
       host: "{route.provider}"

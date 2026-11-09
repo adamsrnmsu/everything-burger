@@ -299,7 +299,8 @@ def render(
         scen["spec"]["apps"] = apps
     if req.monitor:
         nodes.append(copy.deepcopy(MONITOR_NODE))
-    if req.attacker:
+    has_kali = any(n["general"]["hostname"] == "kali" for n in nodes)  # the mitm topology has one
+    if req.attacker and not has_kali:
         nodes.append(copy.deepcopy(KALI_NODE))
     if req.traffic_gen:
         nodes.extend(copy.deepcopy(TRAFFIC_NODES))

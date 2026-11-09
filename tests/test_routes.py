@@ -45,5 +45,22 @@ def test_site_route_unset(settings, monkeypatch):
 
 
 def test_unknown_route(settings):
-    with pytest.raises(BurgerError, match="site, soap, waterway"):
+    with pytest.raises(BurgerError, match="mitm, site, soap, waterway"):
         load_route("waterwy", settings)
+
+
+def test_waterway_arm64_route(settings):
+    r = load_route("waterway-arm64", settings)
+    assert r.unset == []
+    assert r.base["topology"].endswith("waterway-arm64/waterway-topology.yaml")
+    assert r.bennu_nodes == ["rtu-1", "rtu-2", "waterway-provider"]
+    assert "bennu-arm64.qc2" in r.images and r.windows_images == []
+    assert load_route("waterway", settings).images == []  # stock bennu.qc2, minirouter.qc2
+
+
+def test_mitm_route_and_ettercap_board(settings):
+    from burger.switchboard import load_switchboard
+
+    r = load_route("mitm", settings)
+    assert (r.topology_dir, r.files) == ("mitm", ("mitm-topology.yaml", "mitm-scenario.yaml"))
+    assert load_switchboard("ettercap", settings).route == "mitm"

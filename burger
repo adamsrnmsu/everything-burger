@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Shim: runs the burger package from the checkout's venv.
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ ! -x "$here/.venv/bin/burger" ]; then
+venv="${BURGER_VENV:-$here/.venv}"
+if [ ! -x "$venv/bin/burger" ]; then
   echo "burger: run 'python3 -m venv .venv && .venv/bin/pip install -e .' first" >&2
   exit 1
 fi
-exec "$here/.venv/bin/burger" "$@"
+exec "$venv/bin/burger" "$@"

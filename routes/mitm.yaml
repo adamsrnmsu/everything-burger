@@ -1,0 +1,10 @@
+# The lean MITM derivative of waterway (sceptre-phenix-topologies mitm/): rtu-1,
+# rtu-2, router, opc, simulink-provider and its own kali attacker on the ICS
+# segment. The ettercap board runs here so the MITM never touches waterway.
+topology_dir: mitm
+files: [mitm-topology.yaml, mitm-scenario.yaml]
+rtus: [rtu-1, rtu-2]
+provider: simulink-provider
+ics_port: 502
+bennu_nodes: [rtu-1, rtu-2, simulink-provider]
+windows_images: [opc.qc2]

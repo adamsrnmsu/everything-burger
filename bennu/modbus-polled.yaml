@@ -4,7 +4,7 @@ type: modbus-polled
 about: >
   Something (SCADA or OPC) holds an established Modbus connection to each RTU.
   Needs the Windows nodes, so it is skipped under --linux-only.
-routes: [waterway]
+routes: [waterway, waterway-arm64, mitm]
 requires: {windows: true}
 verify:
   - port: {host: "{route.rtus}", port: 502, state: established}

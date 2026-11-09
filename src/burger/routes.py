@@ -5,7 +5,7 @@ from burger.config import BurgerError, Settings
 from burger.loader import load_yaml
 
 ROUTES_DIR = Path(__file__).resolve().parents[2] / "routes"
-_LISTS = ("bennu_nodes", "drop_nodes", "windows_images")
+_LISTS = ("bennu_nodes", "drop_nodes", "windows_images", "images")
 _FIELDS = {"topology_dir", "files", "base", "rtus", "provider", "ics_port", *_LISTS}
 
 
@@ -19,6 +19,7 @@ class Route:
     bennu_nodes: list[str] = field(default_factory=list)
     drop_nodes: list[str] = field(default_factory=list)
     windows_images: list[str] = field(default_factory=list)
+    images: list[str] = field(default_factory=list)  # empty: bennu.qc2, minirouter.qc2
     unset: list[str] = field(default_factory=list)
 
 

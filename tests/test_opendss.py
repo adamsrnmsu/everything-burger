@@ -2,9 +2,8 @@ import json
 
 from burger.checks.base import CheckContext
 from burger.checks.hook import load, python
-from burger.compose import compose
 from burger.items import load_item
-from burger.switchboard import load_switchboard, resolve
+from tests.conftest import assert_one_cc_component
 
 
 def result(**kw):
@@ -59,10 +58,5 @@ def test_hook_rows(settings, tmp_path):
 
 
 def test_opendss_board_renders_one_cc_component(settings):
-    res = resolve(load_switchboard("opendss", settings), settings)
-    comps, runs = compose(res, {"bennu": {"deb_version": "1"}})
-    comp = next(c for c in comps if c["name"] == "opendss-batched-write")
-    assert comp["type"] == "cc"
-    assert comp["metadata"]["vms"][0]["hostname"] == "power-provider"
+    comp = assert_one_cc_component(settings, "opendss", "opendss-batched-write", "power-provider")
     assert "${" not in comp["metadata"]["vms"][0]["start"][0]["args"]
-    assert any(r.get("start") == ["opendss-batched-write"] for r in runs)
