@@ -45,6 +45,9 @@ def man_for(board):
 def build(settings, topologies, name, linux_only, man=None):
     r = res(settings, name, linux_only=linux_only)
     where = None if r.route.base else topologies / r.route.topology_dir
+    if where is not None and not where.is_dir():
+        # e.g. mitm/ while sceptre-phenix-topologies#31 is unmerged: CI clones main
+        pytest.skip(f"{r.route.topology_dir}/ is not in BURGER_TOPOLOGIES")
     man = man or man_for(r.board)
     topo, scen = render(r, copy.deepcopy(man), where, STAGE, settings)
     return r, man, topo, scen

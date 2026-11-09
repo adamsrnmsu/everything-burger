@@ -1,6 +1,7 @@
 """Generic invariants over every item, switchboard and check kind."""
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 import yaml
@@ -132,6 +133,8 @@ def test_every_vm_process_and_port_host_is_in_the_topology(settings, topologies)
     def nodes(route):
         topo = route.base["topology"] if route.base else topologies / route.topology_dir
         topo = topo if route.base else topo / route.files[0]
+        if not Path(topo).is_file():
+            return None  # topology not in BURGER_TOPOLOGIES (e.g. an unmerged upstream PR)
         doc = yaml.safe_load(open(topo))
         return {n["general"]["hostname"] for n in doc["spec"]["nodes"]} | {"monitor"}
 
@@ -140,6 +143,8 @@ def test_every_vm_process_and_port_host_is_in_the_topology(settings, topologies)
         for name in item.routes:
             route = load_route(name, settings)
             hosts = nodes(route)
+            if hosts is None:
+                continue
             for entry in resolve_item(item, route, None).verify:
                 if vm := entry.get("vm"):
                     h = vm["host"] if isinstance(vm["host"], list) else [vm["host"]]
