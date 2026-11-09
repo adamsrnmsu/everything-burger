@@ -13,3 +13,4 @@ __pycache__/
 *.egg-info/
 site/
 .venv-lima/
+/assets/art/goart*

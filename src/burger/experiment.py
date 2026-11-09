@@ -81,11 +81,12 @@ def build(res: Resolved, settings: Settings, host) -> None:
     if res.requires.goart_nodes:
         # goart is a prebuilt Atomic Red Team runner, not built here; drop the
         # binary at assets/art/goart and burger stages it for the injection.
-        src = settings.root / "assets" / "art" / "goart"
+        name = "goart-arm64" if res.route.arm64 else "goart"
+        src = settings.root / "assets" / "art" / name
         if not src.is_file():
             raise BurgerError(
-                "requires.goart needs the goart binary at assets/art/goart "
-                "(not committed; add the Atomic Red Team goart build there)"
+                f"requires.goart needs the goart binary at assets/art/{name} (not committed; "
+                "scripts/build-goart.sh builds it, or add your Atomic Red Team goart there)"
             )
         shutil.copy2(src, out / "goart")
 

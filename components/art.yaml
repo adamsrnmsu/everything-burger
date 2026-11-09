@@ -7,7 +7,7 @@ about: >
   art component expects it. The default is T1082 test 0 (System Information
   Discovery): benign recon, no payload; set your own technique and test. Uses
   the art component from #208.
-routes: [waterway]
+routes: [waterway, waterway-arm64]
 stages: [start]
 config:
   technique: T1082
