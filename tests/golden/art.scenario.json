@@ -238,7 +238,7 @@
             {
               "metadata": {
                 "technique": "T1082",
-                "testIndex": 0,
+                "testIndex": 2,
                 "vms": [
                   {
                     "hostname": "rtu-2"

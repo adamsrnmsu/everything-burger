@@ -114,3 +114,12 @@ def test_arm64_route_goart_and_bennu_pr(settings, tmp_path):
     assert board.bennu
     with pytest.raises(BurgerError, match="arm64"):
         resolve(board, settings, route_name="waterway-arm64")
+
+
+def test_art_board_runs_a_linux_test_and_checks_rtu2_output(settings):
+    from burger.switchboard import load_switchboard, resolve
+
+    res = resolve(load_switchboard("art", settings), settings, route_name="waterway-arm64")
+    art = next(i for i in res.items if i.name == "art")
+    assert art.config["testIndex"] == 2  # test 0 of T1082 is Windows-only
+    assert art.verify[0]["json"]["field"] == "Executor.ExecutedCommand.results"

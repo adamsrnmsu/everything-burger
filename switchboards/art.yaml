@@ -3,8 +3,8 @@
 # the component expects it. The default technique (T1082 test 0) is benign
 # recon. The bennu items give the waterway health run around it.
 #
-# Scaffold: needs the goart binary at assets/art/goart (not committed). See
-# components/art.yaml.
+# Needs the goart binary at assets/art/goart (goart-arm64 on arm64 routes; not
+# committed, scripts/build-goart.sh builds it). See components/art.yaml.
 about: "art: run an Atomic Red Team technique on an RTU via goart (#208)"
 route: waterway
 apps: {prs: [208]}
@@ -13,3 +13,12 @@ items:
   bennu/field-device: on
   bennu/simulink-provider: on
   bennu/modbus-polled: on
+# T1082 test 0 supports Windows only: goart refuses it on rtu-2 (Linux) with
+# "unable to run test that supports platforms [windows]". Test 2 (List OS Information)
+# is the benign Linux recon test.
+overrides:
+  art:
+    config: {testIndex: 2}
+    # proof goart ran on rtu-2, not just that the stage returned: the test's own output
+    verify:
+      - json: {glob: "rtu-2.json", field: Executor.ExecutedCommand.results, matches: "Linux rtu-2 "}
