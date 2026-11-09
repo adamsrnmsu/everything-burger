@@ -9,7 +9,7 @@ about: >
   stats, and one rule that alerts on Modbus to the ICS port. Checksum checks are
   off because virtio offloads them. Also stops the snort service the package
   starts, so only the component's snort runs.
-routes: [waterway]
+routes: [waterway, waterway-arm64]
 stages: [configure]
 config:
   vms:

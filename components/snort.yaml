@@ -5,13 +5,14 @@ about: >
   Runs Snort 2.9 (jammy's snort package, injected) on the first RTU, sniffing its
   ICS interface while the field devices are polled, and checks it alerted on the
   Modbus traffic and the component turned its stats into JSON. snort-conf
-  writes the config. The interface is the topology's name for it (IF0): snort
+  writes the config. The interface is the route's ics_iface (IF0 on waterway, eth0 on
+  arm64): snort
   cannot sniff `any` (it does not decode the Linux cooked link type).
-routes: [waterway]
+routes: [waterway, waterway-arm64]
 stages: [configure, start, stop, cleanup]
 config:
   hostname: "{route.rtus[0]}"
-  interface: IF0
+  interface: "{route.ics_iface}"
   # stop waits this long before stopping snort: the polls it alerts on
   waitDuration: 20
 verify:
