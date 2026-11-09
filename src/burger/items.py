@@ -11,11 +11,11 @@ ITEM_FIELDS = {
     *"name kind type about routes stages holds background advisory".split(),
     *"expect_error expect_invalid".split(),
     *"config hosts requires assets".split(),
-    *"verify waterway soap site".split(),
+    *"verify waterway soap site mitm-arm64".split(),
 }
 KINDS = ("scorch", "app", "bennu")
 STAGES = ("configure", "start", "stop", "cleanup")
-_ROUTE_BLOCKS = ("waterway", "soap", "site")
+_ROUTE_BLOCKS = ("waterway", "soap", "site", "mitm-arm64")
 _TOKEN = re.compile(r"\{route\.(\w+)(?:\[(\d+)\])?\}")
 # Each verify entry is one check type -> the spec keys it needs (checks.CHECKS + vm).
 CHECK_KEYS = {
@@ -35,7 +35,7 @@ OPTIONAL_KEYS = {
     "process": ("expect",),
     "port": ("state", "expect"),
     "files": ("min", "min_bytes"),
-    "pcap": ("tcp_port", "udp_port", "ip_proto", "min_packets", "max_fragments"),
+    "pcap": ("tcp_port", "udp_port", "ip_proto", "min_packets", "max_fragments", "src", "dst"),
     "csv": ("min_rows", "columns"),
     "log": ("contains", "lacks"),
     "json": ("equals", "matches", "exists"),

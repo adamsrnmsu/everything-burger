@@ -11,6 +11,9 @@ provider: simulink-provider
 ics_port: 502
 # arm64 images keep kernel NIC names (eth0 = first NIC), not the topology name IF0
 ics_iface: eth0
+# opc-arm64 is a Linux OPC gateway: it polls rtu-1, so the Modbus checks marked
+# `windows: true` still run under --linux-only.
+linux_poller: true
 bennu_nodes: [rtu-1, rtu-2, simulink-provider]
 drop_nodes: [blue]
 images:

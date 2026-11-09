@@ -4,7 +4,7 @@ type: disruption
 about: >
   Holds the start stage open for run_duration seconds so captures and polls
   have traffic to see. Baseline means nothing is attacked.
-routes: [waterway, soap, site]
+routes: [waterway, soap, site, mitm, waterway-arm64, mitm-arm64]
 stages: [configure, start, cleanup]
 holds: true
 config: {current_disruption: baseline, run_duration: 30}

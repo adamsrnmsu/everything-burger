@@ -4,10 +4,10 @@ from burger.checks import pcap
 from tests.conftest import make_ctx
 
 
-def ip_packet(proto=6, sport=40000, dport=502):
+def ip_packet(proto=6, sport=40000, dport=502, src=b"\1" * 4, dst=b"\2" * 4):
     ports = struct.pack(">HH", sport, dport) + b"\0" * 16
     n = 20 + len(ports)
-    hdr = struct.pack(">BBHHHBBH4s4s", 0x45, 0, n, 0, 0, 64, proto, 0, b"\1" * 4, b"\2" * 4)
+    hdr = struct.pack(">BBHHHBBH4s4s", 0x45, 0, n, 0, 0, 64, proto, 0, src, dst)
     return hdr + ports
 
 
@@ -123,3 +123,15 @@ def test_pcap_check_max_fragments(tmp_path, settings):
     assert r.verdict == "FAIL" and "1 IP fragment(s), at most 0" in r.reason
     (loop / "a.pcap").write_bytes(classic([]))  # an empty capture proves nothing
     assert pcap.pcap(spec, ctx).verdict == "FAIL"
+
+
+def test_pcap_src_dst_filter(tmp_path):
+    opc, rtu = bytes([10, 1, 2, 50]), bytes([10, 1, 1, 101])
+    p = tmp_path / "a.pcap"
+    p.write_bytes(
+        classic([eth(ip_packet(src=opc, dst=rtu))] * 3 + [eth(ip_packet(src=rtu, dst=opc))])
+    )
+    assert pcap.count_packets(p, tcp_port=502) == 4
+    assert pcap.count_packets(p, tcp_port=502, src="10.1.2.50", dst="10.1.1.101") == 3
+    assert pcap.count_packets(p, tcp_port=502, src="10.1.1.101", dst="10.1.2.50") == 1
+    assert pcap.count_packets(p, tcp_port=502, src="10.9.9.9") == 0

@@ -220,6 +220,14 @@
                   }
                 ]
               }
+            },
+            {
+              "name": "disruption",
+              "type": "disruption",
+              "metadata": {
+                "current_disruption": "baseline",
+                "run_duration": 45
+              }
             }
           ],
           "runs": [
@@ -231,13 +239,20 @@
             },
             {
               "name": "mitm",
+              "configure": [
+                "disruption"
+              ],
               "start": [
                 "mitm-capture",
-                "ettercap"
+                "ettercap",
+                "disruption"
               ],
               "stop": [
                 "ettercap",
                 "mitm-capture"
+              ],
+              "cleanup": [
+                "disruption"
               ]
             }
           ]

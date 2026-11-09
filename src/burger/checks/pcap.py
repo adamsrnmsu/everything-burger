@@ -1,6 +1,7 @@
 """Stdlib pcap/pcapng reader: counts IPv4 packets matching a TCP/UDP port or IP protocol,
 and IP fragments."""
 
+import socket
 import struct
 from collections.abc import Iterator
 from pathlib import Path
@@ -88,11 +89,18 @@ def count_fragments(path: Path) -> int:
     return sum(struct.unpack(">H", ip[6:8])[0] & 0x3FFF != 0 for ip in _ipv4_packets(path))
 
 
-def count_packets(path: Path, tcp_port=None, udp_port=None, ip_proto=None) -> int:
+def count_packets(
+    path: Path, tcp_port=None, udp_port=None, ip_proto=None, src=None, dst=None
+) -> int:
     """IPv4 packets with TCP port tcp_port, UDP port udp_port, or IP protocol ip_proto
-    (any one matching counts); with no criteria, every IPv4 packet."""
+    (any one matching counts); with no criteria, every IPv4 packet. src and dst, when given,
+    first keep only packets from/to that IPv4 address."""
     n = 0
+    want_src = socket.inet_aton(src) if src else None
+    want_dst = socket.inet_aton(dst) if dst else None
     for ip in _ipv4_packets(path):
+        if (want_src and ip[12:16] != want_src) or (want_dst and ip[16:20] != want_dst):
+            continue
         proto, hdr = ip[9], (ip[0] & 0x0F) * 4
         if tcp_port is None and udp_port is None and ip_proto is None:
             n += 1
@@ -116,7 +124,12 @@ def pcap(spec: dict, ctx: CheckContext) -> Row:
     for p in found:
         try:
             total += count_packets(
-                p, spec.get("tcp_port"), spec.get("udp_port"), spec.get("ip_proto")
+                p,
+                spec.get("tcp_port"),
+                spec.get("udp_port"),
+                spec.get("ip_proto"),
+                spec.get("src"),
+                spec.get("dst"),
             )
             frags += count_fragments(p) if "max_fragments" in spec else 0
         except BurgerError as e:

@@ -15,3 +15,10 @@ verify:
   # The Modbus polls come from the Windows OPC server, so this is Windows
   # traffic: skipped under --linux-only, like waterway's own Modbus checks.
   - pcap: {glob: "*.pcap", tcp_port: "{route.ics_port}", min_packets: 4, windows: true}
+# mitm-arm64: the OPC gateway (10.1.2.50) is Linux and polls rtu-1 (10.1.1.101), so
+# the capture must hold polls in both directions, not just any port-502 packets.
+mitm-arm64:
+  verify:
+    - files: {glob: "*.pcap", min_bytes: 1000}
+    - pcap: {glob: "*.pcap", tcp_port: "{route.ics_port}", src: 10.1.2.50, dst: 10.1.1.101, min_packets: 10, windows: true}
+    - pcap: {glob: "*.pcap", tcp_port: "{route.ics_port}", src: 10.1.1.101, dst: 10.1.2.50, min_packets: 10, windows: true}

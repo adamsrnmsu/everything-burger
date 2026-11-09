@@ -5,11 +5,13 @@ import subprocess
 import yaml
 
 from burger import verify as v
-from burger.checks import Row
+from burger.checks import Row, run_checks
 from burger.compose import health_checks
+from burger.items import load_item
+from burger.routes import load_route
 from burger.switchboard import load_switchboard, resolve
 from burger.vcs import board_dir
-from tests.conftest import MAN
+from tests.conftest import MAN, make_ctx
 from tests.fakes import FakeHost
 
 
@@ -174,3 +176,31 @@ def test_models_yaml_resolves_asset_dir(settings, monkeypatch):
     out.parent.mkdir(parents=True, exist_ok=True)
     v.models_yaml(res, out, "/stage")
     assert "/stage/assets/x.py" in out.read_text() and "{asset_dir}" not in out.read_text()
+
+
+def _mitm_capture_rows(settings, tmp_path, route, packets):
+    """mitm-capture's verify rows under --linux-only for a kali capture holding `packets`."""
+    from burger.items import resolve_item
+    from tests.test_pcap import classic, eth, ip_packet
+
+    item = resolve_item(load_item("mitm-capture", settings), load_route(route, settings), None)
+    ctx, loop = make_ctx(settings, tmp_path, item=item)
+    ctx.route, ctx.linux_only = load_route(route, settings), True
+    (loop / "kali.pcap").write_bytes(classic([eth(ip_packet(src=s, dst=d)) for s, d in packets]))
+    return run_checks(item, ctx)
+
+
+def test_mitm_capture_proves_interception_on_linux_poller_route(settings, tmp_path):
+    opc, rtu = bytes([10, 1, 2, 50]), bytes([10, 1, 1, 101])
+    both = [(opc, rtu), (rtu, opc)] * 10
+    rows = _mitm_capture_rows(settings, tmp_path, "mitm-arm64", both)
+    assert [r.verdict for r in rows] == ["ok"] * 3  # no skipped row: the poller is Linux
+    rows = _mitm_capture_rows(settings, tmp_path / "b", "mitm-arm64", [(opc, rtu)] * 20)
+    assert [r.verdict for r in rows] == ["ok", "ok", "FAIL"]  # replies never seen
+    rows = _mitm_capture_rows(settings, tmp_path / "c", "mitm-arm64", [])
+    assert "FAIL" in {r.verdict for r in rows}
+
+
+def test_mitm_capture_pcap_still_skipped_on_windows_route(settings, tmp_path):
+    rows = _mitm_capture_rows(settings, tmp_path, "mitm", [])
+    assert [r.verdict for r in rows] == ["ok", "skipped"]  # unchanged: the pcap check needs Windows

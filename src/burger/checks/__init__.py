@@ -20,7 +20,11 @@ def run_checks(item: Item, ctx: CheckContext) -> list[Row]:
     rows = []
     for entry in item.verify:
         ((name, spec),) = entry.items()
-        if ctx.linux_only and isinstance(spec, dict) and spec.get("windows"):
+        if (
+            ctx.route.skips_windows(ctx.linux_only)
+            and isinstance(spec, dict)
+            and spec.get("windows")
+        ):
             label = f"vm {spec['host']}: {spec['run']}"[:64] if name == "vm" else name
             rows.append(Row(item.name, label, "skipped", "needs the Windows nodes", []))
             continue

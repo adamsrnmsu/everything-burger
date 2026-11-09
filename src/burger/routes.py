@@ -15,6 +15,7 @@ _FIELDS = {
     "ics_port",
     "ics_iface",
     "image_map",
+    "linux_poller",
     *_LISTS,
 }
 
@@ -34,6 +35,12 @@ class Route:
     # route with one is an arm64 range, so those nodes also get the arm64 hardware block.
     image_map: dict[str, str] = field(default_factory=dict)
     unset: list[str] = field(default_factory=list)
+    # The Modbus poller (OPC) is a Linux VM, so checks marked `windows: true` on its traffic
+    # still run under --linux-only.
+    linux_poller: bool = False
+
+    def skips_windows(self, linux_only: bool) -> bool:
+        return linux_only and not self.linux_poller
 
     @property
     def arm64(self) -> bool:
@@ -54,6 +61,7 @@ def load_route(name: str, settings: Settings) -> Route:
         base=doc.get("base"),
         values={k: doc[k] for k in ("rtus", "provider", "ics_port", "ics_iface") if k in doc},
         image_map=doc.get("image_map") or {},
+        linux_poller=bool(doc.get("linux_poller")),
         unset=unset,
         **{k: doc.get(k) or [] for k in _LISTS},
     )

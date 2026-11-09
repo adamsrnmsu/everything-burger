@@ -18,7 +18,15 @@ items:
   bennu/field-device: on
   bennu/simulink-provider: on
   bennu/modbus-polled: on
+  # holds the start stage open so ettercap is still poisoning while the capture
+  # sees OPC's 1 s polls: start stages run back to back, so without it ettercap
+  # is stopped ~0.2 s after it starts (holds items sort last in start)
+  disruption: on
+overrides:
+  disruption: {config: {run_duration: 45}}
 runs:
   - name: mitm
-    start: [mitm-capture, ettercap]
+    configure: [disruption]
+    start: [mitm-capture, ettercap, disruption]
     stop: [ettercap, mitm-capture]
+    cleanup: [disruption]
