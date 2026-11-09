@@ -379,7 +379,7 @@ def _check(args, s, host) -> int:
         )
         out.print(f"run {n} {run.get('name')}: {stages}", markup=False, highlight=False)
     out.print(f"ok: {args.board} renders; wrote {dest}/topology.json and scenario.json")
-    models_yaml(res, dest / "models.yaml")
+    models_yaml(res, dest / "models.yaml", f"{s.phenix_dir}/burger/{args.board}")
     rows = [
         *invalid.scorch_rows(res, s, host, dest / "models.yaml"),
         *invalid.app_rows(res, s, host, topo, dest / "apps"),

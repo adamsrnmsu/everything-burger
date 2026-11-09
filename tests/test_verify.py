@@ -164,3 +164,13 @@ def test_report_names_a_branch_source():
     }
     text = v.render_report(res, man, {"linux_only": False}, [])
     assert "branch fork/integration" in text and "upstream/main" in text
+
+
+def test_models_yaml_resolves_asset_dir(settings, monkeypatch):
+    res, _ = setup(settings, monkeypatch, name="metadata")
+    comp = next(i for i in res.items if i.kind == "scorch")
+    comp.config["script"] = "{asset_dir}/x.py"
+    out = board_dir(settings, "metadata") / "m.yaml"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    v.models_yaml(res, out, "/stage")
+    assert "/stage/assets/x.py" in out.read_text() and "{asset_dir}" not in out.read_text()

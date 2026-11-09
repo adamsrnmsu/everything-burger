@@ -14,14 +14,18 @@ from burger.vcs import bennu_label, board_dir, load_manifest
 NO_VALIDATOR = "command -v phenix-scorch-validate"
 
 
-def models_yaml(res: Resolved, path: Path) -> None:
-    """Every scorch item config, validate-only ones included, in the old `components:` format."""
+def models_yaml(res: Resolved, path: Path, stage_dir: str) -> None:
+    """Every scorch item config, validate-only ones included, in the old `components:` format.
+
+    `{asset_dir}` resolves as render does, so the validator sees the real paths.
+    """
     comps = [
         {"name": i.name, "type": i.type, "metadata": i.config}
         for i in [*res.items, *res.validate_only]
         if i.kind == "scorch"
     ]
-    path.write_text(yaml.safe_dump({"components": comps}, sort_keys=False))
+    text = yaml.safe_dump({"components": comps}, sort_keys=False)
+    path.write_text(text.replace("{asset_dir}", f"{stage_dir}/assets"))
 
 
 def _install_row(res: Resolved, man: dict, host) -> Row:
@@ -114,7 +118,7 @@ def verify(res: Resolved, settings, host) -> list[Row]:
     rows = [_install_row(res, man, host)]
     bad = not_running(host, res.board.exp)
     rows.append(Row("-", "experiment + VMs running", "FAIL" if bad else "ok", bad, []))
-    models_yaml(res, rd_out / "models.yaml")
+    models_yaml(res, rd_out / "models.yaml", f"{settings.phenix_dir}/burger/{name}")
     rows += _validate_rows(res, settings, host, rd_out / "models.yaml")
     topo_file = rd_out / "topology.json"
     if topo_file.is_file():
