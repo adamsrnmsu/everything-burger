@@ -1,0 +1,28 @@
+# Live proof of bennu #81 (protocol servers must survive bad input and errors).
+# On the arm64 rig burger builds the #81 deb natively. After the waterway health
+# run:
+#  - modbus-badframes (rtu-1): a truncated Modbus request and MBAP lengths 0,
+#    4000 and 65535 must get no response, the field device keeps its pid, a
+#    normal read still answers and its stderr log stays small. Stock bennu
+#    answers the truncated request.
+#  - iec104-masters and dnp3-accept (rtu-2): the RTU image has no DNP3 or IEC 104
+#    device, so each starts a second bennu-field-device there with bennu's own
+#    example config on a spare localhost port. 104: master A keeps receiving
+#    while B connects and closes, C takes over after A. DNP3: the outstation
+#    must answer again after its fd limit was squeezed with prlimit (needs root
+#    on the RTU). Stock bennu fails both.
+# GOOSE (also in #81) is not built in bennu, so nothing to run. Drop the `bennu:`
+# block to run on the stock bennu-arm64 image: it should FAIL there.
+about: "bennu #81: Modbus bad frames, IEC-104 masters and DNP3 accept retry"
+route: waterway-arm64
+apps: {prs: []}
+bennu:
+  pr: 81
+  install: [deb]
+items:
+  modbus-badframes: on
+  iec104-masters: on
+  dnp3-accept: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on

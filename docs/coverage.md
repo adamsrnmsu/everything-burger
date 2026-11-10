@@ -46,6 +46,7 @@ that still needs an open PR runs on `integrate` (and its PR's board) and joins
 | #179 | docs only (AGENTS.md); nothing to run | |
 | #132 | on hold as a draft at mgaliar's request; no board | |
 | bennu #79 | `fdleak` switchboard on the arm64 rig: `modbus-churn` opens and closes 1500 Modbus TCP connections to rtu-1 and fails on a socket fd leak, a server that stops answering, or a log flood. Fails on stock bennu | a leak under a real SCADA poller; other protocols (reviewed in the PR, nothing to run) |
+| bennu #81 | `robust` switchboard on the arm64 rig: `modbus-badframes` (truncated request and MBAP lengths 0, 4000, 65535 get no response, same pid, normal read answers), `iec104-masters` (reverse poll survives a second client and a failover) and `dnp3-accept` (outstation answers after an `accept()` EMFILE), the last two on a second field device on rtu-2 with bennu's example configs | GOOSE (the module is not built); the Modbus overflow itself (checked by reading the code and by the process surviving, not by a crash on stock bennu) |
 
 Merged and rolled off every board: bennu #55, #56, #57, #58 and #66; apps #155, #157,
 #158, #159, #161, #164, #165, #167, #169, #170, #171, #172, #173, #174, #175, #176, #177, #183, #190,

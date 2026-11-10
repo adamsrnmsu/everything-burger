@@ -1,0 +1,288 @@
+{
+  "apiVersion": "phenix.sandia.gov/v2",
+  "kind": "Scenario",
+  "metadata": {
+    "annotations": {
+      "topology": "ebwes-robust"
+    },
+    "name": "ebwes-robust"
+  },
+  "spec": {
+    "apps": [
+      {
+        "assetDir": "/phenix/topologies/waterway-arm64",
+        "hosts": [
+          {
+            "hostname": "waterway-provider",
+            "metadata": {
+              "publish_endpoint": "udp://*;239.0.0.1:40000",
+              "publish_points": "/phenix/topologies/waterway-arm64/injects/publishPoints.txt",
+              "simulator": "Simulink",
+              "solver": "/phenix/topologies/waterway-arm64/injects/simulinksolver",
+              "type": "provider"
+            }
+          },
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "infrastructure": "waterway",
+              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
+              "modbus": [
+                {
+                  "name": "lowerwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "lowergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "lowervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "lowersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "waterway-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "infrastructure": "waterway",
+              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
+              "modbus": [
+                {
+                  "name": "upperwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "uppergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "uppervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "uppersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "waterway-provider",
+              "type": "fd-server"
+            }
+          }
+        ],
+        "name": "sceptre"
+      },
+      {
+        "metadata": {
+          "components": [
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-2",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "waterway-provider",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)simulinksolver( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "health",
+              "type": "cc"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "args": "python3 - <<'PY'\nimport glob, json, os, socket, struct, subprocess, time\nMAX_LOG = int(\"1000000\")\nPORT, OUT = 502, \"/tmp/burger-badframes.json\"\nREQ = struct.pack(\">HHHBBHH\", 1, 0, 6, 1, 3, 0, 1)  # read 1 holding register\nres = {\"max_log_bytes\": MAX_LOG, \"error\": None, \"pid_before\": None, \"pid_after\": None,\n       \"cases\": [], \"log_grew\": None, \"answers\": False}\n\ndef logsize(pid):\n    paths = {\"/etc/sceptre/log/watcher-stderr.log\"}\n    try:\n        t = os.readlink(f\"/proc/{pid}/fd/2\")\n        if t.startswith(\"/\") and os.path.isfile(t):\n            paths.add(t)\n    except OSError:\n        pass\n    return sum(os.path.getsize(p) for p in paths if os.path.isfile(p))\n\ndef poll(host):\n    with socket.create_connection((host, PORT), timeout=3) as s:\n        s.settimeout(3)\n        s.sendall(REQ)\n        return len(s.recv(256)) >= 9\n\ndef case(host, name, frames):\n    \"\"\"Send each frame, half-close, and return whatever the server sends after the last.\"\"\"\n    got = b\"\"\n    with socket.create_connection((host, PORT), timeout=3) as s:\n        s.settimeout(3)\n        for i, f in enumerate(frames):\n            try:\n                s.sendall(f)\n            except OSError:\n                break  # the server already closed on us\n            if i < len(frames) - 1:\n                s.recv(256)  # the answer to the valid request\n        try:\n            s.shutdown(socket.SHUT_WR)\n        except OSError:\n            pass\n        try:\n            while True:\n                d = s.recv(4096)\n                if not d:\n                    break\n                got += d\n        except (socket.timeout, OSError):\n            pass\n    res[\"cases\"].append({\"name\": name, \"response\": got.hex()})\n\ntry:\n    pids = []\n    for d in glob.glob(\"/proc/[0-9]*\"):\n        try:\n            argv0 = open(d + \"/cmdline\", \"rb\").read().split(bytes(1))[0]\n        except OSError:\n            continue\n        if os.path.basename(argv0) in (b\"bennu-field-device\", b\"bennu-field-deviced\"):\n            pids.append(int(d.rsplit(\"/\", 1)[1]))\n    if not pids:\n        raise RuntimeError(\"no bennu-field-device process\")\n    pid = res[\"pid_before\"] = pids[0]\n    ips = subprocess.run([\"hostname\", \"-I\"], capture_output=True, text=True).stdout.split()\n    host = None\n    for _ in range(30):\n        for h in [\"127.0.0.1\", *ips]:\n            try:\n                if poll(h):\n                    host = h\n                    break\n            except OSError:\n                pass\n        if host:\n            break\n        time.sleep(2)\n    if not host:\n        raise RuntimeError(\"the server never answered a Modbus read\")\n    log0 = logsize(pid)\n    case(host, \"truncated request\", [REQ, REQ[:8]])\n    for n in (0, 4000, 65535):\n        case(host, f\"MBAP length {n}\", [struct.pack(\">HHH\", 1, 0, n) + b\"A\" * (n or 8)])\n    time.sleep(1)\n    res[\"pid_after\"] = pid if os.path.isdir(f\"/proc/{pid}\") else None\n    res[\"log_grew\"] = logsize(pid) - log0\n    try:\n        res[\"answers\"] = poll(host)\n    except OSError:\n        pass\nexcept Exception as e:\n    res[\"error\"] = f\"{type(e).__name__}: {e}\"\nfinally:\n    json.dump(res, open(OUT, \"w\"))\n    print(json.dumps(res))\nPY\n",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "/tmp/burger-badframes.json",
+                        "type": "recv"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "modbus-badframes",
+              "type": "cc"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-2",
+                    "start": [
+                      {
+                        "args": "python3 - <<'PY'\nimport json, os, resource, socket, struct, subprocess, sys, tempfile, time\nOUT = \"/tmp/burger-iec104.json\"\nres = {\"ok\": False, \"error\": None, \"steps\": []}\n\nPORT = 25404\nCFG = r\"\"\"<?xml version='1.0' encoding='utf-8'?><SCEPTRE><field-device><name>rtu-spare</name><cycle-time>500</cycle-time><tags>\n<external-tag><name>brkr</name><io>I3</io><type>binary</type></external-tag>\n<external-tag><name>load-power</name><io>I1</io><type>analog</type></external-tag>\n<external-tag><name>load-breaker-toggle</name><io>O0</io><type>binary</type></external-tag>\n<external-tag><name>load-mw-setpoint</name><io>O3</io><type>analog</type></external-tag>\n</tags><comms><iec60870-5-104-server><rpoll-rate>1</rpoll-rate>\n<endpoint>tcp://127.0.0.1:25404</endpoint><event-logging>/tmp/burger-104-events.log</event-logging><subtype>double</subtype>\n<binary-input><address>101</address><tag>brkr</tag></binary-input>\n<analog-input><address>103</address><tag>load-power</tag></analog-input>\n<binary-output><address>1</address><tag>load-breaker-toggle</tag></binary-output>\n<analog-output><address>3</address><tag>load-mw-setpoint</tag></analog-output>\n</iec60870-5-104-server></comms><input><endpoint>udp://239.0.0.1:40000</endpoint>\n<analog><id>I1</id><name>load-1_bus-1.mw</name></analog>\n<binary><id>I3</id><name>load-1_bus-1.active</name></binary></input>\n<output><endpoint>tcp://127.0.0.1:5555</endpoint>\n<binary><id>O0</id><name>load-1_bus-1.active</name></binary>\n<analog><id>O3</id><name>load-1_bus-1.mw</name></analog></output></field-device></SCEPTRE>\"\"\"\n\nclass Master:\n    def __init__(self):\n        self.s = socket.create_connection((\"127.0.0.1\", PORT), timeout=5)\n        self.buf, self.rx = b\"\", 0\n\n    def startdt(self):\n        self.s.sendall(bytes([0x68, 0x04, 0x07, 0, 0, 0]))\n        t = time.time() + 5\n        while time.time() < t:\n            if self.frames(0.5, until_u=0x0B):\n                return\n        raise RuntimeError(\"no STARTDT_CON\")\n\n    def frames(self, secs, until_u=None):\n        \"\"\"Read for secs, ack I-frames; return how many arrived (True on STARTDT_CON).\"\"\"\n        end, n = time.time() + secs, 0\n        while time.time() < end:\n            self.s.settimeout(max(0.05, end - time.time()))\n            try:\n                d = self.s.recv(4096)\n            except socket.timeout:\n                break\n            if not d:\n                break\n            self.buf += d\n            while len(self.buf) >= 2 and len(self.buf) >= self.buf[1] + 2:\n                f, self.buf = self.buf[: self.buf[1] + 2], self.buf[self.buf[1] + 2 :]\n                if f[2] & 1 == 0:\n                    n += 1\n                    self.rx += 1\n                    self.s.sendall(bytes([0x68, 0x04, 0x01, 0]) + struct.pack(\"<H\", self.rx << 1))\n                elif until_u is not None and f[2] == until_u:\n                    return True\n        return n\n\ndev = None\ntry:\n    d = tempfile.mkdtemp()\n    open(d + \"/iec104.xml\", \"w\").write(CFG)\n    dev = subprocess.Popen([\"bennu-field-device\", \"--file\", d + \"/iec104.xml\"], cwd=d,\n                           stdout=open(d + \"/out.log\", \"w\"), stderr=subprocess.STDOUT)\n    for _ in range(50):\n        try:\n            a = Master()\n            break\n        except OSError:\n            time.sleep(0.2)\n    else:\n        raise RuntimeError(\"server never accepted\")\n    a.startdt()\n    if a.frames(4) == 0:\n        raise RuntimeError(\"A got no data after STARTDT\")\n    res[\"steps\"].append(\"A active, receiving\")\n    b = Master()\n    if a.frames(4) == 0:\n        raise RuntimeError(\"A stopped receiving after a second client connected\")\n    res[\"steps\"].append(\"A still receiving with B connected\")\n    b.s.close()\n    if a.frames(4) == 0:\n        raise RuntimeError(\"A stopped receiving after the second client closed\")\n    res[\"steps\"].append(\"A still receiving after B closed\")\n    a.s.close()\n    c = Master()\n    c.startdt()\n    if c.frames(4) == 0:\n        raise RuntimeError(\"new master C got no data after A closed\")\n    res[\"steps\"].append(\"C active after A closed, receiving\")\n    if dev.poll() is not None:\n        raise RuntimeError(\"server died\")\n    res[\"ok\"] = True\nexcept Exception as e:\n    res[\"error\"] = f\"{type(e).__name__}: {e}\"\nfinally:\n    if dev:\n        dev.kill()\n        dev.wait()\n    json.dump(res, open(OUT, \"w\"))\n    print(json.dumps(res))\nPY\n",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "/tmp/burger-iec104.json",
+                        "type": "recv"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "iec104-masters",
+              "type": "cc"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-2",
+                    "start": [
+                      {
+                        "args": "python3 - <<'PY'\nimport json, os, resource, socket, struct, subprocess, sys, tempfile, time\nOUT = \"/tmp/burger-dnp3.json\"\nres = {\"ok\": False, \"error\": None, \"steps\": []}\n\nPORT = 20999\nCFG = r\"\"\"<?xml version='1.0' encoding='utf-8'?><SCEPTRE><field-device><name>rtu-spare</name><cycle-time>500</cycle-time><tags>\n<external-tag><name>brkr</name><io>I3</io><type>binary</type></external-tag>\n<external-tag><name>load-power</name><io>I1</io><type>analog</type></external-tag>\n<external-tag><name>load-breaker-toggle</name><io>O0</io><type>binary</type></external-tag>\n<external-tag><name>load-mw-setpoint</name><io>O3</io><type>analog</type></external-tag>\n</tags><comms><dnp3-server><endpoint>tcp://127.0.0.1:20999</endpoint><address>10</address>\n<event-logging>/tmp/burger-dnp3-events.log</event-logging>\n<binary-input><address>2</address><tag>brkr</tag></binary-input>\n<analog-input><address>0</address><tag>load-power</tag></analog-input>\n</dnp3-server></comms><input><endpoint>udp://239.0.0.1:40000</endpoint>\n<analog><id>I1</id><name>load-1_bus-1.mw</name></analog>\n<binary><id>I3</id><name>load-1_bus-1.active</name></binary></input>\n<output><endpoint>tcp://127.0.0.1:5555</endpoint>\n<binary><id>O0</id><name>load-1_bus-1.active</name></binary>\n<analog><id>O3</id><name>load-1_bus-1.mw</name></analog></output></field-device></SCEPTRE>\"\"\"\n\ndef crc(data):\n    c = 0\n    for b in data:\n        c ^= b\n        for _ in range(8):\n            c = (c >> 1) ^ 0xA6BC if c & 1 else c >> 1\n    return ~c & 0xFFFF\n\ndef link_status_request(dest=10, src=1):\n    hdr = bytes([0x05, 0x64, 0x05, 0xC9]) + dest.to_bytes(2, \"little\") + src.to_bytes(2, \"little\")\n    return hdr + crc(hdr).to_bytes(2, \"little\")\n\ndef answers(timeout):\n    with socket.create_connection((\"127.0.0.1\", PORT), timeout=5) as s:\n        s.sendall(link_status_request())\n        s.settimeout(timeout)\n        try:\n            return s.recv(64)[:2] == b\"\\x05\\x64\"\n        except (socket.timeout, ConnectionError):\n            return False\n\ndev = None\nold = resource.getrlimit(resource.RLIMIT_NOFILE)\ntry:\n    d = tempfile.mkdtemp()\n    open(d + \"/dnp3.xml\", \"w\").write(CFG)\n    dev = subprocess.Popen([\"bennu-field-device\", \"--file\", d + \"/dnp3.xml\"], cwd=d,\n                           stdout=open(d + \"/out.log\", \"w\"), stderr=subprocess.STDOUT)\n    for _ in range(50):\n        try:\n            if answers(1):\n                break\n        except OSError:\n            pass\n        time.sleep(0.2)\n    else:\n        raise RuntimeError(\"outstation never answered\")\n    res[\"steps\"].append(\"outstation answers a link status request\")\n    time.sleep(1)\n    used = {int(f) for f in os.listdir(f\"/proc/{dev.pid}/fd\")}\n    lim = next(i for i in range(len(used) + 2) if i not in used)\n    try:\n        resource.prlimit(dev.pid, resource.RLIMIT_NOFILE, (lim, old[1]))\n    except PermissionError as e:\n        raise RuntimeError(f\"prlimit not permitted on the RTU image (needs root or CAP_SYS_RESOURCE): {e}\")\n    s = socket.create_connection((\"127.0.0.1\", PORT), timeout=5)\n    s.sendall(link_status_request())\n    time.sleep(1)  # the outstation hits EMFILE here\n    resource.prlimit(dev.pid, resource.RLIMIT_NOFILE, old)\n    res[\"steps\"].append(f\"fd limit {lim} then restored\")\n    s.settimeout(10)\n    try:\n        ok = s.recv(64)[:2] == b\"\\x05\\x64\"\n    except (socket.timeout, ConnectionError):\n        ok = False\n    s.close()\n    if dev.poll() is not None:\n        raise RuntimeError(\"outstation died\")\n    if not ok:\n        raise RuntimeError(\"outstation did not resume accepting after an accept() error\")\n    if not answers(5):\n        raise RuntimeError(\"outstation does not answer new connections\")\n    res[\"steps\"].append(\"outstation resumed accepting and answers\")\n    res[\"ok\"] = True\nexcept Exception as e:\n    res[\"error\"] = f\"{type(e).__name__}: {e}\"\nfinally:\n    if dev:\n        dev.kill()\n        dev.wait()\n    json.dump(res, open(OUT, \"w\"))\n    print(json.dumps(res))\nPY\n",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "/tmp/burger-dnp3.json",
+                        "type": "recv"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "dnp3-accept",
+              "type": "cc"
+            }
+          ],
+          "runs": [
+            {
+              "name": "health",
+              "start": [
+                "health"
+              ]
+            },
+            {
+              "name": "robust",
+              "start": [
+                "modbus-badframes",
+                "iec104-masters",
+                "dnp3-accept"
+              ]
+            }
+          ]
+        },
+        "name": "scorch"
+      }
+    ]
+  }
+}

@@ -393,3 +393,9 @@ def test_bennu_startup_removes_the_usr_local_build_before_dpkg():
     lines = bennu.bennu_startup({"bennu": {"deb_version": "6.0.1"}}).splitlines()
     rm = next(i for i, ln in enumerate(lines) if ln.startswith("rm -f /usr/local/bin/bennu-"))
     assert rm < next(i for i, ln in enumerate(lines) if ln.startswith("dpkg -i"))
+
+
+def test_bennu_startup_removes_usr_local_copies_of_the_debs_libraries():
+    lines = bennu.bennu_startup({"bennu": {"deb_version": "6.0.1"}}).splitlines()
+    dpkg = next(i for i, ln in enumerate(lines) if ln.startswith("dpkg -i"))
+    assert "dpkg -L bennu" in lines[dpkg + 1] and "/usr/local/lib/" in lines[dpkg + 1]

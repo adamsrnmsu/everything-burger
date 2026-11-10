@@ -1,0 +1,131 @@
+name: iec104-masters
+kind: scorch
+type: cc
+about: >
+  IEC 60870-5-104 reverse poll with several clients (bennu #81: the server
+  kept one connection, so a second client connecting took the poll away from
+  the active master and any client closing stopped polling). The RTU image has
+  no DNP3 or IEC 104 field device, so this starts a second bennu-field-device
+  on rtu-2 with the 104 server config of bennu's own
+  data/configs/ep/iec60870-5-104-server.xml (trimmed, 127.0.0.1:25404, reverse
+  poll every 1 s, no route traffic). Master A sends STARTDT and must keep
+  receiving I-frames while B connects, and after B closes; after A closes, C
+  sends STARTDT and must receive. Takes about 20 s. Fails on stock bennu,
+  passes with #81.
+routes: [waterway-arm64]
+stages: [start]
+# ${VAR:-default} expansions are read when burger loads this file. No other ${...} in here.
+config:
+  vms:
+    - hostname: rtu-2
+      start:
+        - type: exec
+          wait: true
+          args: |
+            python3 - <<'PY'
+            import json, os, resource, socket, struct, subprocess, sys, tempfile, time
+            OUT = "/tmp/burger-iec104.json"
+            res = {"ok": False, "error": None, "steps": []}
+
+            PORT = 25404
+            CFG = r"""<?xml version='1.0' encoding='utf-8'?><SCEPTRE><field-device><name>rtu-spare</name><cycle-time>500</cycle-time><tags>
+            <external-tag><name>brkr</name><io>I3</io><type>binary</type></external-tag>
+            <external-tag><name>load-power</name><io>I1</io><type>analog</type></external-tag>
+            <external-tag><name>load-breaker-toggle</name><io>O0</io><type>binary</type></external-tag>
+            <external-tag><name>load-mw-setpoint</name><io>O3</io><type>analog</type></external-tag>
+            </tags><comms><iec60870-5-104-server><rpoll-rate>1</rpoll-rate>
+            <endpoint>tcp://127.0.0.1:25404</endpoint><event-logging>/tmp/burger-104-events.log</event-logging><subtype>double</subtype>
+            <binary-input><address>101</address><tag>brkr</tag></binary-input>
+            <analog-input><address>103</address><tag>load-power</tag></analog-input>
+            <binary-output><address>1</address><tag>load-breaker-toggle</tag></binary-output>
+            <analog-output><address>3</address><tag>load-mw-setpoint</tag></analog-output>
+            </iec60870-5-104-server></comms><input><endpoint>udp://239.0.0.1:40000</endpoint>
+            <analog><id>I1</id><name>load-1_bus-1.mw</name></analog>
+            <binary><id>I3</id><name>load-1_bus-1.active</name></binary></input>
+            <output><endpoint>tcp://127.0.0.1:5555</endpoint>
+            <binary><id>O0</id><name>load-1_bus-1.active</name></binary>
+            <analog><id>O3</id><name>load-1_bus-1.mw</name></analog></output></field-device></SCEPTRE>"""
+
+            class Master:
+                def __init__(self):
+                    self.s = socket.create_connection(("127.0.0.1", PORT), timeout=5)
+                    self.buf, self.rx = b"", 0
+
+                def startdt(self):
+                    self.s.sendall(bytes([0x68, 0x04, 0x07, 0, 0, 0]))
+                    t = time.time() + 5
+                    while time.time() < t:
+                        if self.frames(0.5, until_u=0x0B):
+                            return
+                    raise RuntimeError("no STARTDT_CON")
+
+                def frames(self, secs, until_u=None):
+                    """Read for secs, ack I-frames; return how many arrived (True on STARTDT_CON)."""
+                    end, n = time.time() + secs, 0
+                    while time.time() < end:
+                        self.s.settimeout(max(0.05, end - time.time()))
+                        try:
+                            d = self.s.recv(4096)
+                        except socket.timeout:
+                            break
+                        if not d:
+                            break
+                        self.buf += d
+                        while len(self.buf) >= 2 and len(self.buf) >= self.buf[1] + 2:
+                            f, self.buf = self.buf[: self.buf[1] + 2], self.buf[self.buf[1] + 2 :]
+                            if f[2] & 1 == 0:
+                                n += 1
+                                self.rx += 1
+                                self.s.sendall(bytes([0x68, 0x04, 0x01, 0]) + struct.pack("<H", self.rx << 1))
+                            elif until_u is not None and f[2] == until_u:
+                                return True
+                    return n
+
+            dev = None
+            try:
+                d = tempfile.mkdtemp()
+                open(d + "/iec104.xml", "w").write(CFG)
+                dev = subprocess.Popen(["bennu-field-device", "--file", d + "/iec104.xml"], cwd=d,
+                                       stdout=open(d + "/out.log", "w"), stderr=subprocess.STDOUT)
+                for _ in range(50):
+                    try:
+                        a = Master()
+                        break
+                    except OSError:
+                        time.sleep(0.2)
+                else:
+                    raise RuntimeError("server never accepted")
+                a.startdt()
+                if a.frames(4) == 0:
+                    raise RuntimeError("A got no data after STARTDT")
+                res["steps"].append("A active, receiving")
+                b = Master()
+                if a.frames(4) == 0:
+                    raise RuntimeError("A stopped receiving after a second client connected")
+                res["steps"].append("A still receiving with B connected")
+                b.s.close()
+                if a.frames(4) == 0:
+                    raise RuntimeError("A stopped receiving after the second client closed")
+                res["steps"].append("A still receiving after B closed")
+                a.s.close()
+                c = Master()
+                c.startdt()
+                if c.frames(4) == 0:
+                    raise RuntimeError("new master C got no data after A closed")
+                res["steps"].append("C active after A closed, receiving")
+                if dev.poll() is not None:
+                    raise RuntimeError("server died")
+                res["ok"] = True
+            except Exception as e:
+                res["error"] = f"{type(e).__name__}: {e}"
+            finally:
+                if dev:
+                    dev.kill()
+                    dev.wait()
+                json.dump(res, open(OUT, "w"))
+                print(json.dumps(res))
+            PY
+        - type: recv
+          args: /tmp/burger-iec104.json
+verify:
+  - python: judge_iec104

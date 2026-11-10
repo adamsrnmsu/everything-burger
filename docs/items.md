@@ -37,6 +37,24 @@ passes only if the field device's socket fds grew by at most
 less than `BURGER_CHURN_MAX_LOG_BYTES` (5000000). Stock bennu leaks one fd per
 connection and fails. The `fdleak` board runs it on the arm64 range.
 
+`modbus-badframes` (`components/modbus-badframes.yaml` and `.py`) is a live check for
+bennu #81 on the first RTU's field device: a valid read followed by the same read cut
+after the function code (half-close), and one connection each with an MBAP length of
+0, 4000 and 65535. It passes only if none of them got a Modbus response, the field
+device kept its pid, a normal read still answers, and its stderr log grew by less than
+`BURGER_BADFRAMES_MAX_LOG_BYTES` (1000000). Stock bennu answers the truncated request.
+
+`iec104-masters` and `dnp3-accept` (also for #81) cover protocols the RTU images do not
+serve. Each starts a second `bennu-field-device` on `rtu-2` with a trimmed copy of bennu's
+own `data/configs/ep/iec60870-5-104-server.xml` or `dnp3-server.xml`, on a spare port of
+127.0.0.1 (25404, 20999), so the route's traffic is untouched. `iec104-masters`: master A
+must keep receiving the 1 s reverse poll while B connects and after B closes, and C must
+receive after A closes. `dnp3-accept`: the outstation's fd limit is lowered with
+`prlimit` to the lowest free fd so `accept()` fails with EMFILE, then restored; a link
+status request must be answered afterwards. `prlimit` on another process needs root or
+CAP_SYS_RESOURCE: the cc exec runs as root on the RTU image, and the item fails naming
+that if it does not. Stock bennu fails both. The `robust` board runs all three.
+
 ## Configs that must be rejected
 
 Some bad configs fail validation or stop the experiment before SCORCH runs, so

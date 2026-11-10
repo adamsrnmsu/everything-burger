@@ -1,0 +1,123 @@
+name: dnp3-accept
+kind: scorch
+type: cc
+about: >
+  DNP3 outstation accept retry (bennu #81: any accept() error, such as EMFILE,
+  stopped the outstation accepting forever). The RTU image has no DNP3 or
+  IEC 104 field device, so this starts a second bennu-field-device on rtu-2
+  with the DNP3 server config of bennu's own data/configs/ep/dnp3-server.xml
+  (trimmed, 127.0.0.1:20999, no route traffic). It lowers that process's fd
+  limit with prlimit to the lowest free fd, connects (accept fails with
+  EMFILE), restores the limit, and passes only if the outstation then answers a
+  link status request. prlimit on another process needs root or
+  CAP_SYS_RESOURCE: the cc exec runs as root on the RTU image, and the item
+  fails with that reason if it does not. Fails on stock bennu, passes with #81.
+routes: [waterway-arm64]
+stages: [start]
+# ${VAR:-default} expansions are read when burger loads this file. No other ${...} in here.
+config:
+  vms:
+    - hostname: rtu-2
+      start:
+        - type: exec
+          wait: true
+          args: |
+            python3 - <<'PY'
+            import json, os, resource, socket, struct, subprocess, sys, tempfile, time
+            OUT = "/tmp/burger-dnp3.json"
+            res = {"ok": False, "error": None, "steps": []}
+
+            PORT = 20999
+            CFG = r"""<?xml version='1.0' encoding='utf-8'?><SCEPTRE><field-device><name>rtu-spare</name><cycle-time>500</cycle-time><tags>
+            <external-tag><name>brkr</name><io>I3</io><type>binary</type></external-tag>
+            <external-tag><name>load-power</name><io>I1</io><type>analog</type></external-tag>
+            <external-tag><name>load-breaker-toggle</name><io>O0</io><type>binary</type></external-tag>
+            <external-tag><name>load-mw-setpoint</name><io>O3</io><type>analog</type></external-tag>
+            </tags><comms><dnp3-server><endpoint>tcp://127.0.0.1:20999</endpoint><address>10</address>
+            <event-logging>/tmp/burger-dnp3-events.log</event-logging>
+            <binary-input><address>2</address><tag>brkr</tag></binary-input>
+            <analog-input><address>0</address><tag>load-power</tag></analog-input>
+            </dnp3-server></comms><input><endpoint>udp://239.0.0.1:40000</endpoint>
+            <analog><id>I1</id><name>load-1_bus-1.mw</name></analog>
+            <binary><id>I3</id><name>load-1_bus-1.active</name></binary></input>
+            <output><endpoint>tcp://127.0.0.1:5555</endpoint>
+            <binary><id>O0</id><name>load-1_bus-1.active</name></binary>
+            <analog><id>O3</id><name>load-1_bus-1.mw</name></analog></output></field-device></SCEPTRE>"""
+
+            def crc(data):
+                c = 0
+                for b in data:
+                    c ^= b
+                    for _ in range(8):
+                        c = (c >> 1) ^ 0xA6BC if c & 1 else c >> 1
+                return ~c & 0xFFFF
+
+            def link_status_request(dest=10, src=1):
+                hdr = bytes([0x05, 0x64, 0x05, 0xC9]) + dest.to_bytes(2, "little") + src.to_bytes(2, "little")
+                return hdr + crc(hdr).to_bytes(2, "little")
+
+            def answers(timeout):
+                with socket.create_connection(("127.0.0.1", PORT), timeout=5) as s:
+                    s.sendall(link_status_request())
+                    s.settimeout(timeout)
+                    try:
+                        return s.recv(64)[:2] == b"\x05\x64"
+                    except (socket.timeout, ConnectionError):
+                        return False
+
+            dev = None
+            old = resource.getrlimit(resource.RLIMIT_NOFILE)
+            try:
+                d = tempfile.mkdtemp()
+                open(d + "/dnp3.xml", "w").write(CFG)
+                dev = subprocess.Popen(["bennu-field-device", "--file", d + "/dnp3.xml"], cwd=d,
+                                       stdout=open(d + "/out.log", "w"), stderr=subprocess.STDOUT)
+                for _ in range(50):
+                    try:
+                        if answers(1):
+                            break
+                    except OSError:
+                        pass
+                    time.sleep(0.2)
+                else:
+                    raise RuntimeError("outstation never answered")
+                res["steps"].append("outstation answers a link status request")
+                time.sleep(1)
+                used = {int(f) for f in os.listdir(f"/proc/{dev.pid}/fd")}
+                lim = next(i for i in range(len(used) + 2) if i not in used)
+                try:
+                    resource.prlimit(dev.pid, resource.RLIMIT_NOFILE, (lim, old[1]))
+                except PermissionError as e:
+                    raise RuntimeError(f"prlimit not permitted on the RTU image (needs root or CAP_SYS_RESOURCE): {e}")
+                s = socket.create_connection(("127.0.0.1", PORT), timeout=5)
+                s.sendall(link_status_request())
+                time.sleep(1)  # the outstation hits EMFILE here
+                resource.prlimit(dev.pid, resource.RLIMIT_NOFILE, old)
+                res["steps"].append(f"fd limit {lim} then restored")
+                s.settimeout(10)
+                try:
+                    ok = s.recv(64)[:2] == b"\x05\x64"
+                except (socket.timeout, ConnectionError):
+                    ok = False
+                s.close()
+                if dev.poll() is not None:
+                    raise RuntimeError("outstation died")
+                if not ok:
+                    raise RuntimeError("outstation did not resume accepting after an accept() error")
+                if not answers(5):
+                    raise RuntimeError("outstation does not answer new connections")
+                res["steps"].append("outstation resumed accepting and answers")
+                res["ok"] = True
+            except Exception as e:
+                res["error"] = f"{type(e).__name__}: {e}"
+            finally:
+                if dev:
+                    dev.kill()
+                    dev.wait()
+                json.dump(res, open(OUT, "w"))
+                print(json.dumps(res))
+            PY
+        - type: recv
+          args: /tmp/burger-dnp3.json
+verify:
+  - python: judge_dnp3

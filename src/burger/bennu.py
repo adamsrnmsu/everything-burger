@@ -24,6 +24,12 @@ def bennu_startup(man: dict) -> str:
             "&& ldconfig >>/var/log/burger-bennu.log 2>&1"
         )
         lines.append("dpkg -i /root/burger-bennu.deb >>/var/log/burger-bennu.log 2>&1 && ldconfig")
+        # The same image copies of libraries the deb ships (libopendnp3.so, with the DNP3 server
+        # code) would still win in /usr/local/lib: remove them so the PR's libraries are loaded.
+        lines.append(
+            "for f in $(dpkg -L bennu | grep '^/usr/lib/lib.*[.]so$'); do "
+            "rm -f /usr/local/lib/$(basename $f)*; done; ldconfig"
+        )
     if man["bennu"].get("wheel"):
         w = " ".join(f"/root/{n}" for n in [*man["bennu"].get("wheels", []), man["bennu"]["wheel"]])
         # --break-system-packages is unknown to pip < 23: retry without it.
