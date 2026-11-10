@@ -1,15 +1,13 @@
-# Live proof of the bennu fix-watcher-log-flood branch (bennu-watcherd wrote "pid = N" to its
+# Live proof of bennu #82 (bennu-watcherd wrote "pid = N" to its
 # stderr log on every 10 ms poll: 17k+ lines within minutes of boot). After the waterway health
 # run, watcher-quiet samples /etc/sceptre/log/watcher-stderr.log on both RTUs for 60 s and fails
 # above 2 KB/min; the report's Field-device logs section must not flag it as a flood either.
-# The branch is on Ryan's fork until the PR is open: set `pr:` to its number then. Drop the
-# `bennu:` block to run the stock bennu-arm64 image: it should FAIL there (about 58 KB/min).
+# Drop the `bennu:` block to run the stock bennu-arm64 image: it should FAIL there (about 58 KB/min).
 about: "bennu watcherd: no 'pid = N' flood in watcher-stderr.log on either RTU"
 route: waterway-arm64
 apps: {prs: []}
 bennu:
-  branch: fix-watcher-log-flood
-  remote: fork
+  pr: 82
   install: [deb]
 items:
   bennu/field-device: on

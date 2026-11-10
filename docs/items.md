@@ -38,7 +38,7 @@ less than `BURGER_CHURN_MAX_LOG_BYTES` (5000000). Stock bennu leaks one fd per
 connection and fails. The `fdleak` board runs it on the arm64 range.
 
 `watcher-quiet` (`components/watcher-quiet.yaml` and `.py`) checks that `bennu-watcherd` does not
-flood its stderr log (bennu `fix-watcher-log-flood`: `isDeviceRunning()` wrote `pid = N` on every
+flood its stderr log (bennu `#82`: `isDeviceRunning()` wrote `pid = N` on every
 10 ms poll). A `cc` command on each RTU sizes `/etc/sceptre/log/watcher-stderr.log`, waits
 `BURGER_WATCHER_SECONDS` (60) and sizes it again. It fails if either RTU's log grew by more than
 `BURGER_WATCHER_MAX_BYTES_PER_MIN` (2048) or is missing. It is a component, not an `fdlogs`
