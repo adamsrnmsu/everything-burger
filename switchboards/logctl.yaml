@@ -1,0 +1,17 @@
+# Live proof of bennu #80 (runtime log control of a running field device, no restart). On the
+# arm64 rig burger builds the #80 deb natively. After the waterway health run, logctl drives
+# `bennu-field-deviced log ...` on rtu-1 as the user the field device runs as: status, `on`
+# three times (idempotent, one fd, no duplicated lines), tail, a level change that reverts, the
+# rotation cap, `off` twice, and the 0700/0600 socket modes. Stock bennu has no log subcommand
+# and no socket: drop the `bennu:` block to run the stock bennu-arm64 image, it should FAIL there.
+about: "bennu #80: toggle file logging, level and live tail on a running field device"
+route: waterway-arm64
+apps: {prs: []}
+bennu:
+  pr: 80
+  install: [deb]
+items:
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+  logctl: on

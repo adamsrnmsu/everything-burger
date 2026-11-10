@@ -1,0 +1,242 @@
+{
+  "apiVersion": "phenix.sandia.gov/v2",
+  "kind": "Scenario",
+  "metadata": {
+    "annotations": {
+      "topology": "ebwes-logctl"
+    },
+    "name": "ebwes-logctl"
+  },
+  "spec": {
+    "apps": [
+      {
+        "assetDir": "/phenix/topologies/waterway-arm64",
+        "hosts": [
+          {
+            "hostname": "waterway-provider",
+            "metadata": {
+              "publish_endpoint": "udp://*;239.0.0.1:40000",
+              "publish_points": "/phenix/topologies/waterway-arm64/injects/publishPoints.txt",
+              "simulator": "Simulink",
+              "solver": "/phenix/topologies/waterway-arm64/injects/simulinksolver",
+              "type": "provider"
+            }
+          },
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "infrastructure": "waterway",
+              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
+              "modbus": [
+                {
+                  "name": "lowerwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "lowergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "lowervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "lowersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "waterway-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "infrastructure": "waterway",
+              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
+              "modbus": [
+                {
+                  "name": "upperwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "uppergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "uppervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "uppersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "waterway-provider",
+              "type": "fd-server"
+            }
+          }
+        ],
+        "name": "sceptre"
+      },
+      {
+        "metadata": {
+          "components": [
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-2",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "waterway-provider",
+                    "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)simulinksolver( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "health",
+              "type": "cc"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "args": "python3 - <<'PY'\nimport glob, json, os, re, signal, stat, subprocess, time\nOUT, F1, F2 = \"/tmp/burger-logctl.json\", \"/tmp/burger-fd.log\", \"/tmp/burger-fd-rot.log\"\nCAP, KEEP, ROT_WAIT = 20 * 1024, 2, 50\nDEST = re.compile(r\"pid (\\d+) \\(([^)]*)\\): logging to (.*), level (\\w+)\")\nres = {\"error\": None, \"pid\": None, \"user\": None, \"expected\": 12, \"checks\": []}\n\ndef check(name, ok, detail):\n    res[\"checks\"].append({\"name\": name, \"ok\": bool(ok), \"detail\": detail})\n    return ok\n\ndef find_pid():\n    for d in sorted(glob.glob(\"/proc/[0-9]*\"), key=lambda p: int(p.rsplit(\"/\", 1)[1])):\n        try:\n            argv0 = open(d + \"/cmdline\", \"rb\").read().split(bytes(1))[0]\n        except OSError:\n            continue\n        if os.path.basename(argv0) in (b\"bennu-field-device\", b\"bennu-field-deviced\"):\n            return int(d.rsplit(\"/\", 1)[1])\n    raise RuntimeError(\"no bennu-field-device process\")\n\ndef cleanup():\n    for f in glob.glob(F1 + \"*\") + glob.glob(F2 + \"*\"):\n        try:\n            os.unlink(f)\n        except OSError:\n            pass\n\ntry:\n    pid = res[\"pid\"] = find_pid()\n    uid = os.stat(f\"/proc/{pid}\").st_uid\n    gid = os.stat(f\"/proc/{pid}\").st_gid\n    import pwd\n    res[\"user\"] = pwd.getpwuid(uid).pw_name\n    exe = os.readlink(f\"/proc/{pid}/exe\")\n    sockdir = f\"/tmp/bennu-{uid}\"\n    socks = glob.glob(f\"{sockdir}/*.{pid}.sock\")\n    if not socks:\n        raise RuntimeError(f\"no log control socket {sockdir}/*.{pid}.sock for pid {pid}: \"\n                           \"this bennu has no runtime log control\")\n\n    def drop():\n        os.setgid(gid)\n        os.setuid(uid)\n\n    def log(*args, timeout=15):\n        p = subprocess.run([exe, \"log\", \"--pid\", str(pid), *args], capture_output=True,\n                           text=True, timeout=timeout, preexec_fn=drop)\n        out = p.stdout + p.stderr\n        return p.returncode, out, DEST.search(out)\n\n    def level_of(m):\n        return m.group(4) if m else None\n\n    cleanup()\n    # 1. socket permissions\n    d, s = os.stat(sockdir), os.stat(socks[0])\n    check(\"socket modes\", stat.S_ISDIR(d.st_mode) and stat.S_IMODE(d.st_mode) == 0o700\n          and stat.S_ISSOCK(s.st_mode) and stat.S_IMODE(s.st_mode) == 0o600\n          and d.st_uid == uid and s.st_uid == uid,\n          f\"{sockdir} {oct(stat.S_IMODE(d.st_mode))}, socket {oct(stat.S_IMODE(s.st_mode))}, \"\n          f\"owner uid {s.st_uid}\")\n    # 2. status\n    rc, out, m = log(\"status\")\n    check(\"status\", rc == 0 and m, out.strip().splitlines()[-1] if out.strip() else \"no output\")\n    level0 = level_of(m)\n    dests = re.findall(r\"(?:stdout|stderr) (/\\S+?)[,)]\", m.group(3)) if m else []\n    # 3. on x3: idempotent, one fd, one copy of each line\n    outs = [log(\"on\", \"--file\", F1) for _ in range(3)]\n    check(\"on x3 prints destination\", all(o[0] == 0 and o[2] and F1 in o[2].group(3) for o in outs),\n          \"; \".join(o[1].strip().splitlines()[0] for o in outs))\n    check(\"on 2nd and 3rd are no-ops\", all(\"already logging to \" + F1 in o[1] for o in outs[1:])\n          and \"already logging\" not in outs[0][1],\n          \"2nd/3rd: \" + \", \".join(\"already logging\" if \"already logging to \" + F1 in o[1] else \"NOT idempotent\"\n                                  for o in outs[1:]))\n    fds = [f for f in glob.glob(f\"/proc/{pid}/fd/*\") if os.path.realpath(f) == F1]\n    check(\"one fd on the file\", len(fds) == 1, f\"{len(fds)} fds on {F1} in /proc/{pid}/fd\")\n    # 4. level debug --for 20s, while also giving the dupe check and the tail debug output\n    t_level = time.time()\n    rc, out, m = log(\"level\", \"debug\", \"--for\", \"20s\")\n    ok_set = rc == 0 and m and level_of(m) == \"debug\"\n    tail = subprocess.Popen([exe, \"log\", \"--pid\", str(pid), \"tail\", \"--level\", \"debug\"],\n                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, preexec_fn=drop)\n    time.sleep(5)\n    tail.send_signal(signal.SIGTERM)\n    try:\n        tout = tail.communicate(timeout=5)[0].decode(errors=\"replace\")\n    except subprocess.TimeoutExpired:\n        tail.kill()\n        tout = tail.communicate()[0].decode(errors=\"replace\")\n    lines = [l for l in tout.splitlines() if l.strip()]\n    check(\"tail receives lines\", len(lines) > 0, f\"{len(lines)} lines in 5 s\"\n          + (f\", e.g. {lines[0][:80]!r}\" if lines else \"\"))\n    time.sleep(3)\n    # file lines vs default output: file first, so the default output is a superset\n    flines = [l for l in open(F1, errors=\"replace\").read().splitlines() if l.strip()]\n    base = {}\n    for p in set(dests):\n        if os.path.isfile(p):\n            for l in open(p, errors=\"replace\").read().splitlines():\n                base[l] = base.get(l, 0) + 1\n    counts = {}\n    for l in flines:\n        counts[l] = counts.get(l, 0) + 1\n    dup = [l for l, n in counts.items() if n > base.get(l, 0)]\n    check(\"no duplicated lines\", flines and base and not dup,\n          f\"{len(flines)} lines in {F1}, {len(dup)} more often than in the default output\"\n          + (f\" {dup[0][:80]!r}\" if dup else \"\") + (\"\" if base else \"; default output not a file\"))\n    rc, out, m = log(\"status\")\n    check(\"level debug shown\", ok_set and level_of(m) == \"debug\", out.strip().splitlines()[-1])\n    time.sleep(max(0, 22 - (time.time() - t_level)))\n    rc, out, m = log(\"status\")\n    check(\"level reverts after --for\", m and level_of(m) == level0,\n          f\"{level0} -> debug for 20s -> {level_of(m)}\")\n    # 5. rotation under debug output (switches the file: opens the new one first)\n    rc, out, m = log(\"on\", \"--file\", F2, \"--max-size\", \"20K\", \"--keep\", str(KEEP), \"--level\", \"debug\")\n    t0 = time.time()\n    while time.time() - t0 < ROT_WAIT and not os.path.exists(F2 + \".1\"):\n        time.sleep(1)\n    time.sleep(3)\n    files = sorted(glob.glob(F2 + \"*\"))\n    sizes = {os.path.basename(f): os.path.getsize(f) for f in files}\n    total = sum(sizes.values())\n    check(\"rotation cap holds\", os.path.exists(F2 + \".1\") and len(files) <= KEEP + 1\n          and total < 3 * CAP + 8192 and max(sizes.values()) <= CAP + 8192,\n          f\"{len(files)} files {sizes}, total {total} B for cap {CAP} x {KEEP + 1}, \"\n          f\"rotated after {int(time.time() - t0)} s\")\n    # 6. off twice\n    o1, o2 = log(\"off\"), log(\"off\")\n    check(\"off twice\", o1[0] == 0 and \"off\" in o1[1] and \"already off\" in o2[1]\n          and \"already off\" not in o1[1] and o1[2] and o2[2],\n          \"1st: \" + o1[1].strip().splitlines()[0] + \"; 2nd: \" + o2[1].strip().splitlines()[0])\n    check(\"off restores level, drops the file\", o2[2] and level_of(o2[2]) == level0\n          and F2 not in o2[2].group(3),\n          o2[2].group(0) if o2[2] else \"no destination line\")\nexcept Exception as e:\n    res[\"error\"] = f\"{type(e).__name__}: {e}\"\nfinally:\n    try:\n        subprocess.run([exe, \"log\", \"--pid\", str(pid), \"off\"], capture_output=True, timeout=15, preexec_fn=drop)\n    except Exception:\n        pass\n    cleanup()\n    json.dump(res, open(OUT, \"w\"))\n    print(json.dumps(res))\nPY\n",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "/tmp/burger-logctl.json",
+                        "type": "recv"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "logctl",
+              "type": "cc"
+            }
+          ],
+          "runs": [
+            {
+              "name": "health",
+              "start": [
+                "health"
+              ]
+            },
+            {
+              "name": "logctl",
+              "start": [
+                "logctl"
+              ]
+            }
+          ]
+        },
+        "name": "scorch"
+      }
+    ]
+  }
+}

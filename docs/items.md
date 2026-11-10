@@ -55,6 +55,25 @@ status request must be answered afterwards. `prlimit` on another process needs r
 CAP_SYS_RESOURCE: the cc exec runs as root on the RTU image, and the item fails naming
 that if it does not. Stock bennu fails both. The `robust` board runs all three.
 
+`logctl` (`components/logctl.yaml` and `.py`) is a live check for bennu #80 on the first RTU's
+field device. The cc command runs as root and drops to the user the process runs as, then drives
+`<exe> log --pid N ...`: socket directory 0700 and socket 0600 owned by that user; `status`;
+`on --file /tmp/burger-fd.log` three times (the 2nd and 3rd must say "already logging to", the
+process must hold exactly one fd on the file, and no line of the file may occur more often than in
+the default output); `tail --level debug` for 5 s must receive lines; `level debug --for 20s` must
+show debug and revert after the timeout; `on --max-size 20K --keep 2` at debug must keep the rotated
+files under about 3x the cap (the wait for output is capped at 50 s); `off` twice (the second
+"already off") and the level restored. Every command but `tail` must print the
+`pid N (name): logging to <dest>, level L` line. It never runs the binary unless the process has a
+socket in `/tmp/bennu-<uid>/`, so stock bennu fails with "no log control socket". Files in `/tmp`
+are deleted at the end. The `logctl` board runs it.
+
+`bennu/deb-arm64` is a manifest check for bennu #78 (no VM command). On an arm64 route burger
+builds the deb natively and records what cpack wrote: `deb_file`, `deb_arch` and `relabel_needed`
+(true when `Architecture` was not `arm64` and burger had to relabel it, the workaround for the
+hard-coded `amd64`). It passes only if `relabel_needed` is false and the file name ends
+`_arm64.deb`. The `arm64deb` board runs it with the waterway items.
+
 ## Configs that must be rejected
 
 Some bad configs fail validation or stop the experiment before SCORCH runs, so

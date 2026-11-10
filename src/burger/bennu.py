@@ -137,15 +137,20 @@ def build_bennu(
         return
     # The worktree's .git file points into the main repo, and CMake stamps the
     # deb version with `git rev-parse --short HEAD`: mount both at their host paths.
-    # CpackConfig.cmake hard-codes `Architecture: amd64` (bennu #78 fixes that) and dpkg on the
-    # arm64 RTUs refuses such a deb, so on arm64 relabel it with the build's own architecture.
-    # Its Depends lists -dev packages the offline RTU images do not carry (only the runtime libs),
-    # so dpkg leaves bennu unconfigured: drop the line too. Drop this once #78 is merged and the
-    # RTU images have the -dev packages.
+    # On arm64 the deb is repacked without its Depends line: that lists -dev packages the offline
+    # RTU images do not carry (only the runtime libs), so dpkg would leave bennu unconfigured. Older
+    # heads also have CpackConfig.cmake hard-code `Architecture: amd64` (bennu #78 fixes that) and
+    # dpkg on the arm64 RTUs refuses such a deb, so that repack relabels it with the build's own
+    # architecture; a deb that already says so (#78) keeps its Architecture. deb-name and deb-arch
+    # record what cpack made, for the manifest (relabel_needed) and the arm64deb board.
     relabel = (
-        " && d=$(mktemp -d) && dpkg-deb -R /out/bennu.deb $d && "
-        'sed -i "s/^Architecture:.*/Architecture: $(dpkg --print-architecture)/;/^Depends:/d" '
-        "$d/DEBIAN/control "
+        " && ls bennu-*.deb > /out/deb-name"
+        " && dpkg-deb --field /out/bennu.deb Architecture > /out/deb-arch"
+        ' && arch=$(dpkg --print-architecture) && fix="/^Depends:/d" '
+        '&& if [ "$(cat /out/deb-arch)" != "$arch" ]; then '
+        'fix="s/^Architecture:.*/Architecture: $arch/;$fix"; fi '
+        "&& d=$(mktemp -d) && dpkg-deb -R /out/bennu.deb $d && "
+        'sed -i "$fix" $d/DEBIAN/control '
         "&& dpkg-deb --root-owner-group -b $d /out/bennu.deb >/dev/null"
         if arm64
         else ""
@@ -174,6 +179,14 @@ def build_bennu(
             script,
         ]
     )
+    if arm64:
+        man["bennu"]["deb_file"] = (out / "deb-name").read_text().strip()
+        man["bennu"]["deb_arch"] = (out / "deb-arch").read_text().strip()
+        man["bennu"]["relabel_needed"] = man["bennu"]["deb_arch"] != "arm64"
+        logger.info(
+            f"{man['bennu']['deb_file']}: Architecture {man['bennu']['deb_arch']}, "
+            f"relabel {'needed' if man['bennu']['relabel_needed'] else 'not needed'}"
+        )
     version = host.run(
         [
             "docker",

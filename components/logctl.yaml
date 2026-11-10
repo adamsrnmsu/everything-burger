@@ -1,0 +1,179 @@
+name: logctl
+kind: scorch
+type: cc
+about: >
+  Runtime log control of the first RTU's live bennu-field-device (bennu #80:
+  `bennu-field-deviced log status|on|off|level|tail` over an owner-only Unix
+  socket in /tmp/bennu-<uid>/). The cc command runs as root on the RTU and
+  drops to the user the field device runs as. Checks: socket directory 0700 and
+  socket 0600 owned by that user; `log status`; `log on --file` three times
+  (the 2nd and 3rd say "already logging to", exactly one fd on the file in
+  /proc/<pid>/fd, no line of the file more often than in the default output);
+  `log tail` for 5 s receives lines; `log level debug --for 20s` shows debug and
+  reverts after the timeout; `log on --max-size 20K --keep 2` while the process
+  logs at debug keeps the rotated files under about 3x the cap; `log off`
+  twice (the second says "already off") and the level is back. Every command
+  but tail must print the "pid N (name): logging to <dest>, level L" line. The
+  run is bounded (the debug output is capped at 50 s) and deletes its /tmp
+  files. Stock bennu has no log subcommand and no socket: the item fails
+  cleanly there without running the binary. Passes with #80.
+routes: [waterway, waterway-arm64]
+stages: [start]
+# No ${...} and no dollar sign in here: SCORCH templating and minimega eat them in cc commands.
+config:
+  vms:
+    - hostname: "{route.rtus[0]}"
+      start:
+        - type: exec
+          wait: true
+          args: |
+            python3 - <<'PY'
+            import glob, json, os, re, signal, stat, subprocess, time
+            OUT, F1, F2 = "/tmp/burger-logctl.json", "/tmp/burger-fd.log", "/tmp/burger-fd-rot.log"
+            CAP, KEEP, ROT_WAIT = 20 * 1024, 2, 50
+            DEST = re.compile(r"pid (\d+) \(([^)]*)\): logging to (.*), level (\w+)")
+            res = {"error": None, "pid": None, "user": None, "expected": 12, "checks": []}
+
+            def check(name, ok, detail):
+                res["checks"].append({"name": name, "ok": bool(ok), "detail": detail})
+                return ok
+
+            def find_pid():
+                for d in sorted(glob.glob("/proc/[0-9]*"), key=lambda p: int(p.rsplit("/", 1)[1])):
+                    try:
+                        argv0 = open(d + "/cmdline", "rb").read().split(bytes(1))[0]
+                    except OSError:
+                        continue
+                    if os.path.basename(argv0) in (b"bennu-field-device", b"bennu-field-deviced"):
+                        return int(d.rsplit("/", 1)[1])
+                raise RuntimeError("no bennu-field-device process")
+
+            def cleanup():
+                for f in glob.glob(F1 + "*") + glob.glob(F2 + "*"):
+                    try:
+                        os.unlink(f)
+                    except OSError:
+                        pass
+
+            try:
+                pid = res["pid"] = find_pid()
+                uid = os.stat(f"/proc/{pid}").st_uid
+                gid = os.stat(f"/proc/{pid}").st_gid
+                import pwd
+                res["user"] = pwd.getpwuid(uid).pw_name
+                exe = os.readlink(f"/proc/{pid}/exe")
+                sockdir = f"/tmp/bennu-{uid}"
+                socks = glob.glob(f"{sockdir}/*.{pid}.sock")
+                if not socks:
+                    raise RuntimeError(f"no log control socket {sockdir}/*.{pid}.sock for pid {pid}: "
+                                       "this bennu has no runtime log control")
+
+                def drop():
+                    os.setgid(gid)
+                    os.setuid(uid)
+
+                def log(*args, timeout=15):
+                    p = subprocess.run([exe, "log", "--pid", str(pid), *args], capture_output=True,
+                                       text=True, timeout=timeout, preexec_fn=drop)
+                    out = p.stdout + p.stderr
+                    return p.returncode, out, DEST.search(out)
+
+                def level_of(m):
+                    return m.group(4) if m else None
+
+                cleanup()
+                # 1. socket permissions
+                d, s = os.stat(sockdir), os.stat(socks[0])
+                check("socket modes", stat.S_ISDIR(d.st_mode) and stat.S_IMODE(d.st_mode) == 0o700
+                      and stat.S_ISSOCK(s.st_mode) and stat.S_IMODE(s.st_mode) == 0o600
+                      and d.st_uid == uid and s.st_uid == uid,
+                      f"{sockdir} {oct(stat.S_IMODE(d.st_mode))}, socket {oct(stat.S_IMODE(s.st_mode))}, "
+                      f"owner uid {s.st_uid}")
+                # 2. status
+                rc, out, m = log("status")
+                check("status", rc == 0 and m, out.strip().splitlines()[-1] if out.strip() else "no output")
+                level0 = level_of(m)
+                dests = re.findall(r"(?:stdout|stderr) (/\S+?)[,)]", m.group(3)) if m else []
+                # 3. on x3: idempotent, one fd, one copy of each line
+                outs = [log("on", "--file", F1) for _ in range(3)]
+                check("on x3 prints destination", all(o[0] == 0 and o[2] and F1 in o[2].group(3) for o in outs),
+                      "; ".join(o[1].strip().splitlines()[0] for o in outs))
+                check("on 2nd and 3rd are no-ops", all("already logging to " + F1 in o[1] for o in outs[1:])
+                      and "already logging" not in outs[0][1],
+                      "2nd/3rd: " + ", ".join("already logging" if "already logging to " + F1 in o[1] else "NOT idempotent"
+                                              for o in outs[1:]))
+                fds = [f for f in glob.glob(f"/proc/{pid}/fd/*") if os.path.realpath(f) == F1]
+                check("one fd on the file", len(fds) == 1, f"{len(fds)} fds on {F1} in /proc/{pid}/fd")
+                # 4. level debug --for 20s, while also giving the dupe check and the tail debug output
+                t_level = time.time()
+                rc, out, m = log("level", "debug", "--for", "20s")
+                ok_set = rc == 0 and m and level_of(m) == "debug"
+                tail = subprocess.Popen([exe, "log", "--pid", str(pid), "tail", "--level", "debug"],
+                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, preexec_fn=drop)
+                time.sleep(5)
+                tail.send_signal(signal.SIGTERM)
+                try:
+                    tout = tail.communicate(timeout=5)[0].decode(errors="replace")
+                except subprocess.TimeoutExpired:
+                    tail.kill()
+                    tout = tail.communicate()[0].decode(errors="replace")
+                lines = [l for l in tout.splitlines() if l.strip()]
+                check("tail receives lines", len(lines) > 0, f"{len(lines)} lines in 5 s"
+                      + (f", e.g. {lines[0][:80]!r}" if lines else ""))
+                time.sleep(3)
+                # file lines vs default output: file first, so the default output is a superset
+                flines = [l for l in open(F1, errors="replace").read().splitlines() if l.strip()]
+                base = {}
+                for p in set(dests):
+                    if os.path.isfile(p):
+                        for l in open(p, errors="replace").read().splitlines():
+                            base[l] = base.get(l, 0) + 1
+                counts = {}
+                for l in flines:
+                    counts[l] = counts.get(l, 0) + 1
+                dup = [l for l, n in counts.items() if n > base.get(l, 0)]
+                check("no duplicated lines", flines and base and not dup,
+                      f"{len(flines)} lines in {F1}, {len(dup)} more often than in the default output"
+                      + (f" {dup[0][:80]!r}" if dup else "") + ("" if base else "; default output not a file"))
+                rc, out, m = log("status")
+                check("level debug shown", ok_set and level_of(m) == "debug", out.strip().splitlines()[-1])
+                time.sleep(max(0, 22 - (time.time() - t_level)))
+                rc, out, m = log("status")
+                check("level reverts after --for", m and level_of(m) == level0,
+                      f"{level0} -> debug for 20s -> {level_of(m)}")
+                # 5. rotation under debug output (switches the file: opens the new one first)
+                rc, out, m = log("on", "--file", F2, "--max-size", "20K", "--keep", str(KEEP), "--level", "debug")
+                t0 = time.time()
+                while time.time() - t0 < ROT_WAIT and not os.path.exists(F2 + ".1"):
+                    time.sleep(1)
+                time.sleep(3)
+                files = sorted(glob.glob(F2 + "*"))
+                sizes = {os.path.basename(f): os.path.getsize(f) for f in files}
+                total = sum(sizes.values())
+                check("rotation cap holds", os.path.exists(F2 + ".1") and len(files) <= KEEP + 1
+                      and total < 3 * CAP + 8192 and max(sizes.values()) <= CAP + 8192,
+                      f"{len(files)} files {sizes}, total {total} B for cap {CAP} x {KEEP + 1}, "
+                      f"rotated after {int(time.time() - t0)} s")
+                # 6. off twice
+                o1, o2 = log("off"), log("off")
+                check("off twice", o1[0] == 0 and "off" in o1[1] and "already off" in o2[1]
+                      and "already off" not in o1[1] and o1[2] and o2[2],
+                      "1st: " + o1[1].strip().splitlines()[0] + "; 2nd: " + o2[1].strip().splitlines()[0])
+                check("off restores level, drops the file", o2[2] and level_of(o2[2]) == level0
+                      and F2 not in o2[2].group(3),
+                      o2[2].group(0) if o2[2] else "no destination line")
+            except Exception as e:
+                res["error"] = f"{type(e).__name__}: {e}"
+            finally:
+                try:
+                    subprocess.run([exe, "log", "--pid", str(pid), "off"], capture_output=True, timeout=15, preexec_fn=drop)
+                except Exception:
+                    pass
+                cleanup()
+                json.dump(res, open(OUT, "w"))
+                print(json.dumps(res))
+            PY
+        - type: recv
+          args: /tmp/burger-logctl.json
+verify:
+  - python: judge_logctl

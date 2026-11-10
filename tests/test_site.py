@@ -222,12 +222,23 @@ def test_no_site_commands_unchanged(tmp_path, monkeypatch):
     assert site_image(nosite, "golang:1.24") == "golang:1.24" and nosite.calls == []
 
 
-def test_build_bennu_arm64_builds_natively_and_relabels_the_deb(tmp_path, monkeypatch):
+def _cpack_made(out, arch, name="bennu-6.0.1-g1_arm64.deb"):
+    """What the arm64 build script leaves in out/ for burger to read back."""
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "deb-name").write_text(name + "\n")
+    (out / "deb-arch").write_text(arch + "\n")
+
+
+def test_build_bennu_arm64_builds_natively_and_relabels_only_when_needed(tmp_path, monkeypatch):
     monkeypatch.delenv("BURGER_BENNU_REPO", raising=False)
     version = subprocess.CompletedProcess([], 0, "6.0.1\n", "")
     host = _host(tmp_path, responses={"docker run": version})
     out = tmp_path / "out"
-    bennu.build_bennu(host, tmp_path / "wt", out, {"bennu": {}}, ["deb"], [], arm64=True)
+    _cpack_made(out, "amd64", "bennu-6.0.1-g1_amd64.deb")  # a head without #78
+    man = {"bennu": {}}
+    bennu.build_bennu(host, tmp_path / "wt", out, man, ["deb"], [], arm64=True)
+    assert man["bennu"]["relabel_needed"] is True and man["bennu"]["deb_arch"] == "amd64"
+    assert man["bennu"]["deb_file"].endswith("_amd64.deb")
     build, make, ver = host.calls
     assert build[:5] == ["docker", "build", "--platform", "linux/arm64", "-t"]
     assert build[5] == "burger-bennu-build:22.04-arm64"
@@ -235,13 +246,27 @@ def test_build_bennu_arm64_builds_natively_and_relabels_the_deb(tmp_path, monkey
         assert run[:4] == ["docker", "run", "--platform", "linux/arm64"]
     script = make[-1]
     assert "dpkg --print-architecture" in script and "dpkg-deb -R /out/bennu.deb" in script
-    assert "/^Depends:/d" in script  # the RTU images lack the -dev packages it lists
+    # Architecture is rewritten only when cpack's differs, after recording it; Depends always goes
+    assert script.index("dpkg-deb --field /out/bennu.deb Architecture") < script.index("if [ ")
+    assert script.index("if [ ") < script.index("; fi") < script.index("dpkg-deb -R")
+    assert 'fix="/^Depends:/d"' in script and "s/^Architecture:.*/Architecture: $arch/" in script
     assert script.endswith(f"chown {os.getuid()}:{os.getgid()} /out/bennu.deb")
+    # a head with #78: cpack already wrote arm64, the manifest says no relabel was needed
+    _cpack_made(out, "arm64")
+    native = {"bennu": {}}
+    bennu.build_bennu(host, tmp_path / "wt", out, native, ["deb"], [], arm64=True)
+    assert native["bennu"] | {"deb_version": "x"} == {
+        "deb_file": "bennu-6.0.1-g1_arm64.deb",
+        "deb_arch": "arm64",
+        "relabel_needed": False,
+        "deb_version": "x",
+    } | {"deb_version": "x"}
     # the amd64 path keeps today's commands: no platform, no relabel (test above)
     amd = _host(tmp_path, responses={"docker run": version})
-    bennu.build_bennu(amd, tmp_path / "wt", out, {"bennu": {}}, ["deb"], [])
+    man = {"bennu": {}}
+    bennu.build_bennu(amd, tmp_path / "wt", out, man, ["deb"], [])
     assert not any("--platform" in c for c in amd.calls)
-    assert "dpkg-deb -R" not in amd.calls[1][-1]
+    assert "dpkg-deb -R" not in amd.calls[1][-1] and "relabel_needed" not in man["bennu"]
 
 
 def test_site_image_reuse_and_rebuild(tmp_path):

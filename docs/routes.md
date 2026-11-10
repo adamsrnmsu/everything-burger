@@ -22,8 +22,10 @@ Every board command takes `--route <name>` to run the board on a route other
 than its own (the item must list the route in `routes:`); pass it on each step
 you run by hand. `goart` comes from `assets/art/goart-arm64` on these routes
 (`scripts/build-goart.sh arm64` builds it). A bennu build on an arm64 route is compiled
-natively in a `linux/arm64` container (needs an arm64 docker host, such as the Lima VM) and its deb is
-relabelled `arm64` (cpack hard-codes `amd64` until bennu #78 merges); the `fdleak` board runs one.
+natively in a `linux/arm64` container (needs an arm64 docker host, such as the Lima VM). A deb
+whose `Architecture` is not already `arm64` is relabelled (cpack hard-codes `amd64` until bennu #78
+merges; the manifest records `relabel_needed`) and every arm64 deb is repacked without its
+`Depends` line, which lists -dev packages the RTU images lack; the `fdleak` board runs one.
 
 Topology asset paths `/phenix/topologies/<dir>` in the waterway and soap
 documents are rewritten to `<phenix dir>/topologies/burger-<dir>`, so your own

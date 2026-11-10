@@ -1,0 +1,11 @@
+name: deb-arm64
+kind: bennu
+type: deb-arm64
+about: >
+  The bennu deb burger built for the arm64 route is natively arm64 (bennu #78):
+  cpack wrote Architecture arm64 and a file name ending _arm64.deb, so burger's
+  Architecture relabel (the workaround for the hard-coded amd64) was not needed.
+  Reads the build manifest; fails on a head that still needs the relabel.
+routes: [waterway-arm64]
+verify:
+  - python: judge_deb_arm64

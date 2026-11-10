@@ -1,0 +1,17 @@
+# Live proof of bennu #78 (cpack names and labels the deb for the build's own architecture).
+# On the arm64 rig burger builds the #78 deb natively and skips its Architecture relabel when
+# cpack already wrote arm64; deb-arm64 asserts that (relabel_needed false in the build manifest,
+# file name ending _arm64.deb), and the usual waterway items show the unrelabelled deb installs
+# and runs on the RTUs. Drop the `bennu:` block to run the stock bennu-arm64 image: the check
+# then fails, since there is no PR deb. On a head without #78 the relabel is needed: it fails.
+about: "bennu #78: the deb is natively arm64 (no Architecture relabel) and installs on the RTUs"
+route: waterway-arm64
+apps: {prs: []}
+bennu:
+  pr: 78
+  install: [deb]
+items:
+  bennu/deb-arm64: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
