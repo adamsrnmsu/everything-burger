@@ -1,0 +1,52 @@
+name: watcher-quiet
+kind: scorch
+type: cc
+about: >
+  bennu-watcherd must not flood its stderr log (bennu fix-watcher-log-flood: isDeviceRunning()
+  wrote "pid = N" on every 10 ms poll, about 58 KB/min, 83 MB/day per RTU). On both RTUs, a
+  cc command samples the size of /etc/sceptre/log/watcher-stderr.log, waits
+  BURGER_WATCHER_SECONDS (60) and samples again. Fails when the growth, as bytes per minute,
+  is over BURGER_WATCHER_MAX_BYTES_PER_MIN (2048), or when the log is missing. Fails on stock
+  bennu, passes with the fix.
+routes: [waterway, waterway-arm64]
+stages: [start]
+# The tunables are ${VAR:-default} expansions, read when burger loads this file.
+# No other ${...} in here: SCORCH templating eats it in cc commands.
+# Each RTU writes its own file: the recv'd files land in one directory by basename.
+config:
+  vms:
+    - hostname: "{route.rtus[0]}"
+      start:
+        - type: exec
+          wait: true
+          args: &sample |
+            python3 - <<'PY'
+            import json, os, socket, time
+            SECS = int("${BURGER_WATCHER_SECONDS:-60}")
+            LOG = "/etc/sceptre/log/watcher-stderr.log"
+            res = {"host": socket.gethostname(), "log": LOG, "seconds": SECS, "error": None,
+                   "max_per_min": int("${BURGER_WATCHER_MAX_BYTES_PER_MIN:-2048}"),
+                   "size": None, "grew": None}
+            try:
+                s0, t0 = os.path.getsize(LOG), time.time()
+                time.sleep(SECS)
+                res["size"] = os.path.getsize(LOG)
+                res["grew"] = max(0, res["size"] - s0)
+                res["seconds"] = round(time.time() - t0, 1)
+            except Exception as e:
+                res["error"] = f"{type(e).__name__}: {e}"
+            finally:
+                json.dump(res, open(f"/tmp/burger-watcher-{res['host']}.json", "w"))
+                print(json.dumps(res))
+            PY
+        - type: recv
+          args: /tmp/burger-watcher-{route.rtus[0]}.json
+    - hostname: "{route.rtus[1]}"
+      start:
+        - type: exec
+          wait: true
+          args: *sample
+        - type: recv
+          args: /tmp/burger-watcher-{route.rtus[1]}.json
+verify:
+  - python: judge_watcher

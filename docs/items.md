@@ -37,6 +37,14 @@ passes only if the field device's socket fds grew by at most
 less than `BURGER_CHURN_MAX_LOG_BYTES` (5000000). Stock bennu leaks one fd per
 connection and fails. The `fdleak` board runs it on the arm64 range.
 
+`watcher-quiet` (`components/watcher-quiet.yaml` and `.py`) checks that `bennu-watcherd` does not
+flood its stderr log (bennu `fix-watcher-log-flood`: `isDeviceRunning()` wrote `pid = N` on every
+10 ms poll). A `cc` command on each RTU sizes `/etc/sceptre/log/watcher-stderr.log`, waits
+`BURGER_WATCHER_SECONDS` (60) and sizes it again. It fails if either RTU's log grew by more than
+`BURGER_WATCHER_MAX_BYTES_PER_MIN` (2048) or is missing. It is a component, not an `fdlogs`
+threshold, because `fdlogs` only warns about a flood and its 3 s sample is too short for a 2 KB/min
+bound. The `watcher` board runs it.
+
 `modbus-badframes` (`components/modbus-badframes.yaml` and `.py`) is a live check for
 bennu #81 on the first RTU's field device: a valid read followed by the same read cut
 after the function code (half-close), and one connection each with an MBAP length of
