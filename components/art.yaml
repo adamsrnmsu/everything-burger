@@ -17,4 +17,3 @@ config:
 requires:
   goart:
     nodes: [rtu-2]
-  apps_prs: [208]

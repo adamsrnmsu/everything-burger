@@ -16,4 +16,3 @@ config:
   facts: burger-facts
 requires:
   caldera_server: true
-  apps_prs: [207]

@@ -22,12 +22,12 @@ def rtu1(health):
 
 
 def test_metadata_runs_match_old_membership(settings):
-    comps, runs = compose(res(settings, "metadata"), MAN)
-    old = golden_scorch("metadata")
+    comps, runs = compose(res(settings, "main"), MAN)
+    old = golden_scorch("main")
     types = {c["name"]: c["type"] for c in comps}
     old_types = {c["name"]: c["type"] for c in old["components"]}
-    main = next(r for r in runs if r["name"] == "metadata")
-    old_main = next(r for r in old["runs"] if r["name"] == "metadata")
+    main = next(r for r in runs if r["name"] == "main")
+    old_main = next(r for r in old["runs"] if r["name"] == "main")
     for stage in STAGES:
         assert {types[n] for n in main.get(stage, [])} == {
             old_types[n] for n in old_main.get(stage, [])
@@ -38,7 +38,7 @@ def test_metadata_runs_match_old_membership(settings):
 
 
 def test_pollers_need_background_and_stop(settings):
-    r = res(settings, "metadata")
+    r = res(settings, "main")
     r.items = [
         dataclasses.replace(i, background=False) if i.name == "hoststats" else i for i in r.items
     ]

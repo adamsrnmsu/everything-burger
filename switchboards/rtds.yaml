@@ -1,13 +1,13 @@
 # RTDS family on your own rig: rtds (#166), providerdata, collector (with the
-# disruption it reads), and the PR build of pybennu on the provider VM. Needs
-# BURGER_SITE_TOPOLOGY and BURGER_SITE_SCENARIO.
-about: "#166 rtds, providerdata, collector + bennu #59 (pybennu) on a site RTDS rig"
+# disruption it reads), and the bennu main build of pybennu on the provider VM.
+# Needs BURGER_SITE_TOPOLOGY and BURGER_SITE_SCENARIO.
+about: "#166 rtds, providerdata, collector + bennu main pybennu (#59) on a site RTDS rig"
 route: site
 apps: {prs: [166]}
 bennu:
-  pr: 59
+  branch: main
   install: [pybennu]
-  pip: ["loguru>=0.7,<1"]  # #59's new dependency; the VMs have no index
+  pip: ["loguru>=0.7,<1"]  # bennu main needs it since #59; bennu.qc2 lacks it and the VMs have no index
 items:
   rtds: on
   providerdata: on

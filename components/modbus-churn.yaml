@@ -1,0 +1,127 @@
+name: modbus-churn
+kind: scorch
+type: cc
+about: >
+  Modbus TCP connection churn against the first RTU's bennu-field-device
+  (bennu #79: the server leaked one socket fd per closed client connection, hit
+  the 1024 fd soft limit, stopped answering and wrote a multi-GB stderr log).
+  On the RTU itself, a client opens, reads one register from and closes
+  BURGER_CHURN_CONNS (1500, above the soft limit) connections to port
+  {route.ics_port}, and counts the field device's socket fds (/proc) before
+  and after. Fails when socket fds grew by more than
+  BURGER_CHURN_SLACK (10), when the server no longer answers a read, or when its
+  stderr log grew by more than BURGER_CHURN_MAX_LOG_BYTES (5000000). The client
+  stops at the first connection that fails (the leak, not a patient server) or
+  after BURGER_CHURN_CAP_S (120) seconds, so a broken server cannot fill the
+  RTU's disk. Fails on stock bennu, passes with #79.
+routes: [waterway, waterway-arm64]
+stages: [start]
+# The tunables are ${VAR:-default} expansions, read when burger loads this file.
+# No other ${...} in here: SCORCH templating eats it in cc commands.
+config:
+  vms:
+    - hostname: "{route.rtus[0]}"
+      start:
+        - type: exec
+          wait: true
+          args: |
+            python3 - <<'PY'
+            import glob, json, os, socket, struct, subprocess, time
+            N = int("${BURGER_CHURN_CONNS:-1500}")
+            SLACK = int("${BURGER_CHURN_SLACK:-10}")
+            MAX_LOG = int("${BURGER_CHURN_MAX_LOG_BYTES:-5000000}")
+            CAP = float("${BURGER_CHURN_CAP_S:-120}")
+            PORT, OUT = {route.ics_port}, "/tmp/burger-churn.json"
+            REQ = struct.pack(">HHHBBHH", 1, 0, 6, 1, 3, 0, 1)  # read 1 holding register
+            res = {"conns": N, "slack": SLACK, "max_log_bytes": MAX_LOG, "done": 0, "error": None,
+                   "sockets_before": None, "sockets_after": None, "log_grew": None, "answers": False}
+
+            def sockets(pid):
+                n = 0
+                for f in os.listdir(f"/proc/{pid}/fd"):
+                    try:
+                        n += os.readlink(f"/proc/{pid}/fd/{f}").startswith("socket:")
+                    except OSError:
+                        pass
+                return n
+
+            def logsize(pid):
+                paths = {"/etc/sceptre/log/watcher-stderr.log"}
+                try:
+                    t = os.readlink(f"/proc/{pid}/fd/2")
+                    if t.startswith("/") and os.path.isfile(t):
+                        paths.add(t)
+                except OSError:
+                    pass
+                return sum(os.path.getsize(p) for p in paths if os.path.isfile(p))
+
+            def poll(host):
+                with socket.create_connection((host, PORT), timeout=3) as s:
+                    s.settimeout(3)
+                    s.sendall(REQ)
+                    return len(s.recv(256)) >= 9  # any Modbus reply, an exception included
+
+            try:
+                pids = []
+                for d in glob.glob("/proc/[0-9]*"):
+                    try:
+                        argv0 = open(d + "/cmdline", "rb").read().split(bytes(1))[0]
+                    except OSError:
+                        continue
+                    if os.path.basename(argv0) in (b"bennu-field-device", b"bennu-field-deviced"):
+                        pids.append(int(d.rsplit("/", 1)[1]))
+                if not pids:
+                    raise RuntimeError("no bennu-field-device process")
+                pid = pids[0]
+                ips = subprocess.run(["hostname", "-I"], capture_output=True, text=True).stdout.split()
+                host = None
+                for _ in range(30):  # first address that answers; the server may bind one IP
+                    for h in ["127.0.0.1", *ips]:
+                        try:
+                            if poll(h):
+                                host = h
+                                break
+                        except OSError:
+                            pass
+                    if host:
+                        break
+                    time.sleep(2)
+                if not host:
+                    raise RuntimeError("the server never answered a Modbus read")
+                res["host"] = host
+                res["sockets_before"] = sockets(pid)
+                log0 = logsize(pid)
+                t0 = time.time()
+                for i in range(N):
+                    try:
+                        if not poll(host):
+                            raise OSError("short reply")
+                    except OSError as e:
+                        res["error"] = f"connection {i + 1} of {N} failed: {e}"
+                        break
+                    res["done"] = i + 1
+                    if time.time() - t0 > CAP:
+                        res["error"] = f"stopped after {CAP:.0f} s at connection {i + 1} of {N}"
+                        break
+                    if i % 50 == 49 and logsize(pid) - log0 > MAX_LOG:
+                        res["error"] = f"stderr log over {MAX_LOG} bytes at connection {i + 1}"
+                        break
+                time.sleep(2)  # let the server see the last EOFs
+                if not os.path.isdir(f"/proc/{pid}"):
+                    raise RuntimeError("bennu-field-device died")
+                res["sockets_after"] = sockets(pid)
+                res["log_grew"] = logsize(pid) - log0
+                try:
+                    res["answers"] = poll(host)
+                except OSError:
+                    pass
+            except Exception as e:
+                res["error"] = res["error"] or f"{type(e).__name__}: {e}"
+            finally:
+                json.dump(res, open(OUT, "w"))
+                print(json.dumps(res))
+            PY
+        - type: recv
+          args: /tmp/burger-churn.json
+verify:
+  - python: judge_churn

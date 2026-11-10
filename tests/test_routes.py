@@ -110,10 +110,9 @@ def test_arm64_route_goart_and_bennu_pr(settings, tmp_path):
 
     _, scen = _render(settings, "art", "waterway-arm64")
     assert scen["metadata"]["name"] == "ebwes-art"
-    board = load_switchboard("bennu", settings)
-    assert board.bennu
-    with pytest.raises(BurgerError, match="arm64"):
-        resolve(board, settings, route_name="waterway-arm64")
+    board = load_switchboard("fdleak", settings)
+    assert board.bennu  # a bennu build on an arm64 route resolves: bennu.py builds it natively
+    assert resolve(board, settings, route_name="waterway-arm64").route.arm64
 
 
 def test_art_board_runs_a_linux_test_and_checks_rtu2_output(settings):

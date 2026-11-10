@@ -265,7 +265,8 @@
                     "iface": "any",
                     "filter": "ip proto 47 and less 600 or tcp port 502"
                   }
-                ]
+                ],
+                "convert_to_json": true
               }
             },
             {

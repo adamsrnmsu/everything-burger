@@ -17,7 +17,13 @@ def bennu_startup(man: dict) -> str:
         "echo '# burger bennu install log' >/var/log/burger-bennu.log",
     ]
     if man["bennu"].get("deb_version"):
-        lines.append("dpkg -i /root/burger-bennu.deb >>/var/log/burger-bennu.log 2>&1")
+        # The arm64 range images carry a source build under /usr/local, which PATH and ld.so find
+        # before the deb's /usr: remove it so the PR build is the one that runs.
+        lines.append(
+            "rm -f /usr/local/bin/bennu-* /usr/local/lib/libbennu-* "
+            "&& ldconfig >>/var/log/burger-bennu.log 2>&1"
+        )
+        lines.append("dpkg -i /root/burger-bennu.deb >>/var/log/burger-bennu.log 2>&1 && ldconfig")
     if man["bennu"].get("wheel"):
         w = " ".join(f"/root/{n}" for n in [*man["bennu"].get("wheels", []), man["bennu"]["wheel"]])
         # --break-system-packages is unknown to pip < 23: retry without it.
@@ -65,10 +71,16 @@ def bennu_injections(man: dict, stage_dir: str) -> list:
     return inj
 
 
-def build_bennu(host, wt: Path, out: Path, man: dict, install: list[str], pip: list[str]) -> None:
+def build_bennu(
+    host, wt: Path, out: Path, man: dict, install: list[str], pip: list[str], arm64: bool = False
+) -> None:
+    """Build the round's bennu deb (and wheel) in the bennu test image. On an arm64 route the
+    image and every container run are linux/arm64, so the deb is compiled natively."""
     repo = Path(os.environ.get("BURGER_BENNU_REPO", host.s.work / "repos" / "bennu")).resolve()
-    image = "burger-bennu-build:22.04"
-    build_dockerfile(host, wt / "docker" / "test", image)
+    platform = "linux/arm64" if arm64 else None
+    plat = ["--platform", platform] if platform else []
+    image = "burger-bennu-build:22.04" + ("-arm64" if arm64 else "")
+    build_dockerfile(host, wt / "docker" / "test", image, platform)
     if "pybennu" in install:
         # Copied first: the build backend may write next to the sources.
         script = (
@@ -82,6 +94,7 @@ def build_bennu(host, wt: Path, out: Path, man: dict, install: list[str], pip: l
             [
                 "docker",
                 "run",
+                *plat,
                 "--rm",
                 "-v",
                 f"{wt.resolve()}:{wt.resolve()}:ro",
@@ -101,6 +114,7 @@ def build_bennu(host, wt: Path, out: Path, man: dict, install: list[str], pip: l
                 [
                     "docker",
                     "run",
+                    *plat,
                     "--rm",
                     "-v",
                     f"{out}:/out",
@@ -117,16 +131,30 @@ def build_bennu(host, wt: Path, out: Path, man: dict, install: list[str], pip: l
         return
     # The worktree's .git file points into the main repo, and CMake stamps the
     # deb version with `git rev-parse --short HEAD`: mount both at their host paths.
+    # CpackConfig.cmake hard-codes `Architecture: amd64` (bennu #78 fixes that) and dpkg on the
+    # arm64 RTUs refuses such a deb, so on arm64 relabel it with the build's own architecture.
+    # Its Depends lists -dev packages the offline RTU images do not carry (only the runtime libs),
+    # so dpkg leaves bennu unconfigured: drop the line too. Drop this once #78 is merged and the
+    # RTU images have the -dev packages.
+    relabel = (
+        " && d=$(mktemp -d) && dpkg-deb -R /out/bennu.deb $d && "
+        'sed -i "s/^Architecture:.*/Architecture: $(dpkg --print-architecture)/;/^Depends:/d" '
+        "$d/DEBIAN/control "
+        "&& dpkg-deb --root-owner-group -b $d /out/bennu.deb >/dev/null"
+        if arm64
+        else ""
+    )
     script = (
         "git config --global --add safe.directory '*' && mkdir -p /tmp/b && cd /tmp/b && "
         f"cmake -DBUILD_TESTS=OFF {shlex.quote(str(wt.resolve()))} >/dev/null && "
-        'make -j"$(nproc)" package >/dev/null && cp bennu-*.deb /out/bennu.deb && '
-        f"chown {os.getuid()}:{os.getgid()} /out/bennu.deb"
+        'make -j"$(nproc)" package >/dev/null && cp bennu-*.deb /out/bennu.deb'
+        f"{relabel} && chown {os.getuid()}:{os.getgid()} /out/bennu.deb"
     )
     host.run(
         [
             "docker",
             "run",
+            *plat,
             "--rm",
             "-v",
             f"{repo}:{repo}:ro",
@@ -144,6 +172,7 @@ def build_bennu(host, wt: Path, out: Path, man: dict, install: list[str], pip: l
         [
             "docker",
             "run",
+            *plat,
             "--rm",
             "-v",
             f"{out}:/out",

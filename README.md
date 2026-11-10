@@ -53,14 +53,14 @@ out of the hooks (they need `BURGER_TOPOLOGIES`); run `make test` before pushing
 ```bash
 ./burger preflight            # host checks; add --linux-only without Windows images
 ./burger list                 # switchboards and items
-./burger check metadata       # resolve and render offline; no phēnix needed
+./burger check main       # resolve and render offline; no phēnix needed
 ./burger run baseline         # sync, build, install, up, scorch, verify, down
 ./burger update --dry-run     # bring a stale host up to main (burger, containers, apps, bennu.qc2)
 ./burger run baseline --linux-only   # the same without the Windows images
 ```
 
 `make` with no target lists shortcuts for the same commands: `make install`,
-`make list`, `make dry-run BOARD=metadata`, `make run BOARD=baseline`, `make docs`,
+`make list`, `make dry-run BOARD=main`, `make run BOARD=baseline`, `make docs`,
 `make check` and `make test`. Run them from the checkout. `make dry-run` and
 `make test` read topologies from `work/repos/topologies` when it is checked out.
 

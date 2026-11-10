@@ -27,6 +27,16 @@ python check passes only if the provider ACKs. A vm check also fails on a FIFO
 error in `/etc/sceptre/log/provider.log`. Stock bennu's 64 KiB pipe fills at
 the 257th record, so this item is meant to FAIL there.
 
+`modbus-churn` (`components/modbus-churn.yaml` and `.py`) is a live check for
+bennu #79: a `cc` command on the first RTU opens, reads one register from and
+closes `BURGER_CHURN_CONNS` (default 1500, above the 1024 fd soft limit) Modbus
+TCP connections to its own field device, stopping at the first failure or after
+`BURGER_CHURN_CAP_S` (120) seconds so a broken server cannot fill the disk. It
+passes only if the field device's socket fds grew by at most
+`BURGER_CHURN_SLACK` (10), it still answers a read, and its stderr log grew by
+less than `BURGER_CHURN_MAX_LOG_BYTES` (5000000). Stock bennu leaks one fd per
+connection and fails. The `fdleak` board runs it on the arm64 range.
+
 ## Configs that must be rejected
 
 Some bad configs fail validation or stop the experiment before SCORCH runs, so
@@ -53,7 +63,7 @@ expected to get no longer fails the board) and the app ones as `check` does. Exa
 ```bash
 ./burger new scorch my-test   # or: app, bennu; copies a commented template to components/my-test.yaml
 $EDITOR components/my-test.yaml
-./burger check metadata       # offline: resolves and renders the switchboard
+./burger check main       # offline: resolves and renders the switchboard
 ```
 
 Then add `my-test: on` under `items:` in a switchboard, and run

@@ -1,13 +1,14 @@
 # Named `integrate`, not `integration`: ebwes-integration is 17 characters, over
 # phenix's 15-character experiment name limit.
-# Upstream main plus every open phenix-apps PR with code (#166 rtds, #168 tcpdump,
-# #202 snort), merged by burger at sync. PRs no longer
+# Upstream main plus the open phenix-apps PRs this board needs (#166 rtds, #205
+# opcexport), merged by burger at sync. #168, #202, #207 and #208 have merged and
+# were dropped from `prs`; #168's tcpdump-alias moved to `main`. PRs no longer
 # edit CHANGELOG.md (releasaurus generates it), so they merge with each other
 # cleanly and no hand-built integration branch is needed. If this passes, the
 # open PRs can merge in any order. When one merges, drop it from `prs`. When
 # all have merged, this board is the same as `main`.
 #
-# Items are the union of the metadata, harden, iperf, base and cc-empty boards
+# Items are the union of the (former) metadata, harden, iperf, base and cc-empty boards
 # on waterway (soap-only items such as provider's are left out: one route per
 # board). One run holds them all; iperf's 20 s run fits inside disruption's
 # 30 s hold, so the default layout works without iperf's own `runs`. Where the
@@ -24,9 +25,9 @@
 # No two items share a component name, so nothing else had to be chosen.
 #
 # bennu is stock: no included item needs a bennu PR.
-about: "main + every open phenix-apps PR (#166, #168, #202) together"
+about: "main + the open phenix-apps PRs it needs (#166, #205) together"
 route: waterway
-apps: {prs: [166, 168, 202, 205, 207, 208]}
+apps: {prs: [166, 205]}
 items:
   disruption: on
   disruption-dos: on

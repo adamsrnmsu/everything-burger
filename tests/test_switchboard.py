@@ -32,8 +32,8 @@ def test_resolve_reports_all_unset_env(settings, monkeypatch):
 
 
 def test_resolve_missing_pr(settings):
-    with pytest.raises(BurgerError, match="#168"):
-        resolve(board(settings, "metadata", apps_prs=[166]), settings)
+    with pytest.raises(BurgerError, match="#205"):
+        resolve(board(settings, "opcexp", apps_prs=[166]), settings)
 
 
 def test_switchboard_unknown_route(settings, tmp_path):
@@ -112,7 +112,7 @@ def test_elastic_board_expects_192_error_and_adds_mgmt_tap(settings):
 
 
 def test_pcap_alias_is_validated_but_not_run(settings):
-    r = res(settings, "metadata")
+    r = res(settings, "main")
     assert "pcap-alias" in [i.name for i in r.validate_only]
     assert "pcap-alias" not in [i.name for i in r.items]
     new = next(i for i in r.items if i.name == "pcap")
@@ -177,12 +177,10 @@ def test_bad_sources_are_burger_errors(settings, tmp_path, body, msg):
 
 
 def test_requires_apps_prs_resolve_against_contains(settings):
-    ok = board(
-        settings, "metadata", apps_prs=[166, 168], apps_branch={"branch": "b", "remote": "fork"}
-    )
+    ok = board(settings, "opcexp", apps_prs=[205], apps_branch={"branch": "b", "remote": "fork"})
     assert resolve(ok, settings).board.apps_branch
-    with pytest.raises(BurgerError, match="#168"):
-        resolve(board(settings, "metadata", apps_prs=[], apps_branch=ok.apps_branch), settings)
+    with pytest.raises(BurgerError, match="#205"):
+        resolve(board(settings, "opcexp", apps_prs=[], apps_branch=ok.apps_branch), settings)
 
 
 def test_branch_names_with_slashes_and_dots_are_fine(settings, tmp_path):
@@ -192,8 +190,8 @@ def test_branch_names_with_slashes_and_dots_are_fine(settings, tmp_path):
 
 def test_requires_message_names_prs_or_contains(settings):
     with pytest.raises(BurgerError, match=r"apps prs$"):
-        resolve(board(settings, "metadata", apps_prs=[]), settings)
-    b = board(settings, "metadata", apps_prs=[], apps_branch={"branch": "b", "remote": "fork"})
+        resolve(board(settings, "opcexp", apps_prs=[]), settings)
+    b = board(settings, "opcexp", apps_prs=[], apps_branch={"branch": "b", "remote": "fork"})
     with pytest.raises(BurgerError, match="apps contains"):
         resolve(b, settings)
 

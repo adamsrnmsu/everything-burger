@@ -21,8 +21,9 @@ monitor, trafficgen, caldera) get the mapped image (`kali.qc2` to
 Every board command takes `--route <name>` to run the board on a route other
 than its own (the item must list the route in `routes:`); pass it on each step
 you run by hand. `goart` comes from `assets/art/goart-arm64` on these routes
-(`scripts/build-goart.sh arm64` builds it). A bennu PR build is not supported on
-an arm64 route yet (the deb is built for amd64): such a board fails to resolve.
+(`scripts/build-goart.sh arm64` builds it). A bennu build on an arm64 route is compiled
+natively in a `linux/arm64` container (needs an arm64 docker host, such as the Lima VM) and its deb is
+relabelled `arm64` (cpack hard-codes `amd64` until bennu #78 merges); the `fdleak` board runs one.
 
 Topology asset paths `/phenix/topologies/<dir>` in the waterway and soap
 documents are rewritten to `<phenix dir>/topologies/burger-<dir>`, so your own

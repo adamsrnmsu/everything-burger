@@ -94,16 +94,16 @@ def test_sync_carrying_a_merged_pr_is_a_no_op(settings, apps_origin, topologies,
 
 
 def test_prs_flags_stale_boards(settings, monkeypatch):
-    board = load_switchboard("pybennu", settings)
+    board = load_switchboard("fdleak", settings)
     assert board.bennu
     n = board.bennu["pr"]
-    (settings.work / "pybennu").mkdir()
+    (settings.work / "fdleak").mkdir()
     man = {"apps": {"prs": {}}, "bennu": {"pr": n, "sha": "old"}}
-    (settings.work / "pybennu" / "manifest.json").write_text(json.dumps(man))
+    (settings.work / "fdleak" / "manifest.json").write_text(json.dumps(man))
     monkeypatch.setattr("shutil.which", lambda _: None)  # no gh: carried PRs only
     host = FakeHost({"git ls-remote": subprocess.CompletedProcess([], 0, "newsha\trefs/x\n", "")})
     row = next(r for r in prs(settings, host, "me") if r["number"] == n and "bennu" in r["repo"])
-    assert "pybennu" in row["boards"] and row["stale"] == ["pybennu"]
+    assert "fdleak" in row["boards"] and row["stale"] == ["fdleak"]
     assert row["head"] == "newsha" and row["title"] == "(not open)"
 
 

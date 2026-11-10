@@ -112,11 +112,11 @@ def test_advisory_not_failing(settings, monkeypatch):
 
 
 def test_models_yaml_includes_validate_only(settings, monkeypatch):
-    res, host = setup(settings, monkeypatch, name="metadata")  # metadata as shipped
+    res, host = setup(settings, monkeypatch, name="integrate")  # integrate as shipped
     v.verify(res, settings, host)
-    doc = yaml.safe_load((board_dir(settings, "metadata") / "out" / "models.yaml").read_text())
+    doc = yaml.safe_load((board_dir(settings, "integrate") / "out" / "models.yaml").read_text())
     assert "disruption-dos" in [c["name"] for c in doc["components"]]
-    assert (board_dir(settings, "metadata") / "report.md").is_file()
+    assert (board_dir(settings, "integrate") / "report.md").is_file()
 
 
 def test_advisory_item_in_explicit_run_stays_advisory(settings, monkeypatch):
@@ -169,10 +169,10 @@ def test_report_names_a_branch_source():
 
 
 def test_models_yaml_resolves_asset_dir(settings, monkeypatch):
-    res, _ = setup(settings, monkeypatch, name="metadata")
+    res, _ = setup(settings, monkeypatch, name="integrate")
     comp = next(i for i in res.items if i.kind == "scorch")
     comp.config["script"] = "{asset_dir}/x.py"
-    out = board_dir(settings, "metadata") / "m.yaml"
+    out = board_dir(settings, "integrate") / "m.yaml"
     out.parent.mkdir(parents=True, exist_ok=True)
     v.models_yaml(res, out, "/stage")
     assert "/stage/assets/x.py" in out.read_text() and "{asset_dir}" not in out.read_text()

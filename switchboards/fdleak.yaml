@@ -1,0 +1,19 @@
+# Live proof of bennu #79 (the Modbus TCP server closes the sockets of closed
+# client connections). After the waterway health run, modbus-churn opens and
+# closes 1500 connections to rtu-1's field device, above the 1024 fd soft
+# limit; the board fails if its socket fds grew, it stops answering a Modbus read
+# or its stderr log grew by 5 MB. Stock bennu leaks one fd per connection and
+# fails (it wedged rtu-1 and wrote a 6.2 GB log live). Drop the `bennu:` block
+# to run it on the stock bennu-arm64 image: it should FAIL there.
+# The arm64 rig: burger builds the #79 deb natively for arm64 (src/burger/bennu.py).
+about: "bennu #79 on arm64 waterway: closed Modbus TCP connections must not leak fds"
+route: waterway-arm64
+apps: {prs: []}
+bennu:
+  pr: 79
+  install: [deb]
+items:
+  modbus-churn: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on

@@ -172,10 +172,6 @@ def resolve(
             f"experiment name '{board.exp}' is {len(board.exp)} characters, "
             f"over the {MAX_EXP_NAME} limit"
         )
-    if route.arm64 and board.bennu:
-        # ponytail: bennu.py builds the PR deb for amd64 only; the range's bennu-arm64
-        # Dockerfile recipe is not wired in (ww-90o.1 follow-up). Fail now, not at install.
-        problems.append("a bennu PR build is not supported on arm64 routes yet")
     refs = [ref for ref, on in board.items.items() if on]
     for key in board.overrides:
         if key not in refs:

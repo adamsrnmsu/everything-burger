@@ -4,7 +4,7 @@
 ./burger preflight            # host checks, WARNs on leftover ebwes-* taps / OVS ports; add --linux-only without Windows images
 ./burger list                 # switchboards and items
 ./burger prs                  # my open PRs, the switchboard that carries each, stale syncs
-./burger check metadata       # resolve and render offline; no phēnix needed
+./burger check main       # resolve and render offline; no phēnix needed
 ./burger run baseline         # sync, build, install, up, scorch, verify, down
 ./burger run bennu
 ./burger run pybennu
@@ -44,10 +44,10 @@ To debug, run the steps by hand:
 ./burger sync metadata        # fetch PR heads, merge onto main, write manifest.json
 ./burger build metadata       # apps tarball, phenix-app-mirror, bennu.deb
 ./burger install metadata     # pip install into the phenix container
-./burger up metadata          # render topology + scenario, create and start ebwes-metadata
+./burger up metadata          # render topology + scenario, create and start ebwes-main
 ./burger scorch metadata      # run 0 (health) retries until healthy, then the rest once
 ./burger scorch metadata --run 1
-./burger verify metadata      # report: work/metadata/report.md
+./burger verify metadata      # report: work/main/report.md
 ./burger down metadata
 ./burger bennu-check bennu    # bennu's own docker harness on the board's bennu PR
 ./burger mm-check main        # minimega #1684's cc_filtered, while ebwes-main is up (--keep)

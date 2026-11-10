@@ -222,6 +222,28 @@ def test_no_site_commands_unchanged(tmp_path, monkeypatch):
     assert site_image(nosite, "golang:1.24") == "golang:1.24" and nosite.calls == []
 
 
+def test_build_bennu_arm64_builds_natively_and_relabels_the_deb(tmp_path, monkeypatch):
+    monkeypatch.delenv("BURGER_BENNU_REPO", raising=False)
+    version = subprocess.CompletedProcess([], 0, "6.0.1\n", "")
+    host = _host(tmp_path, responses={"docker run": version})
+    out = tmp_path / "out"
+    bennu.build_bennu(host, tmp_path / "wt", out, {"bennu": {}}, ["deb"], [], arm64=True)
+    build, make, ver = host.calls
+    assert build[:5] == ["docker", "build", "--platform", "linux/arm64", "-t"]
+    assert build[5] == "burger-bennu-build:22.04-arm64"
+    for run in (make, ver):  # every container, the version probe too, is arm64
+        assert run[:4] == ["docker", "run", "--platform", "linux/arm64"]
+    script = make[-1]
+    assert "dpkg --print-architecture" in script and "dpkg-deb -R /out/bennu.deb" in script
+    assert "/^Depends:/d" in script  # the RTU images lack the -dev packages it lists
+    assert script.endswith(f"chown {os.getuid()}:{os.getgid()} /out/bennu.deb")
+    # the amd64 path keeps today's commands: no platform, no relabel (test above)
+    amd = _host(tmp_path, responses={"docker run": version})
+    bennu.build_bennu(amd, tmp_path / "wt", out, {"bennu": {}}, ["deb"], [])
+    assert not any("--platform" in c for c in amd.calls)
+    assert "dpkg-deb -R" not in amd.calls[1][-1]
+
+
 def test_site_image_reuse_and_rebuild(tmp_path):
     site = full_site(tmp_path)
     tag = f"burger-site/golang_1.24:{site.tag()}"
@@ -365,3 +387,9 @@ def test_stage_names_are_case_insensitive(tmp_path):
 def test_suite_never_reads_the_hosts_site_file():
     assert "BURGER_SITE_CONFIG" not in os.environ
     assert load_site() is None  # HOME points at an empty temp dir, not the real one
+
+
+def test_bennu_startup_removes_the_usr_local_build_before_dpkg():
+    lines = bennu.bennu_startup({"bennu": {"deb_version": "6.0.1"}}).splitlines()
+    rm = next(i for i, ln in enumerate(lines) if ln.startswith("rm -f /usr/local/bin/bennu-"))
+    assert rm < next(i for i, ln in enumerate(lines) if ln.startswith("dpkg -i"))

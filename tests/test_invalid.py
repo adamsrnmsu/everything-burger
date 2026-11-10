@@ -59,24 +59,25 @@ def run(out="", code=1):
 
 
 def test_scorch_rows_need_a_synced_tree_and_uv(settings, tmp_path):
-    r = res(settings, "metadata")
+    r = res(settings, "integrate")
     rows = invalid.scorch_rows(r, settings, FakeHost(settings=settings), tmp_path / "m.yaml")
-    assert {x.verdict for x in rows} == {"skipped"} and "burger sync metadata" in rows[0].reason
-    synced(settings, "metadata")
+    assert {x.verdict for x in rows} == {"skipped"} and "burger sync integrate" in rows[0].reason
+    synced(settings, "integrate")
     host = FakeHost(run(code=127), settings)
     rows = invalid.scorch_rows(r, settings, host, tmp_path / "m.yaml")
     assert {x.reason for x in rows} == {"uv not found"}
 
 
 def test_scorch_rows_run_the_validator_from_the_synced_tree(settings, tmp_path):
-    synced(settings, "metadata")
+    synced(settings, "integrate")
     host = FakeHost(run(OUT), settings)
-    rows = invalid.scorch_rows(res(settings, "metadata"), settings, host, tmp_path / "m.yaml")
+    rows = invalid.scorch_rows(res(settings, "integrate"), settings, host, tmp_path / "m.yaml")
     (cmd,) = host.calls
     assert "--with" in cmd and cmd[-2:] == ["phenix-scorch-validate", str(tmp_path / "m.yaml")]
     got = verdicts(rows)
     assert got["vmstats-bad-name"] == got["qos-bad-rate"] == "ok"
-    assert "FAIL" not in got.values()  # `vmstats` in OUT is valid
+    # `vmstats` in OUT is valid; integrate's other bad-name item is not in OUT, so it fails
+    assert {k for k, v in got.items() if v == "FAIL"} == {"pipe-bad-name"}
 
 
 def test_app_rows_without_uv_use_the_apps_installed_in_phenix(settings, tmp_path):
@@ -123,7 +124,7 @@ def test_app_rows_stop_at_the_first_failing_stage(settings, tmp_path):
 
 
 def validator_host(settings, monkeypatch, out, code):
-    r, host = setup(settings, monkeypatch, name="metadata")
+    r, host = setup(settings, monkeypatch, name="integrate")
     host.responses["docker exec phenix sh -c command -v"] = subprocess.CompletedProcess(
         [], 0, "", ""
     )
@@ -165,11 +166,11 @@ def test_every_expect_invalid_item_is_validate_only(settings):
 def test_check_fails_when_an_item_is_not_rejected(
     settings, monkeypatch, tmp_path, capsys, topologies
 ):
-    synced(settings, "metadata")
+    synced(settings, "integrate")
     monkeypatch.setattr(
         "burger.cli.Host",
         lambda s, site=None: FakeHost(run("ok       m.yaml: qos-bad-rate (qos)\n"), s),
     )
     monkeypatch.setenv("BURGER_WORK", str(settings.work))
-    assert main(["check", "metadata"]) == 1
+    assert main(["check", "integrate"]) == 1
     assert "FAIL" in capsys.readouterr().out

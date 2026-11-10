@@ -92,7 +92,8 @@ def build(res: Resolved, settings: Settings, host) -> None:
 
     if man["bennu"]:
         spec = res.board.bennu or {}
-        build_bennu(host, rd / "bennu", out, man, spec.get("install", ["deb"]), spec.get("pip", []))
+        install = spec.get("install", ["deb"])
+        build_bennu(host, rd / "bennu", out, man, install, spec.get("pip", []), res.route.arm64)
     (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
     (out / "built.json").write_text(json.dumps(_built_key(man)))
     logger.info("switchboard '{}' built into {}", name, out)

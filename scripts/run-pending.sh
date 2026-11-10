@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the boards with no live evidence yet: opendss (bennu #64), mtu (bennu #67),
+# Run the boards with no live evidence yet: opendss (bennu #64, merged), mtu (bennu #67, merged),
 # ssh. --iperf-322 adds iperf-322 (iperf3 3.22).
 # A failing board is recorded, brought down, and the next one still runs.
 set -u

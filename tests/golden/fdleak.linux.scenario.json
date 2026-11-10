@@ -3,29 +3,22 @@
   "kind": "Scenario",
   "metadata": {
     "annotations": {
-      "topology": "ebwes-metadata"
+      "topology": "ebwes-fdleak"
     },
-    "created": "",
-    "name": "ebwes-metadata",
-    "updated": ""
+    "name": "ebwes-fdleak"
   },
   "spec": {
     "apps": [
       {
-        "assetDir": "/phenix/topologies/burger-waterway",
+        "assetDir": "/phenix/topologies/waterway-arm64",
         "hosts": [
           {
-            "hostname": "simulink-provider",
+            "hostname": "waterway-provider",
             "metadata": {
-              "gt": "/phenix/topologies/burger-waterway/injects/simulinkgt",
-              "gt_template": "/phenix/topologies/burger-waterway/injects/main.tmpl",
-              "labels": [
-                "elk"
-              ],
               "publish_endpoint": "udp://*;239.0.0.1:40000",
-              "publish_points": "/phenix/topologies/burger-waterway/injects/publishPoints.txt",
+              "publish_points": "/phenix/topologies/waterway-arm64/injects/publishPoints.txt",
               "simulator": "Simulink",
-              "solver": "/phenix/topologies/burger-waterway/injects/simulinksolver",
+              "solver": "/phenix/topologies/waterway-arm64/injects/simulinksolver",
               "type": "provider"
             }
           },
@@ -33,9 +26,6 @@
             "hostname": "rtu-1",
             "metadata": {
               "infrastructure": "waterway",
-              "labels": [
-                "elk"
-              ],
               "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
               "modbus": [
                 {
@@ -63,7 +53,7 @@
                   "type": "boat-sensor"
                 }
               ],
-              "provider": "simulink-provider",
+              "provider": "waterway-provider",
               "type": "fd-server"
             }
           },
@@ -71,9 +61,6 @@
             "hostname": "rtu-2",
             "metadata": {
               "infrastructure": "waterway",
-              "labels": [
-                "elk"
-              ],
               "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
               "modbus": [
                 {
@@ -101,7 +88,7 @@
                   "type": "boat-sensor"
                 }
               ],
-              "provider": "simulink-provider",
+              "provider": "waterway-provider",
               "type": "fd-server"
             }
           }
@@ -118,9 +105,15 @@
                     "hostname": "rtu-1",
                     "start": [
                       {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
                         "type": "exec",
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
                         "wait": true
                       },
                       {
@@ -144,9 +137,15 @@
                     "hostname": "rtu-2",
                     "start": [
                       {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
                         "type": "exec",
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
                         "wait": true
                       },
                       {
@@ -167,12 +166,18 @@
                     ]
                   },
                   {
-                    "hostname": "simulink-provider",
+                    "hostname": "waterway-provider",
                     "start": [
+                      {
+                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "type": "exec",
+                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "wait": true
+                      },
                       {
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
                         "type": "exec",
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
                         "wait": true
                       },
                       {
@@ -194,141 +199,25 @@
             },
             {
               "metadata": {
-                "current_disruption": "baseline",
-                "run_duration": 30
-              },
-              "name": "disruption",
-              "type": "disruption"
-            },
-            {
-              "metadata": {
-                "convert_to_json": true,
                 "vms": [
                   {
-                    "filter": "not tcp port 502",
                     "hostname": "rtu-1",
-                    "interface": 0
-                  },
-                  {
-                    "hostname": "rtu-2",
-                    "interface": 0
-                  }
-                ]
-              },
-              "name": "pcap",
-              "type": "pcap"
-            },
-            {
-              "metadata": {
-                "convert_to_json": true,
-                "vms": [
-                  {
-                    "filter": "tcp port 502",
-                    "hostname": "rtu-2",
-                    "iface": "any"
-                  }
-                ]
-              },
-              "name": "tcpdump",
-              "type": "tcpdump"
-            },
-            {
-              "metadata": {
-                "start": [
-                  {
-                    "capture": {
-                      "bridge": "phenix",
-                      "filename": "burger-bridge.pcap"
-                    },
-                    "type": "start_capture"
-                  }
-                ],
-                "stop": [
-                  {
-                    "capture": {
-                      "bridge": "phenix",
-                      "convert": true
-                    },
-                    "type": "stop_capture"
-                  }
-                ],
-                "vms": [
-                  {
-                    "hostname": "simulink-provider",
                     "start": [
                       {
-                        "capture": {
-                          "filename": "burger-provider.pcap",
-                          "filter": "not tcp port 502",
-                          "interface": 0
-                        },
-                        "type": "start_capture"
-                      }
-                    ],
-                    "stop": [
+                        "args": "python3 - <<'PY'\nimport glob, json, os, socket, struct, subprocess, time\nN = int(\"1500\")\nSLACK = int(\"10\")\nMAX_LOG = int(\"5000000\")\nCAP = float(\"120\")\nPORT, OUT = 502, \"/tmp/burger-churn.json\"\nREQ = struct.pack(\">HHHBBHH\", 1, 0, 6, 1, 3, 0, 1)  # read 1 holding register\nres = {\"conns\": N, \"slack\": SLACK, \"max_log_bytes\": MAX_LOG, \"done\": 0, \"error\": None,\n       \"sockets_before\": None, \"sockets_after\": None, \"log_grew\": None, \"answers\": False}\n\ndef sockets(pid):\n    n = 0\n    for f in os.listdir(f\"/proc/{pid}/fd\"):\n        try:\n            n += os.readlink(f\"/proc/{pid}/fd/{f}\").startswith(\"socket:\")\n        except OSError:\n            pass\n    return n\n\ndef logsize(pid):\n    paths = {\"/etc/sceptre/log/watcher-stderr.log\"}\n    try:\n        t = os.readlink(f\"/proc/{pid}/fd/2\")\n        if t.startswith(\"/\") and os.path.isfile(t):\n            paths.add(t)\n    except OSError:\n        pass\n    return sum(os.path.getsize(p) for p in paths if os.path.isfile(p))\n\ndef poll(host):\n    with socket.create_connection((host, PORT), timeout=3) as s:\n        s.settimeout(3)\n        s.sendall(REQ)\n        return len(s.recv(256)) >= 9  # any Modbus reply, an exception included\n\ntry:\n    pids = []\n    for d in glob.glob(\"/proc/[0-9]*\"):\n        try:\n            argv0 = open(d + \"/cmdline\", \"rb\").read().split(bytes(1))[0]\n        except OSError:\n            continue\n        if os.path.basename(argv0) in (b\"bennu-field-device\", b\"bennu-field-deviced\"):\n            pids.append(int(d.rsplit(\"/\", 1)[1]))\n    if not pids:\n        raise RuntimeError(\"no bennu-field-device process\")\n    pid = pids[0]\n    ips = subprocess.run([\"hostname\", \"-I\"], capture_output=True, text=True).stdout.split()\n    host = None\n    for _ in range(30):  # first address that answers; the server may bind one IP\n        for h in [\"127.0.0.1\", *ips]:\n            try:\n                if poll(h):\n                    host = h\n                    break\n            except OSError:\n                pass\n        if host:\n            break\n        time.sleep(2)\n    if not host:\n        raise RuntimeError(\"the server never answered a Modbus read\")\n    res[\"host\"] = host\n    res[\"sockets_before\"] = sockets(pid)\n    log0 = logsize(pid)\n    t0 = time.time()\n    for i in range(N):\n        try:\n            if not poll(host):\n                raise OSError(\"short reply\")\n        except OSError as e:\n            res[\"error\"] = f\"connection {i + 1} of {N} failed: {e}\"\n            break\n        res[\"done\"] = i + 1\n        if time.time() - t0 > CAP:\n            res[\"error\"] = f\"stopped after {CAP:.0f} s at connection {i + 1} of {N}\"\n            break\n        if i % 50 == 49 and logsize(pid) - log0 > MAX_LOG:\n            res[\"error\"] = f\"stderr log over {MAX_LOG} bytes at connection {i + 1}\"\n            break\n    time.sleep(2)  # let the server see the last EOFs\n    if not os.path.isdir(f\"/proc/{pid}\"):\n        raise RuntimeError(\"bennu-field-device died\")\n    res[\"sockets_after\"] = sockets(pid)\n    res[\"log_grew\"] = logsize(pid) - log0\n    try:\n        res[\"answers\"] = poll(host)\n    except OSError:\n        pass\nexcept Exception as e:\n    res[\"error\"] = res[\"error\"] or f\"{type(e).__name__}: {e}\"\nfinally:\n    json.dump(res, open(OUT, \"w\"))\n    print(json.dumps(res))\nPY\n",
+                        "type": "exec",
+                        "wait": true
+                      },
                       {
-                        "capture": {
-                          "convert": true,
-                          "interface": 0
-                        },
-                        "type": "stop_capture"
+                        "args": "/tmp/burger-churn.json",
+                        "type": "recv"
                       }
                     ]
                   }
                 ]
               },
-              "name": "mm",
-              "type": "mm"
-            },
-            {
-              "metadata": {
-                "data": "hello-from-burger",
-                "pipe": "burger"
-              },
-              "name": "pipe",
-              "type": "pipe"
-            },
-            {
-              "background": true,
-              "metadata": {
-                "pollPeriod": 5
-              },
-              "name": "hoststats",
-              "type": "hoststats"
-            },
-            {
-              "metadata": {
-                "pollPeriod": 1,
-                "vms": [
-                  "rtu-1",
-                  "rtu-2",
-                  "simulink-provider"
-                ]
-              },
-              "name": "vmstats",
-              "type": "vmstats"
-            },
-            {
-              "metadata": {
-                "vms": [
-                  {
-                    "delay": 20,
-                    "hostname": "rtu-2",
-                    "interface": 0
-                  }
-                ]
-              },
-              "name": "qos",
-              "type": "qos"
-            },
-            {
-              "metadata": {
-                "local_bridge": "phenix",
-                "local_ip": "192.0.2.1",
-                "remote_ip": "192.0.2.2"
-              },
-              "name": "erspan",
-              "type": "erspan"
+              "name": "modbus-churn",
+              "type": "cc"
             }
           ],
           "runs": [
@@ -339,41 +228,10 @@
               ]
             },
             {
-              "cleanup": [
-                "disruption",
-                "pipe"
-              ],
-              "configure": [
-                "disruption"
-              ],
-              "name": "metadata",
+              "name": "fdleak",
               "start": [
-                "pcap",
-                "tcpdump",
-                "mm",
-                "pipe",
-                "hoststats",
-                "vmstats",
-                "qos",
-                "disruption"
-              ],
-              "stop": [
-                "pcap",
-                "tcpdump",
-                "mm",
-                "hoststats",
-                "vmstats",
-                "qos"
+                "modbus-churn"
               ]
-            },
-            {
-              "cleanup": [
-                "erspan"
-              ],
-              "configure": [
-                "erspan"
-              ],
-              "name": "extras-erspan"
             }
           ]
         },

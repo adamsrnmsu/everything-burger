@@ -1,13 +1,13 @@
-# bennu #59 (main with #54-#58 merged, plus the loguru migration) on upstream
+# bennu main (#54-#59 are merged: the loguru migration included) on upstream
 # main apps. waterway runs the C++ field device and simulink provider; the
 # pybennu wheel is installed too, but only the pybennu switchboard runs it.
-about: upstream main apps + bennu #59 (main + loguru)
+about: upstream main apps + bennu main (deb and pybennu wheel)
 route: waterway
 apps: {prs: []}
 bennu:
-  pr: 59
+  branch: main
   install: [deb, pybennu]
-  pip: ["loguru>=0.7,<1"]  # #59's new dependency; the VMs have no index
+  pip: ["loguru>=0.7,<1"]  # bennu main needs it since #59; bennu.qc2 lacks it and the VMs have no index
 items:
   bennu/field-device: on
   bennu/simulink-provider: on

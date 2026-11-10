@@ -32,7 +32,7 @@ def test_version(capsys):
 def test_list_shows_boards_and_items(capsys):
     assert main(["list"]) == 0
     text = capsys.readouterr().out
-    assert "metadata" in text
+    assert "integrate" in text
     assert "bennu/field-device" in text
     assert "validate-only" in text
 
