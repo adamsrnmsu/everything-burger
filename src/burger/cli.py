@@ -8,11 +8,12 @@ import time
 import urllib.error
 from pathlib import Path
 
+from loguru import logger
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from burger import __version__, experiment, invalid, update, vcs, verify
+from burger import __version__, experiment, fdlogs, invalid, update, vcs, verify
 from burger.bennu import bennu_check
 from burger.checks import Row
 from burger.compose import compose
@@ -112,22 +113,38 @@ def _verify(res: Resolved, s, host, timings=None, keep=None) -> int:
 def _run(args, s, host) -> int:
     name = args.board
     timings: dict[str, float] = {}
-    for cmd in ("sync", "build", "install", "up", "scorch"):
-        out.rule(f"{cmd} {name}", style="dim")
-        began = time.monotonic()
-        step = argparse.Namespace(**{**vars(args), "cmd": cmd, "run": None})
-        _one(step, s, host, name)
-        timings[cmd] = time.monotonic() - began
-        if cmd == "sync":  # render and compose offline first: hostname/run errors before docker
-            res, rd = _board(s, name, args.linux_only, route=args.route), vcs.board_dir(s, name)
-            topo = res.route.topology_dir
-            stage = f"{s.phenix_dir}/burger/{name}"
-            render(res, vcs.load_manifest(s, name), rd / topo if topo else None, stage, s)
+    cmd = ""
+    try:
+        for cmd in ("sync", "build", "install", "up", "scorch"):
+            out.rule(f"{cmd} {name}", style="dim")
+            began = time.monotonic()
+            step = argparse.Namespace(**{**vars(args), "cmd": cmd, "run": None})
+            _one(step, s, host, name)
+            timings[cmd] = time.monotonic() - began
+            if cmd == "sync":  # render and compose offline first: hostname/run errors before docker
+                res, rd = _board(s, name, args.linux_only, route=args.route), vcs.board_dir(s, name)
+                topo = res.route.topology_dir
+                stage = f"{s.phenix_dir}/burger/{name}"
+                render(res, vcs.load_manifest(s, name), rd / topo if topo else None, stage, s)
+    except BaseException:
+        if cmd in ("up", "scorch"):  # the experiment exists: keep the evidence before teardown
+            _salvage_fdlogs(args, s, host, name)
+        raise
     out.rule(f"verify {name}", style="dim")
     code = _verify(_board(s, name, args.linux_only, route=args.route), s, host, timings, args.keep)
     if code == 0 and not args.keep:  # a failing switchboard stays up to debug
         _one(argparse.Namespace(cmd="down"), s, host, name)
     return code
+
+
+def _salvage_fdlogs(args, s, host, name: str) -> None:
+    try:
+        res = _board(s, name, args.linux_only, route=args.route)
+        fd = fdlogs.collect(res, s, host, fdlogs.settings_for(res.board))
+        logger.warning("field-device logs saved to {}/results/fdlogs ({} host(s))",
+                       vcs.board_dir(s, name), len(fd))  # fmt: skip
+    except Exception as e:  # already failing; do not mask the real error
+        logger.warning("could not save field-device logs: {}", e)
 
 
 def _preflight(args, s, host) -> int:

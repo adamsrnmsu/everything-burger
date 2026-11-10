@@ -3,7 +3,7 @@
 | What | Where |
 |---|---|
 | Clones | `work/repos/{apps,bennu,topologies}` (only `refs/burger/*` and worktrees are added) |
-| Merged trees, builds, results | `work/<switchboard>/{apps,bennu,<topology>,out,results}`, plus `manifest.json`, `state.json`, `report.md` and `burger.log` |
+| Merged trees, builds, results | `work/<switchboard>/{apps,bennu,<topology>,out,results}`, plus `manifest.json`, `state.json`, `report.md` and `burger.log`; field-device logs in `results/fdlogs/<host>/` |
 | Topology assets in phēnix | `<phenix dir>/topologies/burger-<topology>`. The `site` route copies nothing: its scenario's paths are used as they are |
 | Rendered configs, bennu build | `/phenix/burger/<switchboard>/` |
 | Apps install | pip into the phēnix container; `phenix-app-mirror` into `/usr/local/bin`; marker `/tmp/burger/installed.json` |

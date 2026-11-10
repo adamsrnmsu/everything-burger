@@ -40,6 +40,10 @@ say which PR a failure belongs to. `./burger list` shows them all;
   then the attempt log the console names
   (`work/<board>/results/run-<i>-attempt-<n>.log`) and the status files under
   `work/<board>/results/run-<i>/<component>/`.
+- The `field-device logs` row (`WARN`, or `FAIL` for crash-class lines on bennu-PR
+  boards) comes from the RTUs' stdout/stderr, watcher and protocol logs, saved in
+  `work/<board>/results/fdlogs/<host>/`; the report has a "Field-device logs" table.
+  Read it before blaming a check.
 - A failing `run` leaves the experiment up. Inspect the VMs before `down`. In-VM
   logs: `/var/log/burger-bennu.log`, `/var/log/burger-miniccc.log`,
   `/var/log/burger-debs.log`.

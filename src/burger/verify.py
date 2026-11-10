@@ -3,6 +3,7 @@ from pathlib import Path
 
 import yaml
 
+from burger import fdlogs
 from burger.checks import CheckContext, Row, run_checks
 from burger.checks.status import evaluate
 from burger.compose import compose, health_checks, item_locations
@@ -156,11 +157,29 @@ def verify(res: Resolved, settings, host) -> list[Row]:
             dirs = sorted((rd / "results" / f"run-{n}" / comp).glob("loop-*"))
         rows += run_checks(item, CheckContext(item, dirs, res.route, man, rd, res.linux_only))
 
-    (rd / "report.md").write_text(render_report(res, man, {"linux_only": res.linux_only}, rows))
+    fd, cfg = fdlogs_rows(res, settings, host, rows)
+    man = {**man, "fdlogs": fd}
+    (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
+    (rd / "report.md").write_text(
+        render_report(res, man, {"linux_only": res.linux_only}, rows, cfg)
+    )
     return rows
 
 
-def render_report(res: Resolved, man: dict, state: dict, rows: list[Row]) -> str:
+def fdlogs_rows(res: Resolved, settings, host, rows: list[Row]) -> tuple[dict, dict]:
+    """Collect and scan the RTUs' field-device logs; add one row to `rows`."""
+    cfg = fdlogs.settings_for(res.board)
+    summary = fdlogs.collect(res, settings, host, cfg)
+    if summary:
+        verdict, reason = fdlogs.verdict(summary, cfg["fail_on"])
+        where = board_dir(settings, res.board.name) / "results" / "fdlogs"
+        rows.append(Row("-", "field-device logs", verdict, reason, [str(where)]))
+    return summary, cfg
+
+
+def render_report(
+    res: Resolved, man: dict, state: dict, rows: list[Row], fd_cfg: dict | None = None
+) -> str:
     b = man.get("bennu")
     a = man["apps"]
     prs = ", ".join(f"#{n} `{s[:8]}`" for n, s in a["prs"].items()) or "no PRs"
@@ -191,6 +210,7 @@ def render_report(res: Resolved, man: dict, state: dict, rows: list[Row]) -> str
         lines.append(
             "| " + " | ".join(" ".join(str(c).split()).replace("|", "/") for c in cells) + " |"
         )
+    lines += fdlogs.render_section(man.get("fdlogs") or {}, fd_cfg or fdlogs.DEFAULTS)
     fails = sum(r.verdict == "FAIL" for r in rows)
     lines += [
         "",

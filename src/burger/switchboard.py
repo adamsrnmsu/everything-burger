@@ -8,7 +8,7 @@ from burger.items import Item, load_item, resolve_item
 from burger.loader import load_yaml
 from burger.routes import Route, load_route
 
-_FIELDS = {"about", "route", "apps", "bennu", "items", "overrides", "runs", "linux_only"}
+_FIELDS = {"about", "route", "apps", "bennu", "items", "overrides", "runs", "linux_only", "fdlogs"}
 _BENNU_KEYS = {"pr", "branch", "remote", "install", "pip"}
 _APPS_KEYS = {"prs", "branch", "remote", "contains"}
 REMOTES = ("fork", "upstream")
@@ -33,6 +33,7 @@ class Switchboard:
     exp: str
     unset: list[str] = field(default_factory=list)
     apps_branch: dict | None = None  # {"branch", "remote"}; then apps_prs is only the record
+    fdlogs: dict | None = None  # field-device log knobs, see burger.fdlogs.DEFAULTS
 
 
 @dataclass
@@ -150,7 +151,20 @@ def load_switchboard(name: str, settings: Settings) -> Switchboard:
         exp=f"ebwes-{name}",
         unset=unset,
         apps_branch=branch,
+        fdlogs=_fdlogs(path, doc.get("fdlogs")),
     )
+
+
+def _fdlogs(path, spec) -> dict | None:
+    if spec is None:
+        return None
+    from burger.fdlogs import DEFAULTS, FAIL_ON  # late: fdlogs imports vcs
+
+    if not isinstance(spec, dict) or set(spec) - set(DEFAULTS):
+        raise BurgerError(f"{path}: fdlogs must be a mapping with keys {', '.join(DEFAULTS)}")
+    if spec.get("fail_on", "none") not in FAIL_ON:
+        raise BurgerError(f"{path}: fdlogs.fail_on must be one of {', '.join(FAIL_ON)}")
+    return spec
 
 
 def _unique(seq) -> list:

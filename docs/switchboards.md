@@ -13,6 +13,7 @@ characters):
 | `items` | `<item>: on` switches an item on (`apps/x`, `bennu/x` for the other kinds) |
 | `overrides` | per-item changes to `config` or `verify` |
 | `linux_only` | same as `--linux-only` |
+| `fdlogs` | field-device log knobs, see [verify](verify.md#field-device-logs): `fail_on` (`crash`, `error` or `none`; default `crash` when the board installs a bennu deb from a PR or branch, else `none`), `flood_bytes_per_min` (50000000), `repeat` (5000) |
 | `runs` | explicit run layout; by default burger builds `health` plus one run per item from the item's `stages` |
 
 A component whose `start` polls until phēnix stops it (hoststats) needs
