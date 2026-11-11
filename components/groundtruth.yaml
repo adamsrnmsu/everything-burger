@@ -1,0 +1,318 @@
+name: groundtruth
+kind: scorch
+type: cc
+about: >
+  pybennu's groundtruth_monitor against a real Elasticsearch (bennu PRs #84 UTC and rate limit,
+  #85 elasticsearch-py 8 client and entry point, #86 bounded queue and bulk retry). The cc command
+  runs on the provider VM as root. The Elasticsearch is a container on the phenix docker host
+  (scripts/groundtruth-es.sh start; the VMs reach it at 172.16.0.1:19200 over mgmt_tap's host
+  address). A TCP proxy in the script, 127.0.0.1:9200, is what the monitor connects to, so the
+  script can cut Elasticsearch off and bring it back. The monitor runs with TZ=Etc/GMT-14
+  (UTC+14), so local time and UTC differ. Checks: the console script starts the monitor and it
+  stays up (stock: it dies with elasticsearch-py 8, and the script points at a module that does not
+  exist); documents land in bennu-<UTC date> with @timestamp, provider, device, field and value;
+  @timestamp is UTC; a message whose first point is an alert tag inside the 30 s window keeps its
+  other points; an alert passes after the window; the provider's own stream lands; with
+  Elasticsearch cut off the monitor's memory stops growing under a BURGER_GT_POINTS (300000)
+  point flood; the points published as the outage began arrive after it ends (a retry), and a
+  fresh point lands after recovery. The monitor and the script run with LD_LIBRARY_PATH=/usr/local/lib
+  (bennu's draft libzmq; the board builds a draft pyzmq for it). Stock bennu fails the first check and runs none of the rest;
+  with #85 alone (the gt-es8 board) the monitor runs and fails the UTC, rate-limit,
+  memory and retry checks. Bounded: the flood is capped at about 5 minutes.
+routes: [waterway-arm64]
+stages: [start]
+# The tunables are ${VAR:-default} expansions, read when burger loads this file.
+# No other ${...} and no dollar sign in here: SCORCH templating and minimega eat them in cc commands.
+config:
+  vms:
+    - hostname: "{route.provider}"
+      start:
+        - type: exec
+          wait: true
+          args: |
+            LD_LIBRARY_PATH=/usr/local/lib python3 - <<'PY'
+            import datetime, json, os, shutil, signal, socket, subprocess, sys, threading, time
+            import urllib.request
+            OUT, CFG, LOG = "/tmp/burger-groundtruth.json", "/tmp/burger-gt.ini", "/tmp/burger-gt-monitor.log"
+            ES = ("172.16.0.1", 19200)
+            EP = "${BURGER_GT_ENDPOINT:-udp://239.0.0.1:40000}"
+            POINTS = int("${BURGER_GT_POINTS:-400000}")
+            RATE = int("${BURGER_GT_RATE:-10000}")
+            MAXG = int("${BURGER_GT_MAX_GROWTH_MB:-200}")
+            R = str(int(time.time()))[-6:]
+            res = {"error": None, "expected": 11, "checks": [], "data": {"run": R, "endpoint": EP},
+                   "client": None, "pybennu": None}
+            mon = None
+            open(LOG, "w").close()  # the recv below needs a file even when the monitor never starts
+
+            def check(name, ok, detail):
+                res["checks"].append({"name": name, "ok": bool(ok), "detail": detail})
+                print(("ok   " if ok else "FAIL ") + name + ": " + detail, flush=True)
+                return ok
+
+            def es(method, path, body=None):
+                req = urllib.request.Request("http://%s:%d%s" % (ES[0], ES[1], path),
+                                             data=None if body is None else json.dumps(body).encode(),
+                                             method=method, headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=20) as r:
+                    return json.loads(r.read() or b"{}")
+
+            def count(prefix):
+                es("POST", "/bennu-*/_refresh")
+                q = {"query": {"prefix": {"device.keyword": prefix}}}
+                return es("POST", "/bennu-*/_count", q).get("count", 0)
+
+            def docs(prefix, n=3):
+                es("POST", "/bennu-*/_refresh")
+                q = {"size": n, "query": {"prefix": {"device.keyword": prefix}}}
+                return es("POST", "/bennu-*/_search", q)["hits"]["hits"]
+
+            def rss_mb(pid):
+                for ln in open("/proc/%d/status" % pid):
+                    if ln.startswith("VmRSS"):
+                        return int(ln.split()[1]) / 1024.0
+                return 0.0
+
+            class Proxy:
+                def __init__(self):
+                    self.srv, self.conns, self.held, self.hold = None, [], [], False
+
+                def up(self):
+                    s = socket.socket()
+                    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    s.bind(("127.0.0.1", 9200))
+                    s.listen(64)
+                    self.srv = s
+                    threading.Thread(target=self.accept, args=(s,), daemon=True).start()
+
+                def accept(self, s):
+                    while True:
+                        try:
+                            c, _ = s.accept()
+                        except OSError:
+                            return
+                        if self.hold:  # an unreachable host: connected, never answered
+                            self.held.append(c)
+                            continue
+                        try:
+                            u = socket.create_connection(ES, timeout=10)
+                            u.settimeout(None)
+                        except OSError:
+                            c.close()
+                            continue
+                        self.conns += [c, u]
+                        threading.Thread(target=self.pipe, args=(c, u), daemon=True).start()
+                        threading.Thread(target=self.pipe, args=(u, c), daemon=True).start()
+
+                def pipe(self, a, b):
+                    try:
+                        while True:
+                            d = a.recv(65536)
+                            if not d:
+                                break
+                            b.sendall(d)
+                    except OSError:
+                        pass
+                    for x in (a, b):
+                        try:
+                            x.shutdown(socket.SHUT_RDWR)
+                        except OSError:
+                            pass
+
+                def hang(self):
+                    self.hold = True
+                    for c in self.conns:
+                        try:
+                            c.shutdown(socket.SHUT_RDWR)
+                            c.close()
+                        except OSError:
+                            pass
+                    self.conns = []
+
+                def release(self):
+                    self.hold = False
+                    for c in self.held:
+                        try:
+                            c.close()
+                        except OSError:
+                            pass
+                    self.held = []
+
+                def down(self):
+                    try:
+                        self.srv.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass
+                    self.srv.close()
+                    for c in self.conns:
+                        try:
+                            c.shutdown(socket.SHUT_RDWR)
+                            c.close()
+                        except OSError:
+                            pass
+                    self.conns = []
+
+            def alive():
+                return mon is not None and mon.poll() is None
+
+            def tail():
+                try:
+                    return open(LOG).read()[-600:].replace("\n", " | ")
+                except OSError:
+                    return ""
+
+            try:
+                import elasticsearch
+                import pybennu
+                res["client"] = ".".join(str(x) for x in elasticsearch.__version__)
+                try:
+                    from importlib.metadata import version
+                    res["pybennu"] = version("pybennu")
+                except Exception:
+                    res["pybennu"] = "?"
+                es("GET", "/")  # the real Elasticsearch must answer on the docker host
+                proxy = Proxy()
+                proxy.up()
+                open(CFG, "w").write("[groundtruth-monitor]\npublish-endpoint = %s\nelasticsearch-ip = 127.0.0.1\nfilter = /\n" % EP)
+                env = dict(os.environ, TZ="Etc/GMT-14", BENNU_LOG_FILE="")
+                exe = shutil.which("pybennu-groundtruth-monitor")
+                lf = open(LOG, "wb")
+                t0 = time.time()
+                if exe:
+                    mon = subprocess.Popen([exe, "-c", CFG, "-e", "burger", "start"], env=env, stdout=lf, stderr=subprocess.STDOUT)
+                    time.sleep(6)
+                if not alive():
+                    why = "console script missing" if not exe else "exited %s: %s" % (mon.returncode, tail())
+                    check("monitor runs from the console script", False, why)
+                    # still try the module, to say whether the monitor itself can run
+                    mon = subprocess.Popen([sys.executable, "-m", "pybennu.executables.groundtruth_monitor", "-c", CFG, "-e", "burger", "start"],
+                                           env=env, stdout=lf, stderr=subprocess.STDOUT)
+                    t0 = time.time()
+                    time.sleep(6)
+                    if not alive():
+                        check("monitor runs with elasticsearch-py " + res["client"], False, "exited %s: %s" % (mon.returncode, tail()))
+                        raise SystemExit
+                    check("monitor runs with elasticsearch-py " + res["client"], True, "module runs, pid %d" % mon.pid)
+                else:
+                    check("monitor runs from the console script", True, "pid %d, elasticsearch-py %s" % (mon.pid, res["client"]))
+                    check("monitor runs with elasticsearch-py " + res["client"], True, "pid %d" % mon.pid)
+                from pybennu.distributed.publisher import Publisher
+                pub = Publisher(EP)
+                time.sleep(1)
+
+                # 1. a plain point: fields, index name, UTC timestamp
+                pub.publish("gt%s-shape.v:1.5," % R)
+                time.sleep(4)
+                hits = docs("gt%s-shape" % R)
+                now = datetime.datetime.now(datetime.timezone.utc)
+                if hits:
+                    h = hits[0]
+                    src = h["_source"]
+                    ts = datetime.datetime.fromisoformat(src["@timestamp"].replace("Z", "+00:00"))
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=datetime.timezone.utc)
+                    off = (ts - now).total_seconds()
+                    res["data"]["doc"] = h
+                    want = ["@timestamp", "provider", "device", "field", "value"]
+                    check("documents have the expected fields", all(k in src for k in want) and src["device"] == "gt%s-shape" % R and src["field"] == "v" and src["value"] == 1.5,
+                          "keys %s" % sorted(src))
+                    check("index is bennu-<UTC date>", h["_index"] == "bennu-" + now.strftime("%Y.%m.%d"),
+                          "%s, UTC date %s (monitor TZ is UTC+14)" % (h["_index"], now.strftime("%Y.%m.%d")))
+                    check("@timestamp is UTC", abs(off) < 120, "%s is %+.0f s from UTC now" % (src["@timestamp"], off))
+                else:
+                    for nm in ("documents have the expected fields", "index is bennu-<UTC date>", "@timestamp is UTC"):
+                        check(nm, False, "no document for gt%s-shape" % R)
+
+                # 2. an alert point inside the 30 s window must not drop the rest of the message
+                pub.publish("gt%s-alert.state:1,gt%s-bus1.v:1.5,gt%s-bus2.v:2.5," % (R, R, R))
+                time.sleep(4)
+                n = count("gt%s-bus" % R)
+                check("rate-limited alert keeps the other points", n == 2, "%d of 2 points after an alert-first message %.0f s after start" % (n, time.time() - t0))
+
+                # 3. an alert passes once the window (30 s from start) has passed
+                time.sleep(max(0, 33 - (time.time() - t0)))
+                pub.publish("gt%s-alert2.state:2,gt%s-bus3.v:3.5," % (R, R))
+                time.sleep(4)
+                a2, b3 = count("gt%s-alert2" % R), count("gt%s-bus3" % R)
+                check("an alert after the window is ingested", a2 == 1 and b3 == 1, "alert %d, other point %d" % (a2, b3))
+
+                # 4. the provider's own stream lands (anything not ours)
+                es("POST", "/bennu-*/_refresh")
+                tot = es("POST", "/bennu-*/_count", {}).get("count", 0)
+                ours = es("POST", "/bennu-*/_count", {"query": {"prefix": {"device.keyword": "gt" + R}}}).get("count", 0)
+                res["data"]["provider_docs"] = tot - ours
+                check("the provider's stream lands", tot - ours > 0, "%d documents not from this test" % (tot - ours))
+
+                # 5. Elasticsearch refuses connections for 8 s: the batch popped meanwhile must be retried
+                proxy.down()
+                pub.publish("".join("gt%s-first%d.v:%d.0," % (R, i, i) for i in range(10)))
+                time.sleep(8)
+                proxy.up()
+                end = time.time() + 60
+                first = 0
+                while time.time() < end:
+                    time.sleep(3)
+                    try:
+                        first = count("gt%s-first" % R)
+                    except Exception:
+                        continue
+                    if first >= 10:
+                        break
+                res["data"]["first_docs"] = first
+                check("a batch that failed during an outage is retried", first == 10, "%d of 10 points arrived within 60 s of recovery" % first)
+
+                # 6. Elasticsearch unreachable (connects, never answers): memory must stay bounded
+                rss = [("start", round(rss_mb(mon.pid), 1))]
+                proxy.hang()
+                sent, step, mark, t1 = 0, POINTS // 6, POINTS // 6, time.time()
+                while sent < POINTS:
+                    pub.publish("".join("gt%s-flood.v%d:%d.0," % (R, sent + i, i) for i in range(100)))
+                    sent += 100
+                    if sent >= mark:
+                        rss.append((sent, round(rss_mb(mon.pid), 1)))
+                        mark += step
+                    nap = t1 + sent / RATE - time.time()
+                    if nap > 0:
+                        time.sleep(nap)
+                time.sleep(3)
+                rss.append(("end", round(rss_mb(mon.pid), 1)))
+                res["data"]["rss_mb"] = rss
+                grew = max(v for _, v in rss) - rss[0][1]
+                check("monitor memory is bounded while Elasticsearch is unreachable", mon.poll() is None and grew <= MAXG,
+                      "peak RSS +%.0f MB (limit %d) after %d points; RSS MB %s" % (grew, MAXG, POINTS, ", ".join("%s=%s" % x for x in rss)))
+
+                # 7. Elasticsearch reachable again: documents resume
+                proxy.release()
+                n = 0
+                end = time.time() + 180
+                while time.time() < end and n < 1:
+                    pub.publish("gt%s-after.v:1.0," % R)
+                    time.sleep(6)
+                    try:
+                        n = count("gt%s-after" % R)
+                    except Exception:
+                        pass
+                res["data"]["flood_docs"] = count("gt%s-flood" % R)
+                check("documents resume after Elasticsearch returns", n >= 1, "%d fresh point(s) landed; %d of %d flood points landed" % (n, res["data"]["flood_docs"], POINTS))
+                res["data"]["retry_log_lines"] = open(LOG).read().count("will retry")
+            except SystemExit:
+                pass
+            except Exception as e:
+                res["error"] = "%s: %s" % (type(e).__name__, e)
+            finally:
+                try:
+                    if mon is not None and mon.poll() is None:
+                        mon.send_signal(signal.SIGTERM)
+                        mon.wait(10)
+                except Exception:
+                    pass
+                res["data"]["monitor_log_tail"] = tail()
+                json.dump(res, open(OUT, "w"))
+                print(json.dumps(res)[:3000])
+            PY
+        - type: recv
+          args: /tmp/burger-groundtruth.json
+        - type: recv
+          args: /tmp/burger-gt-monitor.log
+verify:
+  - python: judge_groundtruth

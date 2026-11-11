@@ -235,3 +235,14 @@ def test_iperf_322_injects_static_binary(settings, topologies):
         has = [i for i in inj if i["dst"] == want["dst"]]
         assert has == ([want] if n["general"]["hostname"] in ("rtu-1", "rtu-2") else [])
         assert not any("burger-debs" in i["dst"] for i in inj)
+
+
+def test_bennu_startup_keeps_the_images_swig_endpoint_on_aarch64():
+    """The wheel ships an x86-64 _Endpoint.so and removes the image's own: save and restore it."""
+    lines = bennu_startup({"bennu": {"wheel": WHEEL}}).splitlines()
+    save = next(i for i, ln in enumerate(lines) if "_Endpoint.so.burger" in ln and "uname -m" in ln)
+    pip = next(i for i, ln in enumerate(lines) if ln.startswith("pip3 install"))
+    restore = next(
+        i for i, ln in enumerate(lines) if ln.startswith("[ -f /root/_Endpoint.so.burger")
+    )
+    assert save < pip < restore

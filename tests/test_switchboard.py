@@ -73,7 +73,7 @@ def test_experiment_name_too_long(settings):
 @pytest.mark.usefixtures("site_env")
 def test_every_switchboard_resolves(settings):
     names = all_switchboards(settings)
-    assert len(names) == 33
+    assert len(names) == 36
     for name in names:
         resolve(load_switchboard(name, settings), settings)
 
@@ -205,3 +205,8 @@ def test_iperf_322_requires_and_config(settings):
     assert cfg["iperf_version"] == "3.22"
     assert cfg["iperf_paths"] == {"linux": "/usr/local/bin/iperf3-3.22"}
     assert resolve(load_switchboard("iperf", settings), settings).requires.iperf_static == "3.15"
+
+
+def test_pip_env_reaches_the_gt_board(settings):
+    b = load_switchboard("gt", settings)
+    assert b.bennu["pip_env"]["ZMQ_DRAFT_API"] == "1" and "pyzmq==27.2.0" in b.bennu["pip"]

@@ -32,11 +32,25 @@ def bennu_startup(man: dict) -> str:
         )
     if man["bennu"].get("wheel"):
         w = " ".join(f"/root/{n}" for n in [*man["bennu"].get("wheels", []), man["bennu"]["wheel"]])
+        # The wheel ships the repo's x86-64 swig _Endpoint.so, and replacing pybennu removes the
+        # image's own build of it: on an aarch64 image keep that one, or no pybennu tool imports.
+        swig = (
+            "$(python3 -c 'import importlib.util as u; "
+            'print(u.find_spec("pybennu").submodule_search_locations[0])\')/distributed/swig'
+        )
+        lines.append(
+            f'SWIG={swig}; [ "$(uname -m)" = aarch64 ] && [ -f "$SWIG/_Endpoint.so" ] '
+            '&& cp -a "$SWIG/_Endpoint.so" /root/_Endpoint.so.burger || true'
+        )
         # --break-system-packages is unknown to pip < 23: retry without it.
         lines.append(
             f"pip3 install --no-deps --force-reinstall --break-system-packages {w} "
             f">>/var/log/burger-bennu.log 2>&1 || pip3 install --no-deps --force-reinstall {w} "
             ">>/var/log/burger-bennu.log 2>&1"
+        )
+        lines.append(
+            "[ -f /root/_Endpoint.so.burger ] "
+            '&& cp -a /root/_Endpoint.so.burger "$SWIG/_Endpoint.so" || true'
         )
     return "\n".join(lines) + "\n"
 
@@ -78,7 +92,14 @@ def bennu_injections(man: dict, stage_dir: str) -> list:
 
 
 def build_bennu(
-    host, wt: Path, out: Path, man: dict, install: list[str], pip: list[str], arm64: bool = False
+    host,
+    wt: Path,
+    out: Path,
+    man: dict,
+    install: list[str],
+    pip: list[str],
+    arm64: bool = False,
+    pip_env: dict[str, str] | None = None,
 ) -> None:
     """Build the round's bennu deb (and wheel) in the bennu test image. On an arm64 route the
     image and every container run are linux/arm64, so the deb is compiled natively."""
@@ -122,6 +143,7 @@ def build_bennu(
                     "run",
                     *plat,
                     "--rm",
+                    *[a for k, v in (pip_env or {}).items() for a in ("-e", f"{k}={v}")],
                     "-v",
                     f"{out}:/out",
                     image,

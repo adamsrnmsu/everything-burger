@@ -1,0 +1,217 @@
+{
+  "apiVersion": "phenix.sandia.gov/v2",
+  "kind": "Scenario",
+  "metadata": {
+    "annotations": {
+      "topology": "ebwes-gt-stock"
+    },
+    "name": "ebwes-gt-stock"
+  },
+  "spec": {
+    "apps": [
+      {
+        "assetDir": "/phenix/topologies/waterway-arm64",
+        "hosts": [
+          {
+            "hostname": "waterway-provider",
+            "metadata": {
+              "publish_endpoint": "udp://*;239.0.0.1:40000",
+              "publish_points": "/phenix/topologies/waterway-arm64/injects/publishPoints.txt",
+              "simulator": "Simulink",
+              "solver": "/phenix/topologies/waterway-arm64/injects/simulinksolver",
+              "type": "provider"
+            }
+          },
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "infrastructure": "waterway",
+              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
+              "modbus": [
+                {
+                  "name": "lowerwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "lowergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "lowervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "lowersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "waterway-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "infrastructure": "waterway",
+              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
+              "modbus": [
+                {
+                  "name": "upperwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "uppergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "uppervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "uppersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "waterway-provider",
+              "type": "fd-server"
+            }
+          }
+        ],
+        "name": "sceptre"
+      },
+      {
+        "metadata": {
+          "subnet": "172.16.0.0/16",
+          "vlan": "MGMT"
+        },
+        "name": "mgmt_tap"
+      },
+      {
+        "metadata": {
+          "components": [
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-2",
+                    "start": [
+                      {
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "waterway-provider",
+                    "start": [
+                      {
+                        "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)simulinksolver( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "health",
+              "type": "cc"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "waterway-provider",
+                    "start": [
+                      {
+                        "args": "LD_LIBRARY_PATH=/usr/local/lib python3 - <<'PY'\nimport datetime, json, os, shutil, signal, socket, subprocess, sys, threading, time\nimport urllib.request\nOUT, CFG, LOG = \"/tmp/burger-groundtruth.json\", \"/tmp/burger-gt.ini\", \"/tmp/burger-gt-monitor.log\"\nES = (\"172.16.0.1\", 19200)\nEP = \"udp://239.0.0.1:40000\"\nPOINTS = int(\"400000\")\nRATE = int(\"10000\")\nMAXG = int(\"200\")\nR = str(int(time.time()))[-6:]\nres = {\"error\": None, \"expected\": 11, \"checks\": [], \"data\": {\"run\": R, \"endpoint\": EP},\n       \"client\": None, \"pybennu\": None}\nmon = None\nopen(LOG, \"w\").close()  # the recv below needs a file even when the monitor never starts\n\ndef check(name, ok, detail):\n    res[\"checks\"].append({\"name\": name, \"ok\": bool(ok), \"detail\": detail})\n    print((\"ok   \" if ok else \"FAIL \") + name + \": \" + detail, flush=True)\n    return ok\n\ndef es(method, path, body=None):\n    req = urllib.request.Request(\"http://%s:%d%s\" % (ES[0], ES[1], path),\n                                 data=None if body is None else json.dumps(body).encode(),\n                                 method=method, headers={\"Content-Type\": \"application/json\"})\n    with urllib.request.urlopen(req, timeout=20) as r:\n        return json.loads(r.read() or b\"{}\")\n\ndef count(prefix):\n    es(\"POST\", \"/bennu-*/_refresh\")\n    q = {\"query\": {\"prefix\": {\"device.keyword\": prefix}}}\n    return es(\"POST\", \"/bennu-*/_count\", q).get(\"count\", 0)\n\ndef docs(prefix, n=3):\n    es(\"POST\", \"/bennu-*/_refresh\")\n    q = {\"size\": n, \"query\": {\"prefix\": {\"device.keyword\": prefix}}}\n    return es(\"POST\", \"/bennu-*/_search\", q)[\"hits\"][\"hits\"]\n\ndef rss_mb(pid):\n    for ln in open(\"/proc/%d/status\" % pid):\n        if ln.startswith(\"VmRSS\"):\n            return int(ln.split()[1]) / 1024.0\n    return 0.0\n\nclass Proxy:\n    def __init__(self):\n        self.srv, self.conns, self.held, self.hold = None, [], [], False\n\n    def up(self):\n        s = socket.socket()\n        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)\n        s.bind((\"127.0.0.1\", 9200))\n        s.listen(64)\n        self.srv = s\n        threading.Thread(target=self.accept, args=(s,), daemon=True).start()\n\n    def accept(self, s):\n        while True:\n            try:\n                c, _ = s.accept()\n            except OSError:\n                return\n            if self.hold:  # an unreachable host: connected, never answered\n                self.held.append(c)\n                continue\n            try:\n                u = socket.create_connection(ES, timeout=10)\n                u.settimeout(None)\n            except OSError:\n                c.close()\n                continue\n            self.conns += [c, u]\n            threading.Thread(target=self.pipe, args=(c, u), daemon=True).start()\n            threading.Thread(target=self.pipe, args=(u, c), daemon=True).start()\n\n    def pipe(self, a, b):\n        try:\n            while True:\n                d = a.recv(65536)\n                if not d:\n                    break\n                b.sendall(d)\n        except OSError:\n            pass\n        for x in (a, b):\n            try:\n                x.shutdown(socket.SHUT_RDWR)\n            except OSError:\n                pass\n\n    def hang(self):\n        self.hold = True\n        for c in self.conns:\n            try:\n                c.shutdown(socket.SHUT_RDWR)\n                c.close()\n            except OSError:\n                pass\n        self.conns = []\n\n    def release(self):\n        self.hold = False\n        for c in self.held:\n            try:\n                c.close()\n            except OSError:\n                pass\n        self.held = []\n\n    def down(self):\n        try:\n            self.srv.shutdown(socket.SHUT_RDWR)\n        except OSError:\n            pass\n        self.srv.close()\n        for c in self.conns:\n            try:\n                c.shutdown(socket.SHUT_RDWR)\n                c.close()\n            except OSError:\n                pass\n        self.conns = []\n\ndef alive():\n    return mon is not None and mon.poll() is None\n\ndef tail():\n    try:\n        return open(LOG).read()[-600:].replace(\"\\n\", \" | \")\n    except OSError:\n        return \"\"\n\ntry:\n    import elasticsearch\n    import pybennu\n    res[\"client\"] = \".\".join(str(x) for x in elasticsearch.__version__)\n    try:\n        from importlib.metadata import version\n        res[\"pybennu\"] = version(\"pybennu\")\n    except Exception:\n        res[\"pybennu\"] = \"?\"\n    es(\"GET\", \"/\")  # the real Elasticsearch must answer on the docker host\n    proxy = Proxy()\n    proxy.up()\n    open(CFG, \"w\").write(\"[groundtruth-monitor]\\npublish-endpoint = %s\\nelasticsearch-ip = 127.0.0.1\\nfilter = /\\n\" % EP)\n    env = dict(os.environ, TZ=\"Etc/GMT-14\", BENNU_LOG_FILE=\"\")\n    exe = shutil.which(\"pybennu-groundtruth-monitor\")\n    lf = open(LOG, \"wb\")\n    t0 = time.time()\n    if exe:\n        mon = subprocess.Popen([exe, \"-c\", CFG, \"-e\", \"burger\", \"start\"], env=env, stdout=lf, stderr=subprocess.STDOUT)\n        time.sleep(6)\n    if not alive():\n        why = \"console script missing\" if not exe else \"exited %s: %s\" % (mon.returncode, tail())\n        check(\"monitor runs from the console script\", False, why)\n        # still try the module, to say whether the monitor itself can run\n        mon = subprocess.Popen([sys.executable, \"-m\", \"pybennu.executables.groundtruth_monitor\", \"-c\", CFG, \"-e\", \"burger\", \"start\"],\n                               env=env, stdout=lf, stderr=subprocess.STDOUT)\n        t0 = time.time()\n        time.sleep(6)\n        if not alive():\n            check(\"monitor runs with elasticsearch-py \" + res[\"client\"], False, \"exited %s: %s\" % (mon.returncode, tail()))\n            raise SystemExit\n        check(\"monitor runs with elasticsearch-py \" + res[\"client\"], True, \"module runs, pid %d\" % mon.pid)\n    else:\n        check(\"monitor runs from the console script\", True, \"pid %d, elasticsearch-py %s\" % (mon.pid, res[\"client\"]))\n        check(\"monitor runs with elasticsearch-py \" + res[\"client\"], True, \"pid %d\" % mon.pid)\n    from pybennu.distributed.publisher import Publisher\n    pub = Publisher(EP)\n    time.sleep(1)\n\n    # 1. a plain point: fields, index name, UTC timestamp\n    pub.publish(\"gt%s-shape.v:1.5,\" % R)\n    time.sleep(4)\n    hits = docs(\"gt%s-shape\" % R)\n    now = datetime.datetime.now(datetime.timezone.utc)\n    if hits:\n        h = hits[0]\n        src = h[\"_source\"]\n        ts = datetime.datetime.fromisoformat(src[\"@timestamp\"].replace(\"Z\", \"+00:00\"))\n        if ts.tzinfo is None:\n            ts = ts.replace(tzinfo=datetime.timezone.utc)\n        off = (ts - now).total_seconds()\n        res[\"data\"][\"doc\"] = h\n        want = [\"@timestamp\", \"provider\", \"device\", \"field\", \"value\"]\n        check(\"documents have the expected fields\", all(k in src for k in want) and src[\"device\"] == \"gt%s-shape\" % R and src[\"field\"] == \"v\" and src[\"value\"] == 1.5,\n              \"keys %s\" % sorted(src))\n        check(\"index is bennu-<UTC date>\", h[\"_index\"] == \"bennu-\" + now.strftime(\"%Y.%m.%d\"),\n              \"%s, UTC date %s (monitor TZ is UTC+14)\" % (h[\"_index\"], now.strftime(\"%Y.%m.%d\")))\n        check(\"@timestamp is UTC\", abs(off) < 120, \"%s is %+.0f s from UTC now\" % (src[\"@timestamp\"], off))\n    else:\n        for nm in (\"documents have the expected fields\", \"index is bennu-<UTC date>\", \"@timestamp is UTC\"):\n            check(nm, False, \"no document for gt%s-shape\" % R)\n\n    # 2. an alert point inside the 30 s window must not drop the rest of the message\n    pub.publish(\"gt%s-alert.state:1,gt%s-bus1.v:1.5,gt%s-bus2.v:2.5,\" % (R, R, R))\n    time.sleep(4)\n    n = count(\"gt%s-bus\" % R)\n    check(\"rate-limited alert keeps the other points\", n == 2, \"%d of 2 points after an alert-first message %.0f s after start\" % (n, time.time() - t0))\n\n    # 3. an alert passes once the window (30 s from start) has passed\n    time.sleep(max(0, 33 - (time.time() - t0)))\n    pub.publish(\"gt%s-alert2.state:2,gt%s-bus3.v:3.5,\" % (R, R))\n    time.sleep(4)\n    a2, b3 = count(\"gt%s-alert2\" % R), count(\"gt%s-bus3\" % R)\n    check(\"an alert after the window is ingested\", a2 == 1 and b3 == 1, \"alert %d, other point %d\" % (a2, b3))\n\n    # 4. the provider's own stream lands (anything not ours)\n    es(\"POST\", \"/bennu-*/_refresh\")\n    tot = es(\"POST\", \"/bennu-*/_count\", {}).get(\"count\", 0)\n    ours = es(\"POST\", \"/bennu-*/_count\", {\"query\": {\"prefix\": {\"device.keyword\": \"gt\" + R}}}).get(\"count\", 0)\n    res[\"data\"][\"provider_docs\"] = tot - ours\n    check(\"the provider's stream lands\", tot - ours > 0, \"%d documents not from this test\" % (tot - ours))\n\n    # 5. Elasticsearch refuses connections for 8 s: the batch popped meanwhile must be retried\n    proxy.down()\n    pub.publish(\"\".join(\"gt%s-first%d.v:%d.0,\" % (R, i, i) for i in range(10)))\n    time.sleep(8)\n    proxy.up()\n    end = time.time() + 60\n    first = 0\n    while time.time() < end:\n        time.sleep(3)\n        try:\n            first = count(\"gt%s-first\" % R)\n        except Exception:\n            continue\n        if first >= 10:\n            break\n    res[\"data\"][\"first_docs\"] = first\n    check(\"a batch that failed during an outage is retried\", first == 10, \"%d of 10 points arrived within 60 s of recovery\" % first)\n\n    # 6. Elasticsearch unreachable (connects, never answers): memory must stay bounded\n    rss = [(\"start\", round(rss_mb(mon.pid), 1))]\n    proxy.hang()\n    sent, step, mark, t1 = 0, POINTS // 6, POINTS // 6, time.time()\n    while sent < POINTS:\n        pub.publish(\"\".join(\"gt%s-flood.v%d:%d.0,\" % (R, sent + i, i) for i in range(100)))\n        sent += 100\n        if sent >= mark:\n            rss.append((sent, round(rss_mb(mon.pid), 1)))\n            mark += step\n        nap = t1 + sent / RATE - time.time()\n        if nap > 0:\n            time.sleep(nap)\n    time.sleep(3)\n    rss.append((\"end\", round(rss_mb(mon.pid), 1)))\n    res[\"data\"][\"rss_mb\"] = rss\n    grew = max(v for _, v in rss) - rss[0][1]\n    check(\"monitor memory is bounded while Elasticsearch is unreachable\", mon.poll() is None and grew <= MAXG,\n          \"peak RSS +%.0f MB (limit %d) after %d points; RSS MB %s\" % (grew, MAXG, POINTS, \", \".join(\"%s=%s\" % x for x in rss)))\n\n    # 7. Elasticsearch reachable again: documents resume\n    proxy.release()\n    n = 0\n    end = time.time() + 180\n    while time.time() < end and n < 1:\n        pub.publish(\"gt%s-after.v:1.0,\" % R)\n        time.sleep(6)\n        try:\n            n = count(\"gt%s-after\" % R)\n        except Exception:\n            pass\n    res[\"data\"][\"flood_docs\"] = count(\"gt%s-flood\" % R)\n    check(\"documents resume after Elasticsearch returns\", n >= 1, \"%d fresh point(s) landed; %d of %d flood points landed\" % (n, res[\"data\"][\"flood_docs\"], POINTS))\n    res[\"data\"][\"retry_log_lines\"] = open(LOG).read().count(\"will retry\")\nexcept SystemExit:\n    pass\nexcept Exception as e:\n    res[\"error\"] = \"%s: %s\" % (type(e).__name__, e)\nfinally:\n    try:\n        if mon is not None and mon.poll() is None:\n            mon.send_signal(signal.SIGTERM)\n            mon.wait(10)\n    except Exception:\n        pass\n    res[\"data\"][\"monitor_log_tail\"] = tail()\n    json.dump(res, open(OUT, \"w\"))\n    print(json.dumps(res)[:3000])\nPY\n",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "/tmp/burger-groundtruth.json",
+                        "type": "recv"
+                      },
+                      {
+                        "args": "/tmp/burger-gt-monitor.log",
+                        "type": "recv"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "groundtruth",
+              "type": "cc"
+            }
+          ],
+          "runs": [
+            {
+              "name": "health",
+              "start": [
+                "health"
+              ]
+            },
+            {
+              "name": "gt-stock",
+              "start": [
+                "groundtruth"
+              ]
+            }
+          ]
+        },
+        "name": "scorch"
+      }
+    ]
+  }
+}

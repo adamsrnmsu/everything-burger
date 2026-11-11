@@ -116,3 +116,16 @@ Then add `my-test: on` under `items:` in a switchboard, and run
 `topology.json` and `scenario.json` to `work/<switchboard>/check/`; set
 `BURGER_TOPOLOGIES` to a local clone of sceptre-phenix-topologies so it does
 not need `sync`.
+
+`groundtruth` (`components/groundtruth.yaml` and `.py`) tests pybennu's `groundtruth_monitor`
+(bennu #84, #85, #86). One `cc` command on waterway-provider runs the console script against a real
+Elasticsearch: a container on the phenix docker host that `scripts/groundtruth-es.sh start` creates
+(single node, 512 MB heap, port 19200, reached at 172.16.0.1 over `mgmt_tap`). The script puts a TCP
+proxy on 127.0.0.1:9200 between the monitor and Elasticsearch so it can cut the connection and bring
+it back, and runs the monitor with `TZ=Etc/GMT-14`. Eleven checks: the console script starts and
+the monitor stays up; documents have `@timestamp`, `provider`, `device`, `field`, `value`; the index
+is `bennu-<UTC date>`; `@timestamp` is within 120 s of UTC now; an alert-first message inside the 30 s
+window keeps its other points; an alert after the window is ingested; the provider's own stream
+lands; memory stops growing under a `BURGER_GT_POINTS` (300000) point flood at `BURGER_GT_RATE`
+(10000 points/s) while Elasticsearch is cut off; the 10 points published as the outage began arrive
+once it ends; a fresh point lands after recovery. The `gt`, `gt-es8` and `gt-stock` boards run it.

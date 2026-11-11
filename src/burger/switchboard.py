@@ -9,7 +9,7 @@ from burger.loader import load_yaml
 from burger.routes import Route, load_route
 
 _FIELDS = {"about", "route", "apps", "bennu", "items", "overrides", "runs", "linux_only", "fdlogs"}
-_BENNU_KEYS = {"pr", "branch", "remote", "install", "pip"}
+_BENNU_KEYS = {"pr", "branch", "remote", "install", "pip", "pip_env"}
 _APPS_KEYS = {"prs", "branch", "remote", "contains"}
 REMOTES = ("fork", "upstream")
 # A conservative subset of git ref names: no spaces, `:`, `..`, `//`, a leading `-` or `.`,

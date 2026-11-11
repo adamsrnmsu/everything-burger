@@ -1,0 +1,12 @@
+# Control: stock bennu (the range's own bennu-arm64 image, no `bennu:` block), upstream main
+# apps. The groundtruth item should FAIL here: the monitor cannot start with elasticsearch-py 8.
+# Same Elasticsearch container as `groundtruth` (scripts/groundtruth-es.sh start).
+about: "stock bennu: groundtruth_monitor against a real Elasticsearch on the arm64 range"
+route: waterway-arm64
+apps: {prs: []}
+items:
+  apps/mgmt_tap: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+  groundtruth: on
