@@ -6,7 +6,7 @@ import pytest
 
 from burger import experiment
 from burger.config import BurgerError
-from burger.experiment import down, fix_routers, install, scorch, vm_uuids
+from burger.experiment import down, fix_routers, install, scorch, services, vm_uuids
 from tests.conftest import MAN, res
 from tests.fakes import FakeHost
 
@@ -131,13 +131,15 @@ def test_down_stops_then_deletes(settings):
     assert verbs == [["experiment", "stop"], ["experiment", "delete"], ["config", "delete"]]
 
 
-def test_down_stops_the_boards_services(settings):
+def test_down_leaves_services_to_the_down_command(settings):
+    # up calls down() first to clear an old experiment; that must not stop the services
     r = res(settings)
     r.board.services = ["groundtruth-es"]
     host = FakeHost(settings=settings)
     down(r, host)
-    script = str(settings.root / "scripts" / "groundtruth-es.sh")
-    assert ["sh", script, "stop"] in host.calls
+    assert not any("groundtruth-es.sh" in " ".join(c) for c in host.calls)
+    services(r, settings, host, "stop")
+    assert ["sh", str(settings.root / "scripts" / "groundtruth-es.sh"), "stop"] in host.calls
 
 
 class FakeClock:

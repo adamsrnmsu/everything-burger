@@ -83,6 +83,7 @@ def _one(args, s, host, name: str) -> int:
         return _verify(res, s, host)
     elif cmd == "down":
         experiment.down(res, host)
+        experiment.services(res, s, host, "stop")
     elif cmd == "bennu-check":
         if not vcs.load_manifest(s, name)["bennu"]:
             raise BurgerError(f"switchboard '{name}' has no bennu build")

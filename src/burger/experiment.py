@@ -136,7 +136,6 @@ def services(res: Resolved, settings: Settings, host, action: str) -> None:
 
 
 def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
-    services(res, settings, host, "start")
     name, exp = res.board.name, res.board.exp
     rd, man = board_dir(settings, name), load_manifest(settings, name)
     stage_dir = f"{settings.phenix_dir}/burger/{name}"
@@ -181,7 +180,8 @@ def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
                 raise BurgerError(f"item asset not found: {rel}")
             shutil.copy2(src, adir / Path(rel).name)
 
-    down(res, host)
+    down(res, host)  # clears a previous experiment of this name; the services start fresh below
+    services(res, settings, host, "start")
     if topo_dir:  # the site route's assets are already where its scenario says
         topo_name = res.route.topology_dir
         host.put(topo_dir, f"{settings.phenix_dir}/topologies/burger-{topo_name}")
@@ -291,7 +291,6 @@ def fix_routers(host, settings: Settings, exp: str, topo: dict) -> None:
 
 def down(res: Resolved, host) -> None:
     exp = res.board.exp
-    services(res, host.s, host, "stop")
     info = host.api(f"/experiments/{exp}")
     if info:
         if info.get("running"):
