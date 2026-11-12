@@ -1,12 +1,12 @@
 # Baseline for #84 and #86: only #85 (the elasticsearch-py 8 client and the console script),
 # so the monitor runs and the UTC, rate-limit, memory and retry checks show the bugs live.
-# Same Elasticsearch container as `groundtruth` (scripts/groundtruth-es.sh start).
+# Same Elasticsearch container as `gt` (the services line starts and removes it).
 about: "bennu #85 alone: groundtruth_monitor runs on elasticsearch-py 8, #84 and #86 still fail"
 route: waterway-arm64
 apps: {prs: []}
+services: [groundtruth-es]
 bennu:
-  branch: fix-groundtruth-es8-client
-  remote: fork
+  prs: [85]
   install: [pybennu]
   # The image lacks loguru, and its pyzmq has no draft API (RADIO/DISH, which the pybennu
   # publisher and subscriber need): build a draft pyzmq from source. The monitor then runs

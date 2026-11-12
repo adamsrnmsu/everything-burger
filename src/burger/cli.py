@@ -318,7 +318,7 @@ def _list(args, s, host) -> int:
         if b.apps_branch:
             prs = [f"{b.apps_branch['branch']} ({', '.join(prs) or 'no PRs'})"]
         if b.bennu:
-            prs.append(f"bennu {b.bennu.get('pr') or b.bennu['branch']}")
+            prs.append(f"bennu {vcs.bennu_label(b.bennu)}")
         boards.add_row(name, b.route, ", ".join(prs), Text(b.about), end_section=False)
     items = Table("item", "kind", "routes", "about")
     for i in all_items(s):
@@ -353,6 +353,8 @@ def _synthetic_manifest(board) -> dict:
         man["apps"] = {**br, "head": "a" * 40, "sha": "a" * 40, "prs": {}}
     if b := board.bennu:
         src = {k: b[k] for k in ("pr", "branch", "remote") if k in b}
+        if "prs" in b:
+            src["prs"] = {str(n): "c" * 40 for n in b["prs"]}
         man["bennu"] = {**src, "sha": "c" * 40, "deb_version": "offline"}
         if "pybennu" in b.get("install", ["deb"]):
             man["bennu"]["wheel"] = "pybennu-offline-py3-none-any.whl"

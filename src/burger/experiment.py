@@ -128,7 +128,15 @@ def install(res: Resolved, settings: Settings, host) -> None:
     )
 
 
+def services(res: Resolved, settings: Settings, host, action: str) -> None:
+    """Run scripts/<name>.sh start|stop for each of the board's host services."""
+    for name in res.board.services:
+        logger.info("service {}: {}", name, action)
+        host.run(["sh", settings.root / "scripts" / f"{name}.sh", action])
+
+
 def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
+    services(res, settings, host, "start")
     name, exp = res.board.name, res.board.exp
     rd, man = board_dir(settings, name), load_manifest(settings, name)
     stage_dir = f"{settings.phenix_dir}/burger/{name}"
@@ -283,6 +291,7 @@ def fix_routers(host, settings: Settings, exp: str, topo: dict) -> None:
 
 def down(res: Resolved, host) -> None:
     exp = res.board.exp
+    services(res, host.s, host, "stop")
     info = host.api(f"/experiments/{exp}")
     if info:
         if info.get("running"):

@@ -73,7 +73,7 @@ def test_experiment_name_too_long(settings):
 @pytest.mark.usefixtures("site_env")
 def test_every_switchboard_resolves(settings):
     names = all_switchboards(settings)
-    assert len(names) == 36
+    assert len(names) == 37
     for name in names:
         resolve(load_switchboard(name, settings), settings)
 
@@ -145,7 +145,13 @@ def test_bennu_branch_defaults_to_upstream(settings, tmp_path):
     "body, msg",
     [
         ("apps: {prs: [1], branch: x}\n", "'prs' or 'branch'"),
-        ("bennu: {pr: 1, branch: x}\n", "'pr' or 'branch'"),
+        ("bennu: {pr: 1, branch: x}\n", "'pr' or 'prs' or 'branch'"),
+        ("bennu: {pr: 1, prs: [2]}\n", "'pr' or 'prs' or 'branch'"),
+        ("bennu: {prs: [1], branch: x}\n", "'pr' or 'prs' or 'branch'"),
+        ("bennu: {prs: []}\n", "bennu.prs must not be empty"),
+        ("bennu: {prs: ['1']}\n", "bennu.prs must be a list of integers"),
+        ("services: [no-such-script]\n", "no script scripts/no-such-script.sh"),
+        ("services: groundtruth-es\n", "services must be a list"),
         ("apps: {prs: [1], remote: fork}\n", "apps.remote needs 'branch'"),
         ("apps: {prs: [1], contains: [2]}\n", "apps.contains needs 'branch'"),
         ("apps: {branch: x, remote: origin}\n", "fork or upstream"),
@@ -155,8 +161,8 @@ def test_bennu_branch_defaults_to_upstream(settings, tmp_path):
         ("bennu: {pr: '58'}\n", "bennu.pr must be an integer"),
         ("bennu: {pr: true}\n", "bennu.pr must be an integer"),
         ("apps: {pr: [1]}\n", "unknown apps field 'pr'"),
-        ("bennu: {prs: 1}\n", "unknown bennu field 'prs'"),
-        ("bennu: {install: [deb]}\n", "needs 'pr' or 'branch'"),
+        ("bennu: {prs: 1}\n", "bennu.prs must be a list of integers"),
+        ("bennu: {install: [deb]}\n", "needs 'pr', 'prs' or 'branch'"),
         ("apps: {branch: 5}\n", "branch must be a branch name"),
         ("bennu: {remote: fork, pr: 1}\n", "bennu.remote needs 'branch'"),
         ("bennu: {contains: [1], pr: 1}\n", "unknown bennu field 'contains'"),
@@ -210,3 +216,12 @@ def test_iperf_322_requires_and_config(settings):
 def test_pip_env_reaches_the_gt_board(settings):
     b = load_switchboard("gt", settings)
     assert b.bennu["pip_env"]["ZMQ_DRAFT_API"] == "1" and "pyzmq==27.2.0" in b.bennu["pip"]
+
+
+def test_gt_boards_merge_bennu_prs_and_start_elasticsearch(settings):
+    gt = load_switchboard("gt", settings)
+    assert gt.bennu["prs"] == [84, 85, 86, 87, 88, 89] and "branch" not in gt.bennu
+    assert load_switchboard("gt-84-86", settings).bennu["prs"] == [84, 85, 86]
+    assert load_switchboard("gt-es8", settings).bennu["prs"] == [85]
+    for n in ("gt", "gt-84-86", "gt-es8", "gt-stock"):
+        assert load_switchboard(n, settings).services == ["groundtruth-es"]

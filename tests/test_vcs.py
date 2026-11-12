@@ -8,7 +8,7 @@ from burger import config
 from burger.config import BurgerError
 from burger.shell import Host
 from burger.switchboard import load_switchboard, resolve
-from burger.vcs import _branch_ref, _fetch_branch, branch_url, fork_owner, prs, sync
+from burger.vcs import _branch_ref, _fetch_branch, bennu_label, branch_url, fork_owner, prs, sync
 from tests.fakes import FakeHost
 
 
@@ -181,6 +181,51 @@ def test_sync_bennu_branch_records_branch_remote_and_sha(
     sha = git(bennu_origin, "rev-parse", "main")
     assert man["bennu"] == {"branch": "main", "remote": "upstream", "sha": sha}
     assert (settings.work / "baseline" / "bennu" / "a.txt").exists()
+
+
+def test_sync_bennu_prs_merges_them_in_order(
+    settings, apps_origin, topologies, monkeypatch, tmp_path
+):
+    make_origin(apps_origin, {})
+    bennu_origin = tmp_path / "bennu-origin"
+    make_origin(bennu_origin, {})
+    for n, name in ((1, "one"), (2, "two")):  # two PRs on different files: both merge
+        git(bennu_origin, "checkout", "-q", "-b", f"x{n}", "main")
+        (bennu_origin / f"{name}.txt").write_text(f"{name}\n")
+        git(bennu_origin, "add", ".")
+        git(bennu_origin, "commit", "-qm", name)
+        git(bennu_origin, "update-ref", f"refs/pull/{n}/head", "HEAD")
+    git(bennu_origin, "checkout", "-q", "main")
+    monkeypatch.delenv("BURGER_BENNU_REPO", raising=False)
+    monkeypatch.setitem(config.REPOS, "bennu", str(bennu_origin))
+    monkeypatch.setitem(config.REPOS, "topologies", str(topologies))
+    monkeypatch.setenv("BURGER_TOPOLOGIES_REPO", str(topologies))
+    b = load_switchboard("baseline", settings)
+    spec = {"prs": [1, 2], "install": ["deb"]}
+    man = sync(resolve(dataclasses.replace(b, bennu=spec), settings), settings, Host(settings))
+    wt = settings.work / "baseline" / "bennu"
+    assert (wt / "one.txt").exists() and (wt / "two.txt").exists()
+    assert man["bennu"]["prs"] == {
+        "1": git(bennu_origin, "rev-parse", "refs/pull/1/head"),
+        "2": git(bennu_origin, "rev-parse", "refs/pull/2/head"),
+    }
+    assert man["bennu"]["sha"] == git(wt, "rev-parse", "HEAD") != man["bennu"]["prs"]["2"]
+    assert bennu_label(man["bennu"]) == "#1+#2"
+
+
+def test_prs_lists_every_bennu_pr_of_a_board_and_its_stale_head(settings, monkeypatch):
+    b = load_switchboard("baseline", settings)
+    b = dataclasses.replace(b, bennu={"prs": [84, 85], "install": ["deb"]})
+    monkeypatch.setattr("shutil.which", lambda _: None)
+    monkeypatch.setattr("burger.vcs.all_switchboards", lambda s: ["gt"])
+    monkeypatch.setattr("burger.vcs.load_switchboard", lambda n, s: b)
+    (settings.work / "gt").mkdir()
+    man = {"apps": {"prs": {}}, "bennu": {"prs": {"84": "old", "85": "new"}, "sha": "m"}}
+    (settings.work / "gt" / "manifest.json").write_text(json.dumps(man))
+    host = FakeHost({"git ls-remote": subprocess.CompletedProcess([], 0, "new\trefs/x\n", "")})
+    rows = {r["number"]: r for r in prs(settings, host, "me") if "bennu" in r["repo"]}
+    assert rows[84]["boards"] == ["gt"] and rows[84]["stale"] == ["gt"]
+    assert rows[85]["boards"] == ["gt"] and rows[85]["stale"] == []
 
 
 def test_prs_lists_branch_board_contains_as_carried(settings, monkeypatch):

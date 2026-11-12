@@ -94,6 +94,35 @@ def _fresh_worktree(host, repo: Path, path: Path, ref: str) -> None:
     host.git(repo, "worktree", "add", "--quiet", "--detach", path, ref)
 
 
+def _merge_prs(host, wt: Path, attrs: Path, board: str, prs: list[int]) -> None:
+    """Merge refs/burger/pr/<n> into the worktree in order; a conflict names the files."""
+    for n in prs:
+        merged = host.git(
+            wt,
+            "-c",
+            f"core.attributesFile={attrs}",
+            *GIT_ID,
+            "merge",
+            "--no-ff",
+            "--no-edit",
+            "-m",
+            f"burger: merge #{n}",
+            f"refs/burger/pr/{n}",
+            check=False,
+            capture=True,
+        )
+        if merged.returncode != 0:
+            bad = host.git(
+                wt, "diff", "--name-only", "--diff-filter=U", capture=True
+            ).stdout.split()
+            host.git(wt, "merge", "--abort", check=False, capture=True)
+            raise BurgerError(
+                f"switchboard '{board}': #{n} conflicts with the PRs before it "
+                f"in {', '.join(bad) or '(none; see git output)'}; drop or reorder it in "
+                f"switchboards/{board}.yaml\n{merged.stdout}{merged.stderr}".rstrip()
+            )
+
+
 def sync(res: Resolved, settings: Settings, host) -> dict:
     """Fetch the PRs, merge them over main in fresh worktrees, and write the manifest."""
     board = res.board
@@ -119,30 +148,7 @@ def sync(res: Resolved, settings: Settings, host) -> dict:
     man["apps"] = {**br, "sha": sha, "prs": {}} if br else {"base": sha, "prs": {}}
     for n in prs:
         man["apps"]["prs"][str(n)] = _rev(host, repo, f"refs/burger/pr/{n}")
-        merged = host.git(
-            wt,
-            "-c",
-            f"core.attributesFile={attrs}",
-            *GIT_ID,
-            "merge",
-            "--no-ff",
-            "--no-edit",
-            "-m",
-            f"burger: merge #{n}",
-            f"refs/burger/pr/{n}",
-            check=False,
-            capture=True,
-        )
-        if merged.returncode != 0:
-            bad = host.git(
-                wt, "diff", "--name-only", "--diff-filter=U", capture=True
-            ).stdout.split()
-            host.git(wt, "merge", "--abort", check=False, capture=True)
-            raise BurgerError(
-                f"switchboard '{board.name}': #{n} conflicts with the PRs before it "
-                f"in {', '.join(bad) or '(none; see git output)'}; drop or reorder it in "
-                f"switchboards/{board.name}.yaml\n{merged.stdout}{merged.stderr}".rstrip()
-            )
+    _merge_prs(host, wt, attrs, board.name, prs)
     man["apps"]["head"] = _rev(host, wt, "HEAD")
 
     man["bennu"] = None
@@ -152,11 +158,17 @@ def sync(res: Resolved, settings: Settings, host) -> dict:
         if "branch" in spec:
             ref = _fetch_branch(host, brepo, "bennu", spec)
             src = {"branch": spec["branch"], "remote": spec["remote"]}
+        elif "prs" in spec:  # several PRs merged over main, like apps.prs
+            _fetch(host, brepo, REPOS["bennu"], spec["prs"])
+            ref = "refs/burger/main"
+            src = {"prs": {str(n): _rev(host, brepo, f"refs/burger/pr/{n}") for n in spec["prs"]}}
         else:
             _fetch(host, brepo, REPOS["bennu"], [spec["pr"]])
             ref, src = f"refs/burger/pr/{spec['pr']}", {"pr": spec["pr"]}
         _fresh_worktree(host, brepo, rd / "bennu", ref)
-        man["bennu"] = {**src, "sha": _rev(host, brepo, ref)}
+        if "prs" in spec:
+            _merge_prs(host, rd / "bennu", attrs, board.name, spec["prs"])
+        man["bennu"] = {**src, "sha": _rev(host, rd / "bennu", "HEAD")}
 
     topo = res.route.topology_dir  # a site route brings its own topology: nothing to archive
     man["topologies"] = None
@@ -186,6 +198,8 @@ def sync(res: Resolved, settings: Settings, host) -> dict:
 
 
 def bennu_label(b: dict) -> str:
+    if "prs" in b:
+        return "+".join(f"#{n}" for n in b["prs"])
     return f"#{b['pr']}" if "pr" in b else f"{b['remote']}/{b['branch']}"
 
 
@@ -219,7 +233,10 @@ def _moved_branches(host, synced: dict) -> set[str]:
 def _pr_sha(man: dict, key: str, n: int) -> str | None:
     if key == "apps":
         return man["apps"]["prs"].get(str(n))
-    return man["bennu"]["sha"] if man.get("bennu") and man["bennu"].get("pr") == n else None
+    b = man.get("bennu") or {}
+    if "prs" in b:
+        return b["prs"].get(str(n))
+    return b["sha"] if b.get("pr") == n else None
 
 
 def prs(settings: Settings, host, author: str) -> list[dict]:
@@ -231,8 +248,9 @@ def prs(settings: Settings, host, author: str) -> list[dict]:
         board = load_switchboard(name, settings)
         for n in board.apps_prs:
             carried["apps"].setdefault(int(n), []).append(name)
-        if (board.bennu or {}).get("pr"):  # a bennu branch carries no PR
-            carried["bennu"].setdefault(int(board.bennu["pr"]), []).append(name)
+        b = board.bennu or {}  # a bennu branch carries no PR
+        for n in [b["pr"]] if "pr" in b else b.get("prs", []):
+            carried["bennu"].setdefault(int(n), []).append(name)
         path = board_dir(settings, name) / "manifest.json"
         if path.is_file():
             synced[name] = json.loads(path.read_text())

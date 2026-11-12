@@ -1,17 +1,16 @@
-# Live proof of bennu #84, #85 and #86 (pybennu groundtruth_monitor): the three drafts merged on
-# upstream main (fork branch fix-groundtruth-all, a merge of the PR heads; rebuild it with
-# `git merge fix-groundtruth-correctness fix-groundtruth-es8-client fix-groundtruth-bounded-retry`
-# on upstream/main and push it when a PR head moves). The pybennu wheel is built natively for arm64
-# and installed on the VMs. A real Elasticsearch runs in a container on the phenix docker host:
-# start it with `scripts/groundtruth-es.sh start` before the run and `stop` after; the monitor
-# on waterway-provider reaches it over mgmt_tap's host address. Control boards: `gt-stock`
-# (stock bennu-arm64 image) and `gt-es8` (#85 only, the baseline for #84 and #86).
-about: "bennu #84 #85 #86: groundtruth_monitor against a real Elasticsearch on the arm64 range"
+# Live proof of bennu #84 to #89 (pybennu groundtruth_monitor): the PR heads merged in order over
+# upstream main by burger (#89 contains #86's commit until #86 merges). The pybennu wheel is built
+# natively for arm64 and installed on the VMs. A real Elasticsearch runs in a container on the
+# phenix docker host, started on `up` and removed on `down` (services: scripts/groundtruth-es.sh);
+# the monitor on waterway-provider reaches it over mgmt_tap's host address. Control boards:
+# `gt-stock` (stock bennu-arm64 image), `gt-es8` (#85 only, the baseline for #84 and #86) and
+# `gt-84-86` (exactly #84 #85 #86, the evidence in those PRs' bodies).
+about: "bennu #84 to #89: groundtruth_monitor against a real Elasticsearch on the arm64 range"
 route: waterway-arm64
 apps: {prs: []}
+services: [groundtruth-es]
 bennu:
-  branch: fix-groundtruth-all
-  remote: fork
+  prs: [84, 85, 86, 87, 88, 89]
   install: [pybennu]
   # The image lacks loguru, and its pyzmq has no draft API (RADIO/DISH, which the pybennu
   # publisher and subscriber need): build a draft pyzmq from source. The monitor then runs

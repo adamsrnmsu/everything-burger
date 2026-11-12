@@ -1,0 +1,20 @@
+# Exactly bennu #84, #85 and #86: the state the evidence in those PRs' bodies was taken on.
+# Same item and Elasticsearch service as `gt`, which adds #87 to #89.
+about: "bennu #84 #85 #86 only: the groundtruth_monitor evidence in those PRs, without #87 to #89"
+route: waterway-arm64
+apps: {prs: []}
+services: [groundtruth-es]
+bennu:
+  prs: [84, 85, 86]
+  install: [pybennu]
+  # The image lacks loguru, and its pyzmq has no draft API (RADIO/DISH, which the pybennu
+  # publisher and subscriber need): build a draft pyzmq from source. The monitor then runs
+  # with LD_LIBRARY_PATH=/usr/local/lib, bennu's draft libzmq. The VMs have no index.
+  pip: ["loguru>=0.7,<1", "pyzmq==27.2.0"]
+  pip_env: {ZMQ_DRAFT_API: "1", PIP_NO_BINARY: pyzmq}
+items:
+  apps/mgmt_tap: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+  groundtruth: on

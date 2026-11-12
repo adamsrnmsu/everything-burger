@@ -131,6 +131,15 @@ def test_down_stops_then_deletes(settings):
     assert verbs == [["experiment", "stop"], ["experiment", "delete"], ["config", "delete"]]
 
 
+def test_down_stops_the_boards_services(settings):
+    r = res(settings)
+    r.board.services = ["groundtruth-es"]
+    host = FakeHost(settings=settings)
+    down(r, host)
+    script = str(settings.root / "scripts" / "groundtruth-es.sh")
+    assert ["sh", script, "stop"] in host.calls
+
+
 class FakeClock:
     def __init__(self):
         self.now = 0.0

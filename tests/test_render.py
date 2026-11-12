@@ -30,6 +30,9 @@ def man_for(board):
     if b := board.bennu:
         if "pr" in b:
             man["bennu"]["pr"] = b["pr"]
+        elif "prs" in b:
+            del man["bennu"]["pr"]
+            man["bennu"]["prs"] = {str(n): "d" * 40 for n in b["prs"]}
         else:  # a branch build, e.g. bennu main
             del man["bennu"]["pr"]
             man["bennu"] |= {"branch": b["branch"], "remote": b.get("remote", "upstream")}

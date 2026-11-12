@@ -8,8 +8,11 @@ from burger.items import Item, load_item, resolve_item
 from burger.loader import load_yaml
 from burger.routes import Route, load_route
 
-_FIELDS = {"about", "route", "apps", "bennu", "items", "overrides", "runs", "linux_only", "fdlogs"}
-_BENNU_KEYS = {"pr", "branch", "remote", "install", "pip", "pip_env"}
+_FIELDS = {
+    "about", "route", "apps", "bennu", "items", "overrides", "runs", "linux_only", "fdlogs",
+    "services",
+}  # fmt: skip
+_BENNU_KEYS = {"pr", "prs", "branch", "remote", "install", "pip", "pip_env"}
 _APPS_KEYS = {"prs", "branch", "remote", "contains"}
 REMOTES = ("fork", "upstream")
 # A conservative subset of git ref names: no spaces, `:`, `..`, `//`, a leading `-` or `.`,
@@ -32,6 +35,7 @@ class Switchboard:
     linux_only: bool
     exp: str
     unset: list[str] = field(default_factory=list)
+    services: list[str] = field(default_factory=list)  # scripts/<name>.sh start|stop around up/down
     apps_branch: dict | None = None  # {"branch", "remote"}; then apps_prs is only the record
     fdlogs: dict | None = None  # field-device log knobs, see burger.fdlogs.DEFAULTS
 
@@ -88,9 +92,10 @@ def _source(path: Path, key: str, spec: dict, allowed: set[str], default_remote:
         raise BurgerError(
             f"{path}: unknown {key} field '{bad[0]}' (allowed: {', '.join(sorted(allowed))})"
         )
-    pr = "prs" if key == "apps" else "pr"
-    if pr in spec and "branch" in spec:
-        raise BurgerError(f"{path}: {key} takes '{pr}' or 'branch', not both")
+    prkeys = ["prs"] if key == "apps" else ["pr", "prs"]
+    if len(given := [k for k in (*prkeys, "branch") if k in spec]) > 1:
+        names = " or ".join(f"'{k}'" for k in (*prkeys, "branch"))
+        raise BurgerError(f"{path}: {key} takes {names}, not both ({', '.join(given)} given)")
     if "branch" not in spec:
         for k in ("remote", "contains"):
             if k in spec:
@@ -125,8 +130,12 @@ def load_switchboard(name: str, settings: Settings) -> Switchboard:
         if "pr" in bennu:
             if not _is_int(bennu["pr"]):
                 raise BurgerError(f"{path}: bennu.pr must be an integer, not {bennu['pr']!r}")
+        elif "prs" in bennu:
+            bennu["prs"] = _int_list(path, "bennu.prs", bennu["prs"])
+            if not bennu["prs"]:
+                raise BurgerError(f"{path}: bennu.prs must not be empty")
         elif "branch" not in bennu:
-            raise BurgerError(f"{path}: bennu needs 'pr' or 'branch'")
+            raise BurgerError(f"{path}: bennu needs 'pr', 'prs' or 'branch'")
     for key in ("items", "apps", "overrides"):
         if not isinstance(doc.get(key) or {}, dict):
             raise BurgerError(f"{path}: {key} must be a mapping, not {doc[key]!r}")
@@ -150,9 +159,21 @@ def load_switchboard(name: str, settings: Settings) -> Switchboard:
         linux_only=bool(doc.get("linux_only")),
         exp=f"ebwes-{name}",
         unset=unset,
+        services=_services(path, settings, doc.get("services")),
         apps_branch=branch,
         fdlogs=_fdlogs(path, doc.get("fdlogs")),
     )
+
+
+def _services(path: Path, settings: Settings, spec) -> list[str]:
+    if spec is None:
+        return []
+    if not (isinstance(spec, list) and all(isinstance(n, str) for n in spec)):
+        raise BurgerError(f"{path}: services must be a list of script names, not {spec!r}")
+    for n in spec:
+        if not re.fullmatch(r"[\w-]+", n) or not (settings.root / "scripts" / f"{n}.sh").is_file():
+            raise BurgerError(f"{path}: services: no script scripts/{n}.sh")
+    return spec
 
 
 def _fdlogs(path, spec) -> dict | None:

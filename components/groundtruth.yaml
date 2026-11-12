@@ -3,9 +3,9 @@ kind: scorch
 type: cc
 about: >
   pybennu's groundtruth_monitor against a real Elasticsearch (bennu PRs #84 UTC and rate limit,
-  #85 elasticsearch-py 8 client and entry point, #86 bounded queue and bulk retry). The cc command
+  #85 elasticsearch-py 8 client and entry point, #86 bounded queue and bulk retry, #87 SIGTERM, #89 bulk _id). The cc command
   runs on the provider VM as root. The Elasticsearch is a container on the phenix docker host
-  (scripts/groundtruth-es.sh start; the VMs reach it at 172.16.0.1:19200 over mgmt_tap's host
+  (started by the board's services line, scripts/groundtruth-es.sh; the VMs reach it at 172.16.0.1:19200 over mgmt_tap's host
   address). A TCP proxy in the script, 127.0.0.1:9200, is what the monitor connects to, so the
   script can cut Elasticsearch off and bring it back. The monitor runs with TZ=Etc/GMT-14
   (UTC+14), so local time and UTC differ. Checks: the console script starts the monitor and it
@@ -15,7 +15,9 @@ about: >
   other points; an alert passes after the window; the provider's own stream lands; with
   Elasticsearch cut off the monitor's memory stops growing under a BURGER_GT_POINTS (300000)
   point flood; the points published as the outage began arrive after it ends (a retry), and a
-  fresh point lands after recovery. The monitor and the script run with LD_LIBRARY_PATH=/usr/local/lib
+  fresh point lands after recovery; a bulk of 1500 points whose second chunk is cut off by the proxy
+  and retried must leave exactly 1500 documents (bennu #89, a deterministic _id); at the end
+  SIGTERM must exit 0 with no traceback (bennu #87). The monitor and the script run with LD_LIBRARY_PATH=/usr/local/lib
   (bennu's draft libzmq; the board builds a draft pyzmq for it). Stock bennu fails the first check and runs none of the rest;
   with #85 alone (the gt-es8 board) the monitor runs and fails the UTC, rate-limit,
   memory and retry checks. Bounded: the flood is capped at about 5 minutes.
@@ -40,7 +42,7 @@ config:
             RATE = int("${BURGER_GT_RATE:-10000}")
             MAXG = int("${BURGER_GT_MAX_GROWTH_MB:-200}")
             R = str(int(time.time()))[-6:]
-            res = {"error": None, "expected": 11, "checks": [], "data": {"run": R, "endpoint": EP},
+            res = {"error": None, "expected": 13, "checks": [], "data": {"run": R, "endpoint": EP},
                    "client": None, "pybennu": None}
             mon = None
             open(LOG, "w").close()  # the recv below needs a file even when the monitor never starts
@@ -76,6 +78,7 @@ config:
             class Proxy:
                 def __init__(self):
                     self.srv, self.conns, self.held, self.hold = None, [], [], False
+                    self.cut = None  # {"seen": bulk requests, "cuts": requests dropped} while armed
 
                 def up(self):
                     s = socket.socket()
@@ -104,11 +107,24 @@ config:
                         threading.Thread(target=self.pipe, args=(c, u), daemon=True).start()
                         threading.Thread(target=self.pipe, args=(u, c), daemon=True).start()
 
+                def drop_bulk(self, d):
+                    # While armed let the first _bulk request through, then drop the next ones (more
+                    # than the client's transport retries): the batch dies after its first chunk.
+                    if self.cut is None or not d.startswith(b"POST /_bulk"):
+                        return False
+                    self.cut["seen"] += 1
+                    if self.cut["seen"] > 1 and self.cut["cuts"] < 6:
+                        self.cut["cuts"] += 1
+                        return True
+                    return False
+
                 def pipe(self, a, b):
                     try:
                         while True:
                             d = a.recv(65536)
                             if not d:
+                                break
+                            if self.drop_bulk(d):
                                 break
                             b.sendall(d)
                     except OSError:
@@ -261,6 +277,28 @@ config:
                 res["data"]["first_docs"] = first
                 check("a batch that failed during an outage is retried", first == 10, "%d of 10 points arrived within 60 s of recovery" % first)
 
+                # 5b. a bulk of several chunks dies after its first chunk: the retry must not index it twice
+                NB = 1500
+                proxy.cut = {"seen": 0, "cuts": 0}
+                for i in range(0, NB, 100):
+                    pub.publish("".join("gt%s-dup%d.v:%d.0," % (R, i + j, j) for j in range(100)))
+                dup = 0
+                end = time.time() + 60
+                while time.time() < end:
+                    time.sleep(3)
+                    try:
+                        dup = count("gt%s-dup" % R)
+                    except Exception:
+                        continue
+                    if dup >= NB and proxy.cut["cuts"] >= 1:
+                        break
+                time.sleep(3)
+                dup = count("gt%s-dup" % R)
+                res["data"]["dup"] = {"published": NB, "docs": dup, "bulk_requests": proxy.cut["seen"], "dropped": proxy.cut["cuts"]}
+                check("no duplicate documents after a bulk failed part way", dup == NB and proxy.cut["cuts"] >= 1,
+                      "%d documents for %d distinct points (%d bulk requests seen, %d dropped)" % (dup, NB, proxy.cut["seen"], proxy.cut["cuts"]))
+                proxy.cut = None
+
                 # 6. Elasticsearch unreachable (connects, never answers): memory must stay bounded
                 rss = [("start", round(rss_mb(mon.pid), 1))]
                 proxy.hang()
@@ -295,6 +333,18 @@ config:
                 res["data"]["flood_docs"] = count("gt%s-flood" % R)
                 check("documents resume after Elasticsearch returns", n >= 1, "%d fresh point(s) landed; %d of %d flood points landed" % (n, res["data"]["flood_docs"], POINTS))
                 res["data"]["retry_log_lines"] = open(LOG).read().count("will retry")
+
+                # 8. SIGTERM stops the monitor cleanly: exit status 0, no traceback
+                mark = len(open(LOG).read())
+                mon.send_signal(signal.SIGTERM)
+                try:
+                    rc = mon.wait(15)
+                except subprocess.TimeoutExpired:
+                    rc = None
+                after = open(LOG).read()[mark:]
+                res["data"]["sigterm"] = {"returncode": rc, "log": after[-600:]}
+                check("SIGTERM exits cleanly", rc == 0 and "Traceback" not in after,
+                      "exit status %s, %s" % (rc, "traceback in the log: " + after[-300:].replace("\n", " | ") if "Traceback" in after else "no traceback"))
             except SystemExit:
                 pass
             except Exception as e:
