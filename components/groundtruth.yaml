@@ -110,7 +110,11 @@ config:
                 def drop_bulk(self, d):
                     # While armed let the first _bulk request through, then drop the next ones (more
                     # than the client's transport retries): the batch dies after its first chunk.
-                    if self.cut is None or not d.startswith(b"POST /_bulk"):
+                    if self.cut is None:
+                        return False
+                    if len(self.cut["samples"]) < 4:
+                        self.cut["samples"].append(d[:50])
+                    if b"/_bulk" not in d[:100]:
                         return False
                     self.cut["seen"] += 1
                     if self.cut["seen"] > 1 and self.cut["cuts"] < 6:
@@ -279,7 +283,7 @@ config:
 
                 # 5b. a bulk of several chunks dies after its first chunk: the retry must not index it twice
                 NB = 1500
-                proxy.cut = {"seen": 0, "cuts": 0}
+                proxy.cut = {"seen": 0, "cuts": 0, "samples": []}
                 for i in range(0, NB, 100):
                     pub.publish("".join("gt%s-dup%d.v:%d.0," % (R, i + j, j) for j in range(100)))
                 dup = 0
@@ -294,7 +298,8 @@ config:
                         break
                 time.sleep(3)
                 dup = count("gt%s-dup" % R)
-                res["data"]["dup"] = {"published": NB, "docs": dup, "bulk_requests": proxy.cut["seen"], "dropped": proxy.cut["cuts"]}
+                res["data"]["dup"] = {"published": NB, "docs": dup, "bulk_requests": proxy.cut["seen"], "dropped": proxy.cut["cuts"],
+                                    "first_bytes": [x.decode("latin-1") for x in proxy.cut["samples"]]}
                 check("no duplicate documents after a bulk failed part way", dup == NB and proxy.cut["cuts"] >= 1,
                       "%d documents for %d distinct points (%d bulk requests seen, %d dropped)" % (dup, NB, proxy.cut["seen"], proxy.cut["cuts"]))
                 proxy.cut = None
