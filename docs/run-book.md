@@ -53,6 +53,11 @@ To debug, run the steps by hand:
 ./burger mm-check main        # minimega #1684's cc_filtered, while ebwes-main is up (--keep)
 ```
 
+One board runs one command at a time: `run` and every step command take a lock
+on the board (a file in the temp directory, so it holds on a VM mount too), and a
+second command on the same board fails at once with
+`switchboard '<name>' is busy: pid <n>: burger <args>`. Other boards are free.
+
 Every switchboard also gets a `health` run: a SCORCH `cc` component whose
 checks (the `vm` checks of the `bennu/*` items) run inside the VMs: that
 `bennu-field-deviced`, the Simulink provider and solver are running, that each

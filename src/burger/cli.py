@@ -1,11 +1,15 @@
 import argparse
+import fcntl
+import hashlib
 import json
 import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 import urllib.error
+from contextlib import contextmanager
 from pathlib import Path
 
 from loguru import logger
@@ -101,9 +105,40 @@ def _one(args, s, host, name: str) -> int:
     return 0
 
 
+@contextmanager
+def board_lock(s: Settings, name: str):
+    """One burger command at a time per switchboard: two would share work/<name>/ and the
+    experiment, and one's down deletes the other's. The lock file is in the local temp dir,
+    not work/, which can be a VM mount (virtiofs on the Lima rig) where flock may not hold."""
+    tag = hashlib.sha1(str(s.work).encode()).hexdigest()[:8]
+    path = Path(tempfile.gettempdir()) / f"burger-{tag}-{name}.lock"
+    f = path.open("a+")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        f.seek(0)
+        holder = f.read().strip() or "another burger command"
+        f.close()
+        raise BurgerError(
+            f"switchboard '{name}' is busy: {holder} (lock {path}); wait for it or stop it"
+        ) from None
+    f.seek(0)
+    f.truncate()
+    f.write(f"pid {os.getpid()}: burger {' '.join(sys.argv[1:])}")
+    f.flush()
+    try:
+        yield
+    finally:
+        f.close()  # closing the file releases the lock
+
+
 def _step(args, s, host) -> int:
     names = args.board if isinstance(args.board, list) else [args.board]
-    return max(_one(args, s, host, n) for n in names)
+    codes = []
+    for n in names:
+        with board_lock(s, n):
+            codes.append(_one(args, s, host, n))
+    return max(codes)
 
 
 def _verify(res: Resolved, s, host, timings=None, keep=None) -> int:
@@ -121,6 +156,11 @@ def _verify(res: Resolved, s, host, timings=None, keep=None) -> int:
 
 
 def _run(args, s, host) -> int:
+    with board_lock(s, args.board):
+        return _run_locked(args, s, host)
+
+
+def _run_locked(args, s, host) -> int:
     name = args.board
     timings: dict[str, float] = {}
     cmd = ""
