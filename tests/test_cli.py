@@ -3,6 +3,7 @@ import json
 import subprocess
 import urllib.error
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -470,26 +471,39 @@ def test_summary_says_minimega_stays_swapped_when_left_up():
 
 
 @pytest.mark.parametrize(
-    "mm,fails_at,hinted",
+    "label,fails_at,hinted",
     [
-        ({"pr": 1782, "sha": "c" * 40}, "up", True),
-        ({"pr": 1782, "sha": "c" * 40}, "scorch", True),
-        ({"pr": 1782, "sha": "c" * 40}, "build", False),  # install never swapped minimega
+        ("c" * 40, "install", True),  # install died after the swap (burger-1en)
+        (None, "install", False),  # install died before it
+        ("c" * 40, "up", True),
+        ("c" * 40, "scorch", True),
+        ("c" * 40, "build", False),  # not a step that swaps or uses minimega
         (None, "up", False),
     ],
 )
-def test_run_error_says_minimega_stays_swapped(tmp_path, monkeypatch, capsys, mm, fails_at, hinted):
+def test_run_error_says_minimega_stays_swapped(monkeypatch, capsys, label, fails_at, hinted):
+    """The hint follows the running container's label, not the manifest: only the container
+    knows whether install got as far as the swap."""
+
     def one(args, s, host, name):
-        if args.cmd == "sync":
-            (tmp_path / name).mkdir(exist_ok=True)
-            (tmp_path / name / "manifest.json").write_text(json.dumps({"minimega": mm}))
         if args.cmd == fails_at:
             raise config.BurgerError("boom")
 
+    labels = json.dumps({"burger.minimega": label} if label else {})
+    host = FakeHost(
+        {
+            "docker inspect -f {{json .Config.Labels}} minimega": subprocess.CompletedProcess(
+                [], 0, labels, ""
+            )
+        }
+    )
     monkeypatch.setattr(cli, "_one", one)
     monkeypatch.setattr(cli, "render", lambda *a: None)
+    no_topology = SimpleNamespace(route=SimpleNamespace(topology_dir=None))
+    monkeypatch.setattr(cli, "_board", lambda *a, **k: no_topology)
+    monkeypatch.setattr(cli.vcs, "load_manifest", lambda *a: {})
     monkeypatch.setattr(cli, "_salvage_fdlogs", lambda *a: None)
-    monkeypatch.setattr(cli, "Host", lambda *a: FakeHost())
+    monkeypatch.setattr(cli, "Host", lambda *a: host)
     assert main(["--quiet", "run", "baseline"]) == 1
     err = capsys.readouterr().err
     assert "burger: boom" in err

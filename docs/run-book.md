@@ -98,7 +98,8 @@ Only `sync` (and so `run`) takes the flag: it writes the choice to
   deleted. It skips that, with a warning, while another experiment still runs;
   the `down` of the last one restores. A failing run and `--keep` leave the
   experiment up, so minimega stays swapped until `./burger down <switchboard>`;
-  the summary says so (a warning does when `run` dies in `up` or `scorch`).
+  the summary says so. When `run` dies in `install`, `up` or `scorch`, a warning
+  says so instead, if the minimega container carries burger's label.
   `./burger install <a board without minimega>` and
   `./burger update --only containers` also put stock minimega and its
   `minimega.py` back.
