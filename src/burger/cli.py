@@ -139,7 +139,8 @@ def _run(args, s, host) -> int:
     except BaseException:
         if cmd in ("up", "scorch"):  # the experiment exists: keep the evidence before teardown
             _salvage_fdlogs(args, s, host, name)
-            _warn_swapped(s, name)
+        if cmd in ("install", "up", "scorch"):
+            _warn_swapped(s, host, name)
         raise
     out.rule(f"verify {name}", style="dim")
     code = _verify(_board(s, name, args.linux_only, route=args.route), s, host, timings, args.keep)
@@ -148,10 +149,11 @@ def _run(args, s, host) -> int:
     return code
 
 
-def _warn_swapped(s, name: str) -> None:
-    """A run that died in up or scorch prints no summary panel, so its minimega note goes here."""
+def _warn_swapped(s, host, name: str) -> None:
+    """A run that died after install swapped minimega prints no summary panel, so its
+    minimega note goes here. The container's label says whether the swap happened."""
     try:
-        swapped = vcs.load_manifest(s, name).get("minimega")
+        swapped = minimega.running_sha(host, s)
     except Exception:  # already failing; do not mask the real error
         return
     if swapped:
