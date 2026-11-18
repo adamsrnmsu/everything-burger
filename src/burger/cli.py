@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from burger import __version__, experiment, fdlogs, invalid, update, vcs, verify
+from burger import __version__, experiment, fdlogs, invalid, minimega, update, vcs, verify
 from burger.bennu import bennu_check
 from burger.checks import Row
 from burger.compose import compose
@@ -24,7 +24,13 @@ from burger.render import render
 from burger.routes import load_route
 from burger.shell import Host
 from burger.site import load_site, probe, redact
-from burger.switchboard import Resolved, all_switchboards, load_switchboard, resolve
+from burger.switchboard import (
+    Resolved,
+    all_switchboards,
+    load_switchboard,
+    resolve,
+    with_minimega_flag,
+)
 from burger.ui import banner, results_table, setup_logging, summary_panel
 from burger.verify import models_yaml
 
@@ -69,7 +75,8 @@ def _one(args, s, host, name: str) -> int:
     else:
         lo = getattr(args, "linux_only", False)
     res = _board(s, name, lo, route=getattr(args, "route", None))
-    if cmd == "sync":
+    if cmd == "sync":  # the later steps read the manifest, so only sync takes the flag
+        res.board = with_minimega_flag(res.board, getattr(args, "minimega", None))
         vcs.sync(res, s, host)
     elif cmd == "build":
         experiment.build(res, s, host)
@@ -84,6 +91,7 @@ def _one(args, s, host, name: str) -> int:
     elif cmd == "down":
         experiment.down(res, host)
         experiment.services(res, s, host, "stop")
+        minimega.restore(host, s)
     elif cmd == "bennu-check":
         if not vcs.load_manifest(s, name)["bennu"]:
             raise BurgerError(f"switchboard '{name}' has no bennu build")
@@ -107,7 +115,8 @@ def _verify(res: Resolved, s, host, timings=None, keep=None) -> int:
     bad = any(r.verdict == "FAIL" for r in rows)
     report = vcs.board_dir(s, res.board.name) / "report.md"
     left_up = None if keep is None else bad or keep  # a failing switchboard stays up to debug
-    out.print(summary_panel(res.board.name, rows, report, timings, left_up))
+    swapped = bool(vcs.load_manifest(s, res.board.name).get("minimega"))
+    out.print(summary_panel(res.board.name, rows, report, timings, left_up, swapped))
     return 1 if bad else 0
 
 
@@ -130,12 +139,23 @@ def _run(args, s, host) -> int:
     except BaseException:
         if cmd in ("up", "scorch"):  # the experiment exists: keep the evidence before teardown
             _salvage_fdlogs(args, s, host, name)
+            _warn_swapped(s, name)
         raise
     out.rule(f"verify {name}", style="dim")
     code = _verify(_board(s, name, args.linux_only, route=args.route), s, host, timings, args.keep)
     if code == 0 and not args.keep:  # a failing switchboard stays up to debug
         _one(argparse.Namespace(cmd="down"), s, host, name)
     return code
+
+
+def _warn_swapped(s, name: str) -> None:
+    """A run that died in up or scorch prints no summary panel, so its minimega note goes here."""
+    try:
+        swapped = vcs.load_manifest(s, name).get("minimega")
+    except Exception:  # already failing; do not mask the real error
+        return
+    if swapped:
+        logger.warning("minimega stays swapped until ./burger down {}", name)
 
 
 def _salvage_fdlogs(args, s, host, name: str) -> None:
@@ -436,6 +456,10 @@ def _parser() -> argparse.ArgumentParser:
         {"type": int, "default": 600, "help": "cap on seconds for the first health attempt"},
     )
     keep = ("--keep", {"action": "store_true", "help": "leave the experiment running"})
+    mm = (
+        "--minimega",
+        {"help": "pr:N or branch:NAME[@fork|@upstream]; overrides the board's minimega"},
+    )
     add(
         "run",
         "sync, build, install, up, scorch, verify, down",
@@ -444,10 +468,11 @@ def _parser() -> argparse.ArgumentParser:
         se,
         fc,
         keep,
+        mm,
         fn=_run,
         aliases=["round"],
     )
-    add("sync", "fetch PR heads and merge the switchboard's trees", lo)
+    add("sync", "fetch PR heads and merge the switchboard's trees", lo, mm)
     add("build", "build the apps tarball, mirror binary and bennu", lo)
     add("install", "install the apps into phēnix", lo)
     add("up", "render and start the experiment", lo, to)

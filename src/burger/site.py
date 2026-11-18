@@ -255,17 +255,21 @@ def _build_args(site: Site) -> list[str]:
     return args
 
 
-def build_dockerfile(host, context: Path, tag: str, platform: str | None = None) -> None:
+def build_dockerfile(
+    host, context: Path, tag: str, platform: str | None = None, dockerfile: str = "Dockerfile"
+) -> None:
     """docker build of a Dockerfile we do not own: as is without a site, else from a
-    patched copy of its context (site layer after each FROM, mirrors.urls applied)."""
+    patched copy of its context (site layer after each FROM, mirrors.urls applied).
+    `dockerfile` is its path inside the context."""
     site = host.site
     plat = ["--platform", platform] if platform else []
+    ctx = context if site is None else _context(host, re.sub(r"[/:]", "-", tag), context)
+    plat += [] if dockerfile == "Dockerfile" else ["-f", ctx / dockerfile]
     if site is None:
-        host.run(["docker", "build", *plat, "-t", tag, context])
+        host.run(["docker", "build", *plat, "-t", tag, ctx])
         return
-    ctx = _context(host, re.sub(r"[/:]", "-", tag), context)
-    dockerfile = ctx / "Dockerfile"
-    dockerfile.write_text(patch_dockerfile(dockerfile.read_text(), site))
+    path = ctx / dockerfile
+    path.write_text(patch_dockerfile(path.read_text(), site))
     host.run(["docker", "build", *plat, *_build_args(site), "-t", tag, ctx])
 
 

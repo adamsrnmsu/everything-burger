@@ -27,6 +27,14 @@ whose `Architecture` is not already `arm64` is relabelled (cpack hard-codes `amd
 merges; the manifest records `relabel_needed`) and every arm64 deb is repacked without its
 `Depends` line, which lists -dev packages the RTU images lack; the `fdleak` board runs one.
 
+A route's `minimega_layer` names a Dockerfile the range builds on top of upstream
+minimega. `waterway-arm64` points it at the range's `docker/minimega-arm64.Dockerfile`
+(AAVMF firmware, qemu for x86 and arm guests, the `kvm` wrapper). A board run on a
+minimega PR or branch on that route builds the PR as `burger/minimega-base:<sha12>`,
+then builds the layer from a copy of its directory with its first `FROM` pointed at
+that base, tagged `burger/minimega:<sha12>`. The tag is cached by the PR's sha only:
+after editing the layer, remove the tag with `docker rmi` to rebuild it.
+
 Topology asset paths `/phenix/topologies/<dir>` in the waterway and soap
 documents are rewritten to `<phenix dir>/topologies/burger-<dir>`, so your own
 copy is not touched.

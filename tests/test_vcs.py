@@ -324,3 +324,70 @@ def test_prs_flags_a_branch_board_whose_branch_moved(settings, monkeypatch):
     host = FakeHost({"git ls-remote": subprocess.CompletedProcess([], 0, "new\trefs/x\n", "")})
     row = next(r for r in prs(settings, host, "me") if r["number"] == 159)
     assert row["stale"] == ["integration"]
+
+
+def minimega_board(settings, spec, **kw):
+    b = load_switchboard("baseline", settings)
+    return resolve(dataclasses.replace(b, minimega=spec, **kw), settings)
+
+
+def test_sync_minimega_pr(settings, apps_origin, topologies, monkeypatch, tmp_path):
+    make_origin(apps_origin, {})
+    mm_origin = tmp_path / "mm-origin"
+    make_origin(mm_origin, {1782: "pr\n"})
+    git(mm_origin, "branch", "-m", "main", "master")  # minimega has no main branch
+    monkeypatch.delenv("BURGER_MINIMEGA_REPO", raising=False)
+    monkeypatch.setitem(config.REPOS, "minimega", str(mm_origin))
+    monkeypatch.setitem(config.REPOS, "topologies", str(topologies))
+    monkeypatch.setenv("BURGER_TOPOLOGIES_REPO", str(topologies))
+    man = sync(minimega_board(settings, {"pr": 1782}), settings, Host(settings))
+    sha = git(mm_origin, "rev-parse", "refs/pull/1782/head")
+    assert man["minimega"] == {"pr": 1782, "sha": sha, "from": "board"}
+    assert (settings.work / "baseline" / "minimega" / "a.txt").read_text() == "pr\n"
+    assert json.loads((settings.work / "baseline" / "manifest.json").read_text()) == man
+
+
+def test_sync_minimega_branch_fork(settings, monkeypatch):
+    monkeypatch.setenv("BURGER_FORK_OWNER", "me")
+    monkeypatch.delenv("BURGER_MINIMEGA_REPO", raising=False)
+    host = FakeHost({"git -C": subprocess.CompletedProcess([], 0, "f" * 40 + "\n", "")}, settings)
+    host.run = lambda cmd, **kw: FakeHost.run(host, [c for c in cmd if c != "--quiet"], **kw)
+    res = minimega_board(settings, {"branch": "foo", "remote": "fork"}, minimega_from="flag")
+    man = sync(res, settings, host)
+    repo, wt = settings.work / "repos" / "minimega", settings.work / "baseline" / "minimega"
+    ref = "refs/burger/branch/fork/foo"
+    assert [
+        "git", "-C", str(repo), "fetch", "https://github.com/me/minimega.git",
+        f"+refs/heads/foo:{ref}",
+    ] in host.calls  # fmt: skip
+    assert ["git", "-C", str(repo), "worktree", "add", "--detach", str(wt), ref] in host.calls
+    assert man["minimega"] == {"branch": "foo", "remote": "fork", "sha": "f" * 40, "from": "flag"}
+
+
+def test_sync_minimega_pr_fetches_only_the_pr_head(settings, monkeypatch):
+    monkeypatch.delenv("BURGER_MINIMEGA_REPO", raising=False)
+    host = FakeHost(settings=settings)
+    sync(minimega_board(settings, {"pr": 1782}), settings, host)
+    fetch = next(c for c in host.calls if "fetch" in c and config.REPOS["minimega"] in c)
+    assert fetch[-1] == "+refs/pull/1782/head:refs/burger/pr/1782"
+    assert not any("refs/heads/main" in a for a in fetch)
+
+
+def test_sync_without_minimega_records_none(settings):
+    host = FakeHost(settings=settings)
+    man = sync(minimega_board(settings, None), settings, host)
+    assert man["minimega"] is None
+    assert not any("repos/minimega" in " ".join(c) for c in host.calls)
+
+
+def test_prs_lists_minimega_prs_the_boards_carry(settings, monkeypatch):
+    b = dataclasses.replace(load_switchboard("baseline", settings), minimega={"pr": 1782})
+    monkeypatch.setattr("shutil.which", lambda _: None)
+    monkeypatch.setattr("burger.vcs.all_switchboards", lambda s: ["mm"])
+    monkeypatch.setattr("burger.vcs.load_switchboard", lambda n, s: b)
+    (settings.work / "mm").mkdir()
+    man = {"apps": {"prs": {}}, "minimega": {"pr": 1782, "sha": "old", "from": "board"}}
+    (settings.work / "mm" / "manifest.json").write_text(json.dumps(man))
+    host = FakeHost({"git ls-remote": subprocess.CompletedProcess([], 0, "new\trefs/x\n", "")})
+    (row,) = [r for r in prs(settings, host, "me") if r["repo"] == "sandia-minimega/minimega"]
+    assert (row["number"], row["boards"], row["stale"]) == (1782, ["mm"], ["mm"])

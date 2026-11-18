@@ -1,7 +1,10 @@
+import dataclasses
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from loguru import logger
 
 from burger.config import MAX_EXP_NAME, BurgerError, Settings
 from burger.items import Item, load_item, resolve_item
@@ -10,10 +13,12 @@ from burger.routes import Route, load_route
 
 _FIELDS = {
     "about", "route", "apps", "bennu", "items", "overrides", "runs", "linux_only", "fdlogs",
-    "services",
+    "services", "minimega",
 }  # fmt: skip
 _BENNU_KEYS = {"pr", "prs", "branch", "remote", "install", "pip", "pip_env"}
 _APPS_KEYS = {"prs", "branch", "remote", "contains"}
+_MINIMEGA_KEYS = {"pr", "branch", "remote"}
+_MINIMEGA_FLAG = "pr:N or branch:NAME[@fork|@upstream]"
 REMOTES = ("fork", "upstream")
 # A conservative subset of git ref names: no spaces, `:`, `..`, `//`, a leading `-` or `.`,
 # a trailing `/`, `.` or `.lock`.
@@ -38,6 +43,8 @@ class Switchboard:
     services: list[str] = field(default_factory=list)  # scripts/<name>.sh start|stop around up/down
     apps_branch: dict | None = None  # {"branch", "remote"}; then apps_prs is only the record
     fdlogs: dict | None = None  # field-device log knobs, see burger.fdlogs.DEFAULTS
+    minimega: dict | None = None  # {"pr"} or {"branch", "remote"}: run on this minimega
+    minimega_from: str = "board"  # "flag" when --minimega chose it
 
 
 @dataclass
@@ -92,7 +99,7 @@ def _source(path: Path, key: str, spec: dict, allowed: set[str], default_remote:
         raise BurgerError(
             f"{path}: unknown {key} field '{bad[0]}' (allowed: {', '.join(sorted(allowed))})"
         )
-    prkeys = ["prs"] if key == "apps" else ["pr", "prs"]
+    prkeys = {"apps": ["prs"], "minimega": ["pr"]}.get(key, ["pr", "prs"])
     if len(given := [k for k in (*prkeys, "branch") if k in spec]) > 1:
         names = " or ".join(f"'{k}'" for k in (*prkeys, "branch"))
         raise BurgerError(f"{path}: {key} takes {names}, not both ({', '.join(given)} given)")
@@ -136,6 +143,16 @@ def load_switchboard(name: str, settings: Settings) -> Switchboard:
                 raise BurgerError(f"{path}: bennu.prs must not be empty")
         elif "branch" not in bennu:
             raise BurgerError(f"{path}: bennu needs 'pr', 'prs' or 'branch'")
+    minimega = doc.get("minimega")
+    if minimega is not None:
+        if not isinstance(minimega, dict):
+            raise BurgerError(f"{path}: minimega must be a mapping, not {minimega!r}")
+        minimega = _source(path, "minimega", minimega, _MINIMEGA_KEYS, "fork")
+        if "pr" in minimega:
+            if not _is_int(minimega["pr"]):
+                raise BurgerError(f"{path}: minimega.pr must be an integer, not {minimega['pr']!r}")
+        elif "branch" not in minimega:
+            raise BurgerError(f"{path}: minimega needs 'pr' or 'branch'")
     for key in ("items", "apps", "overrides"):
         if not isinstance(doc.get(key) or {}, dict):
             raise BurgerError(f"{path}: {key} must be a mapping, not {doc[key]!r}")
@@ -162,7 +179,36 @@ def load_switchboard(name: str, settings: Settings) -> Switchboard:
         services=_services(path, settings, doc.get("services")),
         apps_branch=branch,
         fdlogs=_fdlogs(path, doc.get("fdlogs")),
+        minimega=minimega,
     )
+
+
+def parse_minimega_flag(text: str) -> dict:
+    """The --minimega value as a board's `minimega:` mapping."""
+    kind, _, rest = text.partition(":")
+    if kind == "pr" and rest.isascii() and rest.isdigit():
+        return {"pr": int(rest)}
+    branch, _, remote = rest.partition("@")
+    if kind == "branch" and _BRANCH.fullmatch(branch) and (remote or "fork") in REMOTES:
+        return {"branch": branch, "remote": remote or "fork"}
+    raise BurgerError(f"--minimega takes {_MINIMEGA_FLAG}, not {text!r}")
+
+
+def minimega_label(spec: dict) -> str:
+    return f"#{spec['pr']}" if "pr" in spec else f"{spec['remote']}/{spec['branch']}"
+
+
+def with_minimega_flag(board: Switchboard, flag: str | None) -> Switchboard:
+    """The board with --minimega applied; the flag wins over the board's own value."""
+    if flag is None:
+        return board
+    spec = parse_minimega_flag(flag)
+    if old := board.minimega:
+        was = f"pr:{old['pr']}" if "pr" in old else f"branch:{old['branch']} ({old['remote']})"
+        logger.warning(
+            "--minimega {} overrides switchboard '{}' minimega {}", flag, board.name, was
+        )
+    return dataclasses.replace(board, minimega=spec, minimega_from="flag")
 
 
 def _services(path: Path, settings: Settings, spec) -> list[str]:

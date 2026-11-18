@@ -61,6 +61,51 @@ switchboard built, and (with the Windows nodes) that something is polling
 Modbus on each RTU. In `harden` it also checks that the monitor VM sees
 mirrored Modbus traffic.
 
+## Run a board on a minimega PR or branch
+
+Any board can run on a proposed minimega, to see that phēnix still works with it:
+
+```bash
+./burger run main --minimega pr:1782              # a sandia-minimega/minimega PR
+./burger run main --minimega branch:my-fix        # a branch on your fork
+./burger run main --minimega branch:dev@upstream  # a branch on upstream
+```
+
+A board can also carry it as a `minimega:` key ([switchboards](switchboards.md)).
+When both are set the flag wins, and burger warns with the value it overrides:
+`--minimega pr:1782 overrides switchboard 'x' minimega branch:foo (fork)`.
+Only `sync` (and so `run`) takes the flag: it writes the choice to
+`manifest.json`, and the later steps read it there.
+
+- `build` runs `docker build -f docker/Dockerfile` on the checkout
+  (`work/<switchboard>/minimega`) and tags it `burger/minimega:<sha12>`; an
+  existing tag is reused. That Dockerfile runs minimega's own check, build and
+  test scripts, so a change that breaks minimega fails here, before any VM starts.
+- `install` recreates the compose `minimega` service on that image, through the
+  override file `work/minimega/compose.override.yml`, then installs the image's
+  `minimega.py` into phēnix. Recreating minimega kills every VM, so `install`
+  refuses while any experiment runs. With the same commit already running (the
+  re-test loop `sync`, `build`, `install`) it leaves the container alone.
+  minimega must run under docker compose, and `BURGER_MINIMEGA_CONTAINER` must
+  name its container.
+- `up` copies `miniccc` out of the swapped container, so the VMs get the matching
+  agent.
+- `verify` adds a `minimega container` row (the running container is the commit
+  in the manifest) and a `minimega.py in phēnix` row (phēnix imports that
+  container's file). On a board without its own minimega the first row fails when
+  the container is still a swapped one.
+- `down` puts stock minimega and its `minimega.py` back once the experiment is
+  deleted. It skips that, with a warning, while another experiment still runs;
+  the `down` of the last one restores. A failing run and `--keep` leave the
+  experiment up, so minimega stays swapped until `./burger down <switchboard>`;
+  the summary says so (a warning does when `run` dies in `up` or `scorch`).
+  `./burger install <a board without minimega>` and
+  `./burger update --only containers` also put stock minimega and its
+  `minimega.py` back.
+
+The build happens on the phēnix host from a pushed ref: push the branch to your
+fork first, or point `BURGER_MINIMEGA_REPO` at a clone on that host.
+
 ## Bring a stale host up to main
 
 ```bash

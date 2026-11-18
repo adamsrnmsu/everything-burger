@@ -424,3 +424,16 @@ def test_bennu_startup_removes_usr_local_copies_of_the_debs_libraries():
     lines = bennu.bennu_startup({"bennu": {"deb_version": "6.0.1"}}).splitlines()
     dpkg = next(i for i, ln in enumerate(lines) if ln.startswith("dpkg -i"))
     assert "dpkg -L bennu" in lines[dpkg + 1] and "/usr/local/lib/" in lines[dpkg + 1]
+
+
+def test_build_dockerfile_with_site_patches_the_named_dockerfile(tmp_path):
+    context = tmp_path / "minimega"
+    (context / "docker").mkdir(parents=True)
+    (context / "docker" / "Dockerfile").write_text("FROM ubuntu:22.04\nRUN true\n")
+    host = _host(tmp_path, full_site(tmp_path))
+    build_dockerfile(host, context, "burger/minimega:abc", dockerfile="docker/Dockerfile")
+    (cmd,) = host.calls
+    ctx = Path(cmd[-1])
+    assert ctx != context and cmd[cmd.index("-f") + 1] == str(ctx / "docker" / "Dockerfile")
+    assert "FROM reg.site/ubuntu:22.04" in (ctx / "docker" / "Dockerfile").read_text()
+    assert (context / "docker" / "Dockerfile").read_text() == "FROM ubuntu:22.04\nRUN true\n"
