@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import os
 import subprocess
 import urllib.error
 from pathlib import Path
@@ -11,7 +12,7 @@ from burger import cli, config, experiment
 from burger import verify as v
 from burger.cli import main
 from burger.compose import compose
-from burger.config import Settings
+from burger.config import BurgerError, Settings
 from burger.items import STAGES, load_item
 from burger.switchboard import load_switchboard
 from tests.fakes import FakeHost
@@ -508,3 +509,27 @@ def test_run_error_says_minimega_stays_swapped(monkeypatch, capsys, label, fails
     err = capsys.readouterr().err
     assert "burger: boom" in err
     assert ("minimega stays swapped until ./burger down baseline" in err) is hinted
+
+
+def test_a_busy_board_refuses_a_second_command(settings, monkeypatch, capsys):
+    """Two burger processes on one board share its work dir and experiment: the second fails
+    fast, naming the first (burger-8o5)."""
+    ran = []
+    monkeypatch.setattr(cli, "_one", lambda args, s, host, name: ran.append(args.cmd) or 0)
+    monkeypatch.setattr(cli, "Host", lambda *a: FakeHost(settings=settings))
+    monkeypatch.setattr(cli.Settings, "from_env", classmethod(lambda cls, root=None: settings))
+    with cli.board_lock(settings, "baseline"):
+        assert main(["--quiet", "down", "baseline"]) == 1
+        err = capsys.readouterr().err
+        assert "switchboard 'baseline' is busy" in err and f"pid {os.getpid()}" in err
+        assert ran == []
+        assert main(["--quiet", "down", "main"]) == 0  # another board is free
+    assert main(["--quiet", "down", "baseline"]) == 0  # released
+    assert ran == ["down", "down"]
+
+
+def test_the_board_lock_is_released_when_the_command_fails(settings):
+    with pytest.raises(BurgerError), cli.board_lock(settings, "baseline"):
+        raise BurgerError("boom")
+    with cli.board_lock(settings, "baseline"):
+        pass
