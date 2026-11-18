@@ -10,8 +10,12 @@
    a stage that left no status file crashed.
 
 5. Field-device logs (below): a `field-device logs` row, `ok`, `WARN` or `FAIL`.
+6. The minimega container runs what the switchboard asked for: its
+   `burger.minimega` label is the manifest's minimega commit, or absent for stock
+   (`minimega container`). On a board with its own minimega, phēnix imports that
+   container's `minimega.py`, compared by sha256 (`minimega.py in phēnix`).
 
-The report names the exact SHAs of `main`, each PR, bennu and the topologies
+The report names the exact SHAs of `main`, each PR, bennu, minimega and the topologies
 repo, from `work/<switchboard>/manifest.json`.
 
 ## Field-device logs

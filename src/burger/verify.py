@@ -3,13 +3,13 @@ from pathlib import Path
 
 import yaml
 
-from burger import fdlogs
+from burger import fdlogs, minimega
 from burger.checks import CheckContext, Row, run_checks
 from burger.checks.status import evaluate
 from burger.compose import compose, health_checks, item_locations
 from burger.experiment import collect, not_running
 from burger.invalid import app_rows, expected, judge
-from burger.switchboard import Resolved
+from burger.switchboard import Resolved, minimega_label
 from burger.vcs import bennu_label, board_dir, load_manifest
 
 NO_VALIDATOR = "command -v phenix-scorch-validate"
@@ -116,7 +116,7 @@ def verify(res: Resolved, settings, host) -> list[Row]:
     rd, man = board_dir(settings, name), load_manifest(settings, name)
     rd_out = rd / "out"
     rd_out.mkdir(parents=True, exist_ok=True)
-    rows = [_install_row(res, man, host)]
+    rows = [_install_row(res, man, host), *minimega.rows(host, settings, man, name)]
     bad = not_running(host, res.board.exp)
     rows.append(Row("-", "experiment + VMs running", "FAIL" if bad else "ok", bad, []))
     models_yaml(res, rd_out / "models.yaml", f"{settings.phenix_dir}/burger/{name}")
@@ -193,11 +193,14 @@ def render_report(
         if b
         else "stock bennu.qc2"
     )
+    m = man.get("minimega")
+    mm = f"{minimega_label(m)} `{m['sha'][:10]}` ({m['from']})" if m else "stock"
     lines = [
         f"# everything-burger switchboard `{res.board.name}` ({res.board.exp})",
         "",
         f"- apps: {apps}",
         f"- bennu: {bennu}",
+        f"- minimega: {mm}",
         f"- topologies: `{(man.get('topologies') or 'site route')[:10]}`"
         + (" (linux-only)" if state["linux_only"] else ""),
         f"- synced {man.get('synced')}",

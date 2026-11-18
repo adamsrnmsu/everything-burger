@@ -50,6 +50,17 @@
   prints: the pass/fail comes from its exit code (0 only on `ACK`). The solver
   silently skips unknown tag names unless built with DEBUG.
 - Written against phēnix and minimega source; the first live run is its real test.
+- A minimega board (`minimega:` or `--minimega`) builds only pushed refs: a PR, or
+  a branch on the fork or upstream. A local checkout that is not pushed cannot
+  be used, unless `BURGER_MINIMEGA_REPO` points at a clone on the phēnix host
+  that has the ref. The build runs in a git worktree, whose `.git` is a file, so
+  `minimega -e version` in the built image may show no commit; `verify` reads the
+  commit from the container's `burger.minimega` label instead. phēnix itself is
+  not rebuilt: its Go binary does not import the minimega repo.
+- `./burger update --only containers` on a host whose minimega a board swapped
+  recreates the stock minimega container and then copies its `minimega.py` into
+  phēnix, as `./burger down <switchboard>` does. If compose does not recreate
+  the container (a locally built service), both stay swapped until `down`.
 - `--linux-only` drops SCADA, OPC, HMI and historian, so nothing polls the RTUs
   and the Modbus and mirror checks are skipped.
 - `--linux-only` in `harden` still adds the monitor VM and mirror app, but

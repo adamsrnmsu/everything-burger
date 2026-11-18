@@ -9,6 +9,7 @@ from pathlib import Path
 
 from loguru import logger
 
+from burger import minimega
 from burger.bennu import bennu_startup, build_bennu
 from burger.checks.status import collect_status, evaluate
 from burger.compose import compose
@@ -22,7 +23,10 @@ from burger.vcs import board_dir, load_manifest
 
 
 def _built_key(man: dict) -> dict:
-    return {"apps": man["apps"]["head"], "bennu": (man.get("bennu") or {}).get("sha")}
+    key = {"apps": man["apps"]["head"], "bennu": (man.get("bennu") or {}).get("sha")}
+    if mm := man.get("minimega"):  # only then, so boards built before this stay built
+        key["minimega"] = mm["sha"]
+    return key
 
 
 def _require_built(res: Resolved, settings: Settings, man: dict) -> Path:
@@ -97,6 +101,8 @@ def build(res: Resolved, settings: Settings, host) -> None:
             host, rd / "bennu", out, man, install, spec.get("pip", []), res.route.arm64,
             spec.get("pip_env", {}),
         )  # fmt: skip
+    if mm := man.get("minimega"):
+        minimega.build_image(host, rd / "minimega", mm["sha"], res.route.minimega_layer)
     (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
     (out / "built.json").write_text(json.dumps(_built_key(man)))
     logger.info("switchboard '{}' built into {}", name, out)
@@ -106,6 +112,9 @@ def install(res: Resolved, settings: Settings, host) -> None:
     name = res.board.name
     man = load_manifest(settings, name)
     out = _require_built(res, settings, man)
+    mm = (man.get("minimega") or {}).get("sha")
+    if not mm:  # first: put stock back if a killed run left its minimega swapped in
+        minimega.ensure(host, settings, None)
     stage = f"/tmp/burger/{name}"
     host.ctr("rm", "-rf", stage)
     host.put(out / "apps-python.tar", f"{stage}/apps-python.tar")
@@ -126,6 +135,8 @@ def install(res: Resolved, settings: Settings, host) -> None:
     logger.info(
         "installed apps {} (switchboard '{}') into {}", man["apps"]["head"][:10], name, where
     )
+    if mm:
+        minimega.ensure(host, settings, mm)
 
 
 def services(res: Resolved, settings: Settings, host, action: str) -> None:
@@ -140,6 +151,9 @@ def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
     rd, man = board_dir(settings, name), load_manifest(settings, name)
     stage_dir = f"{settings.phenix_dir}/burger/{name}"
     out = _require_built(res, settings, man)
+    # `burger down` put stock minimega back; a board with its own must not start on stock.
+    # Before miniccc is copied out below, so the VMs get the swapped container's miniccc.
+    minimega.ensure(host, settings, (man.get("minimega") or {}).get("sha"))
     if man.get("bennu"):
         (out / "00-burger-bennu.sh").write_text(bennu_startup(man))
     if res.requires.debs_packages:

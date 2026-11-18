@@ -10,6 +10,8 @@ from burger.experiment import down, fix_routers, install, scorch, services, vm_u
 from tests.conftest import MAN, res
 from tests.fakes import FakeHost
 
+NOT_FOUND = subprocess.CompletedProcess([], 1, "", "")
+
 
 def sent(host):
     """The minimega commands, without the docker exec prefix and namespace."""
@@ -309,3 +311,28 @@ def test_build_iperf_builds_once_and_caches(settings):
     assert "esnet/iperf/archive/refs/tags/3.22.tar.gz" in runs[0][-1]
     assert (out / "iperf3-3.22").read_text() == "ELF"
     assert (settings.work / "cache" / "iperf3-3.22").stat().st_mode & 0o111
+
+
+def test_build_marks_minimega_sha(settings, monkeypatch):
+    rd = settings.work / "baseline"
+    rd.mkdir(parents=True)
+    man = {**MAN, "bennu": None, "minimega": {"pr": 1782, "sha": "c" * 40, "from": "flag"}}
+    (rd / "manifest.json").write_text(json.dumps(man))
+    monkeypatch.setattr(experiment, "build_iperf", lambda *a: None)
+    host = FakeHost({"docker image inspect burger/minimega": NOT_FOUND}, settings)
+    experiment.build(res(settings), settings, host)
+    built = [c for c in host.calls if c[:2] == ["docker", "build"] and "-f" in c]
+    assert built == [
+        ["docker", "build", "-f", str(rd / "minimega" / "docker" / "Dockerfile"),
+         "-t", "burger/minimega:cccccccccccc", str(rd / "minimega")]
+    ]  # fmt: skip
+    assert json.loads((rd / "out" / "built.json").read_text())["minimega"] == "c" * 40
+    man["minimega"]["sha"] = "d" * 40  # a new sync moved minimega: the build is stale
+    (rd / "manifest.json").write_text(json.dumps(man))
+    with pytest.raises(BurgerError, match="burger build baseline"):
+        install(res(settings), settings, host)
+
+
+def test_built_key_without_minimega_is_unchanged():
+    # boards built before minimega support keep their built.json
+    assert experiment._built_key(MAN) == {"apps": MAN["apps"]["head"], "bennu": MAN["bennu"]["sha"]}

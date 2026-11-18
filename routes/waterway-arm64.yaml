@@ -24,3 +24,6 @@ image_map:
   ubuntu.qc2: ubuntu-arm64.qc2
   bennu.qc2: bennu-arm64.qc2
   caldera.qc2: caldera-arm64.qc2
+# The rig's minimega is upstream plus this layer (AAVMF firmware, qemu for x86 and arm
+# guests, the kvm wrapper); a board on a minimega PR gets the same layer on its build.
+minimega_layer: ${BURGER_ARM64_RANGE:-/Users/ryanadams/git/phenix-waterway-range}/docker/minimega-arm64.Dockerfile

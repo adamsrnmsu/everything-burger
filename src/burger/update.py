@@ -11,12 +11,13 @@ import sys
 import time
 import urllib.error
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from loguru import logger
 from rich.table import Table
 from rich.text import Text
 
-from burger import experiment, vcs
+from burger import experiment, minimega, vcs  # minimega imports this: use it at call time
 from burger.bennu import build_bennu
 from burger.config import REPOS, BurgerError, Settings
 from burger.site import redact
@@ -117,15 +118,17 @@ def update_burger(ctx: Ctx, remaining: list[str]) -> None:
         os.execv(root / "burger", argv)
 
 
-def running_experiments(host) -> list[str]:
+def running_experiments(host, hint: str = "") -> list[str]:
+    """Names of the running experiments. `hint` ends the error when they cannot be listed:
+    what else the caller's command offers (update's --force; install, up and down have none)."""
     try:
         data = host.api("/experiments")
     except (OSError, urllib.error.URLError) as e:
-        raise BurgerError(
-            f"cannot list phēnix experiments ({e}); fix BURGER_API or pass --force"
-        ) from None
+        raise BurgerError(f"cannot list phēnix experiments ({e}); fix BURGER_API{hint}") from None
     if data is None:  # Host.api turns HTTP 400/404/500 into None
-        raise BurgerError("phēnix answered the experiments request with an error; pass --force")
+        raise BurgerError(
+            f"phēnix answered the experiments request with an error; check the phēnix API{hint}"
+        )
     exps = data.get("experiments") if isinstance(data, dict) else data
     return [e["name"] for e in exps or [] if e.get("running")]
 
@@ -133,7 +136,7 @@ def running_experiments(host) -> list[str]:
 def guard_experiments(ctx: Ctx, what: str) -> None:
     if ctx.force:  # also when the API is unreachable, which is how a stale host looks
         return
-    running = running_experiments(ctx.host)
+    running = running_experiments(ctx.host, " or pass --force")
     if running:
         raise BurgerError(
             f"experiments running: {', '.join(running)}; stop them before updating {what} "
@@ -153,19 +156,35 @@ def wait_phenix(host, timeout: int, clock=time) -> None:
         clock.sleep(5)
 
 
-def compose_labels(host, name: str) -> dict | None:
-    """The compose project facts of a container, None when compose does not manage it."""
+OVERRIDE = "minimega/compose.override.yml"
+
+
+def burger_override(s: Settings) -> Path:
+    """The compose file burger adds to run its own minimega image (burger.minimega)."""
+    return s.work / OVERRIDE
+
+
+def container_labels(host, name: str) -> dict:
     res = host.run(
         ["docker", "inspect", "-f", "{{json .Config.Labels}}", name], check=False, capture=True
     )
-    labels = json.loads(res.stdout.strip() or "null") if res.returncode == 0 else None
-    wd = (labels or {}).get("com.docker.compose.project.working_dir")
-    files = (labels or {}).get("com.docker.compose.project.config_files")
-    svc = (labels or {}).get("com.docker.compose.service")
+    return (json.loads(res.stdout.strip() or "null") if res.returncode == 0 else None) or {}
+
+
+def compose_labels(host, name: str) -> dict | None:
+    """The compose project facts of a container, None when compose does not manage it.
+    The files are the project's own: burger's minimega override is left out, so a
+    command built from them puts the stock service back."""
+    labels = container_labels(host, name)
+    wd = labels.get("com.docker.compose.project.working_dir")
+    files = labels.get("com.docker.compose.project.config_files")
+    svc = labels.get("com.docker.compose.service")
     if not (wd and files and svc):
         return None
     project = labels.get("com.docker.compose.project")
-    return {"dir": wd, "files": files.split(","), "service": svc, "project": project}
+    # by name, not by this checkout's path: another checkout or BURGER_WORK may have swapped
+    own = [f for f in files.split(",") if not f.endswith(f"/{OVERRIDE}")]
+    return {"dir": wd, "files": own, "service": svc, "project": project}
 
 
 def _compose(c: dict) -> list[str]:
@@ -225,11 +244,20 @@ def update_containers(ctx: Ctx, timeout: int = 180) -> None:
     if not names:
         ctx.report("containers", "-", "-", "no containers configured; nothing to do")
         return
+    swapped = minimega.running_sha(ctx.host, ctx.s)  # burger's minimega, before compose
+
+    def stock_py():
+        if minimega.running_sha(ctx.host, ctx.s) is None:  # else it was not recreated
+            minimega._install_py(ctx.host, ctx.s)
+            ctx.say("minimega.py in phēnix: back on the stock minimega container's copy")
+
     touched = [update_container(ctx, n) for n in names]
     if any(touched) and not ctx.dry:
         wait_phenix(ctx.host, timeout)
         version = ctx.host.phenix("version", check=False, capture=True).stdout.strip()
         ctx.say(f"phenix version: {version.splitlines()[0] if version else '?'}")
+    if swapped:  # the stock container is back, so phēnix must not keep the swapped minimega.py
+        ctx.do("copy the stock minimega container's minimega.py into phēnix", stock_py)
 
 
 def main_board(s: Settings, name: str = "main", bennu: dict | None = None) -> Resolved:

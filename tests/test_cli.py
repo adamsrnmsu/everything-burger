@@ -432,3 +432,65 @@ def test_summary_panel_counts_steps_and_no_yellow_without_warnings():
     assert "1 ok" in text and "1 FAIL" in text and "WARN" not in text
     assert "sync 0:12 · up 2:10   total 2:22" in text
     assert "experiment left up" in text
+
+
+def test_sync_minimega_flag_reaches_the_board(monkeypatch):
+    seen = []
+    monkeypatch.setattr(cli.vcs, "sync", lambda res, s, host: seen.append(res.board))
+    monkeypatch.setattr(cli, "Host", lambda *_a: FakeHost())
+    assert main(["--quiet", "sync", "baseline", "--minimega", "pr:1782"]) == 0
+    assert main(["--quiet", "sync", "baseline"]) == 0
+    assert [(b.minimega, b.minimega_from) for b in seen] == [
+        ({"pr": 1782}, "flag"),
+        (None, "board"),
+    ]
+    args = cli._parser().parse_args(["run", "baseline", "--minimega", "branch:x@upstream"])
+    assert args.minimega == "branch:x@upstream"
+
+
+def test_bad_minimega_flag_is_one_line(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "Host", lambda *_a: FakeHost())
+    assert main(["--quiet", "sync", "baseline", "--minimega", "tag:v1"]) == 1
+    assert "pr:N or branch:NAME" in capsys.readouterr().err
+
+
+def test_summary_says_minimega_stays_swapped_when_left_up():
+    from rich.console import Console
+
+    from burger.ui import summary_panel
+
+    def text(**kw):
+        c = Console(width=200, record=True)
+        c.print(summary_panel("x", [], "r.md", **kw))
+        return c.export_text()
+
+    assert "minimega stays swapped until ./burger down x" in text(left_up=True, swapped=True)
+    assert "minimega" not in text(left_up=True)
+    assert "minimega" not in text(left_up=False, swapped=True)
+
+
+@pytest.mark.parametrize(
+    "mm,fails_at,hinted",
+    [
+        ({"pr": 1782, "sha": "c" * 40}, "up", True),
+        ({"pr": 1782, "sha": "c" * 40}, "scorch", True),
+        ({"pr": 1782, "sha": "c" * 40}, "build", False),  # install never swapped minimega
+        (None, "up", False),
+    ],
+)
+def test_run_error_says_minimega_stays_swapped(tmp_path, monkeypatch, capsys, mm, fails_at, hinted):
+    def one(args, s, host, name):
+        if args.cmd == "sync":
+            (tmp_path / name).mkdir(exist_ok=True)
+            (tmp_path / name / "manifest.json").write_text(json.dumps({"minimega": mm}))
+        if args.cmd == fails_at:
+            raise config.BurgerError("boom")
+
+    monkeypatch.setattr(cli, "_one", one)
+    monkeypatch.setattr(cli, "render", lambda *a: None)
+    monkeypatch.setattr(cli, "_salvage_fdlogs", lambda *a: None)
+    monkeypatch.setattr(cli, "Host", lambda *a: FakeHost())
+    assert main(["--quiet", "run", "baseline"]) == 1
+    err = capsys.readouterr().err
+    assert "burger: boom" in err
+    assert ("minimega stays swapped until ./burger down baseline" in err) is hinted

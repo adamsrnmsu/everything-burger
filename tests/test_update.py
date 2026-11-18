@@ -231,7 +231,7 @@ def test_force_skips_the_guard_even_when_the_api_is_down(settings, lines, monkey
     h = compose_host(settings)
     h.responses[INSPECT + "minimega"] = cp("null")
     h.api = down
-    with pytest.raises(BurgerError, match="cannot list"):
+    with pytest.raises(BurgerError, match=r"cannot list.*pass --force"):
         run_update(settings, h, lines, ["containers"])
     run_update(settings, h, lines, ["containers"], force=True)
     assert any(c[:2] == ["docker", "compose"] and "up" in c for c in h.calls)
@@ -240,7 +240,9 @@ def test_force_skips_the_guard_even_when_the_api_is_down(settings, lines, monkey
 def test_api_error_status_is_not_read_as_no_experiments(settings, lines):
     h = compose_host(settings)
     h.api_responses["/experiments"] = None
-    with pytest.raises(BurgerError, match="answered the experiments request with an error"):
+    with pytest.raises(
+        BurgerError, match=r"answered the experiments request with an error.*pass --force"
+    ):
         run_update(settings, h, lines, ["containers"])
     assert not any("compose" in c for call in h.calls for c in call[:2])
 
@@ -485,3 +487,9 @@ def test_bennu_never_deletes_a_leftover_image(settings, lines, images, monkeypat
     with pytest.raises(BurgerError, match=r"bennu\.tar exists"):
         run_update(settings, h, lines, ["bennu"])
     assert not any("rm" in c for c in h.calls)
+
+
+def test_compose_labels_drop_burgers_override(settings):
+    labels = LABELS.replace("/srv/phenix/b.yml", str(update.burger_override(settings)))
+    c = update.compose_labels(compose_host(settings, labels), "phenix")
+    assert c["files"] == ["/srv/phenix/a.yml"]

@@ -6,9 +6,9 @@
 | `BURGER_API` | `http://localhost:3000/api/v1` | phēnix REST API |
 | `BURGER_TOKEN` | unset | JWT, when phēnix auth is on |
 | `BURGER_WORK` | `work/` in the checkout | clones, worktrees, builds, results |
-| `BURGER_APPS_REPO`, `BURGER_BENNU_REPO`, `BURGER_TOPOLOGIES_REPO` | `work/repos/*` | use an existing clone; burger only adds `refs/burger/*` and worktrees |
+| `BURGER_APPS_REPO`, `BURGER_BENNU_REPO`, `BURGER_TOPOLOGIES_REPO`, `BURGER_MINIMEGA_REPO` | `work/repos/*` | use an existing clone; burger only adds `refs/burger/*` and worktrees |
 | `BURGER_TOPOLOGIES` | unset | topologies clone for `check` and the tests, so they need no `sync` |
-| `BURGER_MINIMEGA_CONTAINER` | `minimega` | container burger copies `miniccc` from and sends router cc commands through; empty disables both |
+| `BURGER_MINIMEGA_CONTAINER` | `minimega` | container burger copies `miniccc` from and sends router cc commands through; empty disables both. A board with its own minimega swaps this container's image and needs it set |
 | `BURGER_FORK_OWNER` | the `gh` user | owner of the fork that `remote: fork` branches come from. Set it for a public fork and `gh` is not needed |
 | `BURGER_PHENIX_DIR` | `/phenix` | phēnix's base directory (images, configs, SCORCH output) |
 | `BURGER_IMAGES_DIR` | `$BURGER_PHENIX_DIR/burger/images` | `burger update --only bennu`: the sceptre-phenix-images checkout. It must be one directory that the host and the phēnix container both see at the same path, because the images Makefile hands paths to `docker exec` |

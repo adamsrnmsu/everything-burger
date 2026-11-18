@@ -204,3 +204,85 @@ def test_mitm_capture_proves_interception_on_linux_poller_route(settings, tmp_pa
 def test_mitm_capture_pcap_still_skipped_on_windows_route(settings, tmp_path):
     rows = _mitm_capture_rows(settings, tmp_path, "mitm", [])
     assert [r.verdict for r in rows] == ["ok", "skipped"]  # unchanged: the pcap check needs Windows
+
+
+# --- minimega rows ---
+
+MM_SHA = "e" * 40
+MM_LABELS = "docker inspect -f {{json .Config.Labels}} minimega"
+MM_FILE = "docker exec minimega sha256sum /opt/minimega/lib/minimega.py"
+MM_IN_PHENIX = "docker exec phenix python3 -c import hashlib, minimega"
+
+
+def _mm_rows(settings, monkeypatch, want, have, hashes=("abc", "abc"), mm_ctr="minimega"):
+    """verify's minimega rows: the manifest wants `want`, the container is labelled `have`."""
+    if not mm_ctr:
+        settings = dataclasses.replace(settings, mm_ctr="")
+    res, host = setup(settings, monkeypatch)
+    man = {**MAN, "synced": "now"}
+    if want:
+        man["minimega"] = {"pr": 1782, "sha": want, "from": "flag"}
+    (board_dir(settings, "bennu") / "manifest.json").write_text(json.dumps(man))
+    done = lambda out: subprocess.CompletedProcess([], 0, out, "")  # noqa: E731
+    host.responses[MM_LABELS] = done(json.dumps({"burger.minimega": have} if have else {}))
+    host.responses[MM_FILE] = done(f"{hashes[0]}  /opt/minimega/lib/minimega.py\n")
+    host.responses[MM_IN_PHENIX] = done(f"{hashes[1]}\n")
+    rows = v.verify(res, settings, host)
+    assert rows[1].check == "minimega container"  # right after the install row
+    return [r for r in rows if r.check.startswith("minimega")]
+
+
+def test_minimega_rows_ok(settings, monkeypatch):
+    rows = _mm_rows(settings, monkeypatch, MM_SHA, MM_SHA)
+    assert [(r.check, r.verdict, r.reason) for r in rows] == [
+        ("minimega container", "ok", ""),
+        ("minimega.py in phēnix", "ok", ""),
+    ]
+
+
+def test_stock_board_has_only_the_container_row(settings, monkeypatch):
+    # nothing says a stock phēnix image and a stock minimega image carry the same minimega.py
+    rows = _mm_rows(settings, monkeypatch, None, None, hashes=("abc", "xyz"))
+    assert [(r.check, r.verdict) for r in rows] == [("minimega container", "ok")]
+
+
+def test_minimega_container_still_stock_fails(settings, monkeypatch):
+    row = _mm_rows(settings, monkeypatch, MM_SHA, None)[0]
+    assert row.verdict == "FAIL"
+    assert "stock" in row.reason and MM_SHA[:12] in row.reason
+    assert "burger install bennu" in row.reason
+
+
+def test_leftover_swap_fails_a_board_without_minimega(settings, monkeypatch):
+    (row,) = _mm_rows(settings, monkeypatch, None, MM_SHA)
+    assert row.verdict == "FAIL" and MM_SHA[:12] in row.reason and "stock" in row.reason
+
+
+def test_minimega_py_mismatch_fails(settings, monkeypatch):
+    row = _mm_rows(settings, monkeypatch, MM_SHA, MM_SHA, hashes=("abc", "xyz"))[1]
+    assert row.verdict == "FAIL" and "burger install bennu" in row.reason
+
+
+def test_minimega_py_unreadable_is_not_ok(settings, monkeypatch):
+    # two empty answers must not compare equal
+    row = _mm_rows(settings, monkeypatch, MM_SHA, MM_SHA, hashes=("", ""))[1]
+    assert row.verdict == "FAIL"
+
+
+def test_minimega_rows_skipped_without_the_container(settings, monkeypatch):
+    rows = _mm_rows(settings, monkeypatch, MM_SHA, None, mm_ctr="")
+    assert [(r.verdict, r.reason) for r in rows] == [
+        ("skipped", "BURGER_MINIMEGA_CONTAINER is empty")
+    ] * 2
+
+
+def test_report_names_the_minimega(settings, monkeypatch):
+    res, _ = setup(settings, monkeypatch)
+    man = MAN | {"synced": "t"}
+    assert "- minimega: stock" in v.render_report(res, man, {"linux_only": False}, [])
+    man["minimega"] = {"pr": 1782, "sha": "c" * 40, "from": "flag"}
+    text = v.render_report(res, man, {"linux_only": False}, [])
+    assert "- minimega: #1782 `cccccccccc` (flag)" in text
+    man["minimega"] = {"branch": "foo", "remote": "fork", "sha": "c" * 40, "from": "board"}
+    text = v.render_report(res, man, {"linux_only": False}, [])
+    assert "- minimega: fork/foo `cccccccccc` (board)" in text

@@ -16,6 +16,7 @@ _FIELDS = {
     "ics_iface",
     "image_map",
     "linux_poller",
+    "minimega_layer",
     *_LISTS,
 }
 
@@ -38,6 +39,8 @@ class Route:
     # The Modbus poller (OPC) is a Linux VM, so checks marked `windows: true` on its traffic
     # still run under --linux-only.
     linux_poller: bool = False
+    # A Dockerfile the range builds on top of upstream minimega; minimega boards get it too.
+    minimega_layer: str | None = None
 
     def skips_windows(self, linux_only: bool) -> bool:
         return linux_only and not self.linux_poller
@@ -62,6 +65,7 @@ def load_route(name: str, settings: Settings) -> Route:
         values={k: doc[k] for k in ("rtus", "provider", "ics_port", "ics_iface") if k in doc},
         image_map=doc.get("image_map") or {},
         linux_poller=bool(doc.get("linux_poller")),
+        minimega_layer=doc.get("minimega_layer"),
         unset=unset,
         **{k: doc.get(k) or [] for k in _LISTS},
     )

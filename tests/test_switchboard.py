@@ -3,7 +3,14 @@ import dataclasses
 import pytest
 
 from burger.config import BurgerError
-from burger.switchboard import all_switchboards, load_switchboard, resolve
+from burger.switchboard import (
+    all_switchboards,
+    load_switchboard,
+    minimega_label,
+    parse_minimega_flag,
+    resolve,
+    with_minimega_flag,
+)
 from tests.conftest import res
 
 
@@ -225,3 +232,73 @@ def test_gt_boards_merge_bennu_prs_and_start_elasticsearch(settings):
     assert load_switchboard("gt-es8", settings).bennu["prs"] == [85]
     for n in ("gt", "gt-84-86", "gt-es8", "gt-stock"):
         assert load_switchboard(n, settings).services == ["groundtruth-es"]
+
+
+def test_minimega_pr_and_branch_parse(settings, tmp_path):
+    s = write_board(settings, tmp_path, "minimega: {pr: 1782}\n")
+    assert load_switchboard("t", s).minimega == {"pr": 1782}
+    s = write_board(settings, tmp_path, "minimega: {branch: foo}\n")
+    assert load_switchboard("t", s).minimega == {"branch": "foo", "remote": "fork"}
+    assert load_switchboard("baseline", settings).minimega is None
+
+
+@pytest.mark.parametrize(
+    "body, msg",
+    [
+        ("minimega: {pr: x}\n", "minimega.pr must be an integer"),
+        ("minimega: {pr: 1, branch: a}\n", "not both"),
+        ("minimega: {prs: [1]}\n", "unknown minimega field 'prs'"),
+        ("minimega: {}\n", "minimega needs 'pr' or 'branch'"),
+        ("minimega: [1782]\n", "minimega must be a mapping"),
+        ("minimega: {branch: a, remote: origin}\n", "fork or upstream"),
+    ],
+)
+def test_minimega_errors(settings, tmp_path, body, msg):
+    with pytest.raises(BurgerError, match=msg):
+        load_switchboard("t", write_board(settings, tmp_path, body))
+
+
+@pytest.mark.parametrize(
+    "flag, spec",
+    [
+        ("pr:1782", {"pr": 1782}),
+        ("branch:foo", {"branch": "foo", "remote": "fork"}),
+        ("branch:foo@fork", {"branch": "foo", "remote": "fork"}),
+        ("branch:a/b@upstream", {"branch": "a/b", "remote": "upstream"}),
+    ],
+)
+def test_parse_minimega_flag(flag, spec):
+    assert parse_minimega_flag(flag) == spec
+
+
+@pytest.mark.parametrize(
+    "bad", ["1782", "pr:", "pr:x", "pr:-1", "branch:", "branch:a@nope", "branch:a b", "tag:v1"]
+)
+def test_parse_minimega_flag_rejects(bad):
+    with pytest.raises(BurgerError, match=r"pr:N or branch:NAME\[@fork\|@upstream\]"):
+        parse_minimega_flag(bad)
+
+
+def test_flag_overrides_board_with_warning(settings, tmp_path):
+    from loguru import logger
+
+    got = []
+    hid = logger.add(lambda m: got.append((m.record["level"].name, m.record["message"])), level=0)
+    try:
+        b = load_switchboard("t", write_board(settings, tmp_path, "minimega: {branch: foo}\n"))
+        assert with_minimega_flag(b, None) is b and b.minimega_from == "board"
+        new = with_minimega_flag(b, "pr:1782")
+        plain = with_minimega_flag(load_switchboard("baseline", settings), "pr:1782")
+    finally:
+        logger.remove(hid)
+    assert new.minimega == {"pr": 1782} and new.minimega_from == "flag"
+    assert b.minimega == {"branch": "foo", "remote": "fork"}  # the board itself is untouched
+    assert got == [
+        ("WARNING", "--minimega pr:1782 overrides switchboard 't' minimega branch:foo (fork)")
+    ]
+    assert plain.minimega == {"pr": 1782}  # no board value: nothing to warn about
+
+
+def test_minimega_label():
+    assert minimega_label({"pr": 1782}) == "#1782"
+    assert minimega_label({"branch": "foo", "remote": "fork"}) == "fork/foo"

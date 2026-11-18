@@ -64,9 +64,11 @@ def mmss(seconds: float) -> str:
     return f"{m}:{s:02d}"
 
 
-def summary_panel(name: str, rows: list[Row], report, timings=None, left_up=None) -> Panel:
+def summary_panel(
+    name: str, rows: list[Row], report, timings=None, left_up=None, swapped: bool = False
+) -> Panel:
     """The end of a run in one box: verdict counts, time per step, report, and
-    whether the experiment is still up."""
+    whether the experiment is still up (`swapped`: on the board's own minimega)."""
     counts = Text()
     for verdict, style in (("ok", "green"), ("FAIL", "red"), ("WARN", "yellow")):
         n = sum(r.verdict == verdict for r in rows)
@@ -79,6 +81,8 @@ def summary_panel(name: str, rows: list[Row], report, timings=None, left_up=None
     tail = f"report: {report}"
     if left_up is not None:
         tail += "   experiment left up" if left_up else "   experiment brought down"
+        if left_up and swapped:
+            tail += f"; minimega stays swapped until ./burger down {name}"
     lines.append(Text(tail))
     bad = any(r.verdict == "FAIL" for r in rows)
     return Panel(Text("\n").join(lines), title=name, title_align="left",
