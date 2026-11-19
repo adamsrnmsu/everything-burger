@@ -37,6 +37,16 @@ def test_route_block_replaces_lists_and_types(settings):
     assert len(wat.verify) == 3
 
 
+def test_modbus_polled_checks_dnp3_on_the_arm64_range(settings):
+    # waterway-arm64's OPC gateway polls the RTUs over DNP3 (20000); nothing connects to 502
+    item = load_item("bennu/modbus-polled", settings)
+    arm = resolve_item(item, load_route("waterway-arm64", settings), None)
+    est = "ss -Htn state established '( sport = :{} )' | grep -q ."
+    assert [c["vm"]["run"] for c in arm.verify] == [est.format(20000)]
+    wat = resolve_item(item, load_route("waterway", settings), None)
+    assert [c["vm"]["run"] for c in wat.verify] == [est.format(502)]
+
+
 def test_override_replaces_lists(settings):
     item = load_item("pcap", settings)
     vms = [{"hostname": "rtu-2", "interface": 1}]

@@ -3,8 +3,14 @@ kind: bennu
 type: modbus-polled
 about: >
   Something (SCADA or OPC) holds an established Modbus connection to each RTU.
-  Needs the Windows nodes, so it is skipped under --linux-only.
+  Needs the Windows nodes, so it is skipped under --linux-only. On waterway-arm64
+  the OPC gateway polls over DNP3 instead, so the check is port 20000 there.
 routes: [waterway, waterway-arm64, mitm, mitm-arm64]
 requires: {windows: true}
 verify:
   - port: {host: "{route.rtus}", port: 502, state: established}
+# phenix-waterway-range's arm64 range runs DNP3 (opc_gateway.json: protocol dnp3,
+# port 20000); its RTUs still listen on 502 but nothing connects there.
+waterway-arm64:
+  verify:
+    - port: {host: "{route.rtus}", port: 20000, state: established}
