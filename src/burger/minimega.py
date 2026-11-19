@@ -1,5 +1,6 @@
 """Run a board on a minimega PR or branch: build its image, swap the compose service."""
 
+import hashlib
 import shutil
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from burger.config import BurgerError, Settings
 from burger.site import _FROM, build_dockerfile
 
 LABEL = "burger.minimega"  # on the minimega container burger swapped in: the commit it runs
+IMAGE_LABEL = "burger.minimega.image"  # and the image tag, which also says whether it is layered
 LIB = "/opt/minimega/lib"  # minimega.py in the minimega image; the phēnix image installs it
 # Run where phēnix runs: the sha256 of the minimega.py its Python imports.
 PY_FILE = "import minimega; print(minimega.__file__)"
@@ -21,8 +23,21 @@ PY_HASH = (
 )
 
 
-def image_tag(sha: str) -> str:
-    return f"burger/minimega:{sha[:12]}"
+def image_tag(sha: str, layer_hash: str | None = None) -> str:
+    """burger/minimega:<sha12>, or <sha12>-<layer hash> for a build with the route's layer, so
+    the two never share a tag (burger-fr8)."""
+    return f"burger/minimega:{sha[:12]}" + (f"-{layer_hash}" if layer_hash else "")
+
+
+def _layer_hash(src: Path) -> str:
+    """8 hex digits over the files of the layer's directory that the build copies (no tmp/, .git):
+    editing the Dockerfile or a file it copies in gives a new tag, and so a rebuild."""
+    h = hashlib.sha256()
+    for p in sorted(src.parent.rglob("*")):
+        rel = p.relative_to(src.parent)
+        if p.is_file() and not {"tmp", ".git"} & set(rel.parts):
+            h.update(f"{rel}\0".encode() + p.read_bytes() + b"\0")
+    return h.hexdigest()[:8]
 
 
 def _built(host, tag: str) -> bool:
@@ -39,14 +54,13 @@ def build_image(host, wt: Path, sha: str, layer: str | None = None) -> str:
     `layer` is the route's minimega_layer: a Dockerfile the range puts on top of upstream
     minimega (the arm64 rig adds firmware and a kvm wrapper). It is built from a copy of
     its directory with its first FROM pointed at the PR build."""
-    tag = image_tag(sha)
-    # ponytail: cached by the PR sha only; after editing the layer, docker rmi the tag
-    if _built(host, tag):
-        logger.info("minimega image {} already built", tag)
-        return tag
     src = Path(layer) if layer else None
     if src and not src.is_file():
         raise BurgerError(f"the route's minimega_layer {src} is not a file")
+    tag = image_tag(sha, _layer_hash(src) if src else None)
+    if _built(host, tag):
+        logger.info("minimega image {} already built", tag)
+        return tag
     base = f"burger/minimega-base:{sha[:12]}" if src else tag
     if not (src and _built(host, base)):
         build_dockerfile(host, wt, base, dockerfile="docker/Dockerfile")
@@ -71,6 +85,15 @@ def running_sha(host, s: Settings) -> str | None:
     return update.container_labels(host, s.mm_ctr).get(LABEL)
 
 
+def running_image(host, s: Settings) -> str | None:
+    """The tag of burger's minimega in the running container, None on stock minimega.
+    A swap from before IMAGE_LABEL ran the plain build of its commit."""
+    if not s.mm_ctr:
+        return None
+    got = update.container_labels(host, s.mm_ctr)
+    return got.get(IMAGE_LABEL) or (image_tag(got[LABEL]) if got.get(LABEL) else None)
+
+
 def _install_py(host, s: Settings) -> None:
     """Copy the running minimega container's minimega.py over the one phēnix imports.
     A file copy, not pip: minimega's lib needs setuptools>=77 to build, the phēnix image
@@ -87,8 +110,10 @@ def _install_py(host, s: Settings) -> None:
     host.put(local, where)
 
 
-def _recreate(host, s: Settings, sha: str | None, timeout: int = 180) -> None:
-    """Recreate the compose minimega service: on burger's image for `sha`, or stock for None.
+def _recreate(
+    host, s: Settings, sha: str | None, image: str | None = None, timeout: int = 180
+) -> None:
+    """Recreate the compose minimega service: on burger's `image` of `sha`, or stock for None.
     This kills every VM, so the callers check that no experiment runs."""
     c = update.compose_labels(host, s.mm_ctr)
     if c is None:
@@ -98,7 +123,12 @@ def _recreate(host, s: Settings, sha: str | None, timeout: int = 180) -> None:
         )
     extra = []
     if sha:
-        service = {"image": image_tag(sha), "pull_policy": "never", "labels": {LABEL: sha}}
+        image = image or image_tag(sha)
+        service = {
+            "image": image,
+            "pull_policy": "never",
+            "labels": {LABEL: sha, IMAGE_LABEL: image},
+        }
         path = update.burger_override(s)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(yaml.safe_dump({"services": {c["service"]: service}}))
@@ -116,9 +146,11 @@ def _recreate(host, s: Settings, sha: str | None, timeout: int = 180) -> None:
     _install_py(host, s)
 
 
-def ensure(host, s: Settings, want: str | None) -> None:
-    """Make the running minimega the one the board wants: burger's build of commit `want`,
-    or stock for None (which also undoes a swap a killed run left behind)."""
+def ensure(host, s: Settings, want: str | None, image: str | None = None) -> None:
+    """Make the running minimega the one the board wants: burger's build `image` of commit
+    `want` (default its plain build), or stock for None (which also undoes a swap a killed run
+    left behind). The image, not only the commit, must match: a plain and a layered build of
+    one commit are different minimegas (burger-fr8)."""
     if not s.mm_ctr:
         if want:
             raise BurgerError(
@@ -126,8 +158,9 @@ def ensure(host, s: Settings, want: str | None) -> None:
                 "minimega container: set BURGER_MINIMEGA_CONTAINER to its name"
             )
         return
-    have = running_sha(host, s)
-    if have == want:
+    image = (image or image_tag(want)) if want else None
+    have = running_image(host, s)
+    if have == image:
         if want:  # no recreate; but a recreated phēnix container has the stock minimega.py
             _install_py(host, s)
         return
@@ -135,13 +168,15 @@ def ensure(host, s: Settings, want: str | None) -> None:
     if running:
         raise BurgerError(
             f"experiments running: {', '.join(running)}; changing minimega "
-            f"({(have or 'stock')[:12]} -> {(want or 'stock')[:12]}) would kill their VMs, "
+            f"({_short(have)} -> {_short(image)}) would kill their VMs, "
             "so bring them down first (burger down <board>)"
         )
-    _recreate(host, s, want)
-    logger.info(
-        "minimega container '{}' now runs {}", s.mm_ctr, image_tag(want) if want else "stock"
-    )
+    _recreate(host, s, want, image)
+    logger.info("minimega container '{}' now runs {}", s.mm_ctr, image or "stock")
+
+
+def _short(image: str | None) -> str:
+    return image.split(":", 1)[1] if image else "stock"
 
 
 def restore(host, s: Settings) -> None:
@@ -154,7 +189,7 @@ def restore(host, s: Settings) -> None:
         logger.warning(
             "minimega stays on {} while experiments run ({}); burger down the last of them "
             "restores stock",
-            image_tag(have),
+            running_image(host, s),
             ", ".join(running),
         )
         return
@@ -165,7 +200,8 @@ def restore(host, s: Settings) -> None:
 def rows(host, s: Settings, man: dict, board: str) -> list[Row]:
     """verify's proof of which minimega ran: the container's commit, and for a board with
     its own minimega, that phēnix imports that container's minimega.py."""
-    want = (man.get("minimega") or {}).get("sha")
+    mm = man.get("minimega") or {}
+    want = mm.get("sha")
     checks = ["minimega container", *(["minimega.py in phēnix"] if want else [])]
     if not s.mm_ctr:
         return [Row("-", c, "skipped", "BURGER_MINIMEGA_CONTAINER is empty", []) for c in checks]
@@ -174,6 +210,11 @@ def rows(host, s: Settings, man: dict, board: str) -> list[Row]:
     if have != want:
         reason = (
             f"the container runs {(have or 'stock')[:12]}, want {(want or 'stock')[:12]}; "
+            f"burger install {board}"
+        )
+    elif mm.get("image") and running_image(host, s) != mm["image"]:  # layered or not
+        reason = (
+            f"the container runs {_short(running_image(host, s))}, want {_short(mm['image'])}; "
             f"burger install {board}"
         )
     out = [Row("-", checks[0], "FAIL" if reason else "ok", reason, [])]

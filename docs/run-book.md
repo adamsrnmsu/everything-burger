@@ -83,8 +83,9 @@ Only `sync` (and so `run`) takes the flag: it writes the choice to
 `manifest.json`, and the later steps read it there.
 
 - `build` runs `docker build -f docker/Dockerfile` on the checkout
-  (`work/<switchboard>/minimega`) and tags it `burger/minimega:<sha12>`; an
-  existing tag is reused. That Dockerfile runs minimega's own check, build and
+  (`work/<switchboard>/minimega`) and tags it `burger/minimega:<sha12>`
+  (`<sha12>-<layer hash>` on a route with a `minimega_layer`); an existing tag is
+  reused. That Dockerfile runs minimega's own check, build and
   test scripts, so a change that breaks minimega fails here, before any VM starts.
 - `install` recreates the compose `minimega` service on that image, through the
   override file `work/minimega/compose.override.yml`, then installs the image's

@@ -214,17 +214,25 @@ MM_FILE = "docker exec minimega sha256sum /opt/minimega/lib/minimega.py"
 MM_IN_PHENIX = "docker exec phenix python3 -c import hashlib, minimega"
 
 
-def _mm_rows(settings, monkeypatch, want, have, hashes=("abc", "abc"), mm_ctr="minimega"):
-    """verify's minimega rows: the manifest wants `want`, the container is labelled `have`."""
+def _mm_rows(
+    settings, monkeypatch, want, have, hashes=("abc", "abc"), mm_ctr="minimega", images=(None, None)
+):
+    """verify's minimega rows: the manifest wants `want`, the container is labelled `have`;
+    `images` are the manifest's and the container's image tags, when set."""
     if not mm_ctr:
         settings = dataclasses.replace(settings, mm_ctr="")
     res, host = setup(settings, monkeypatch)
     man = {**MAN, "synced": "now"}
     if want:
         man["minimega"] = {"pr": 1782, "sha": want, "from": "flag"}
+        if images[0]:
+            man["minimega"]["image"] = images[0]
     (board_dir(settings, "bennu") / "manifest.json").write_text(json.dumps(man))
     done = lambda out: subprocess.CompletedProcess([], 0, out, "")  # noqa: E731
-    host.responses[MM_LABELS] = done(json.dumps({"burger.minimega": have} if have else {}))
+    got = {"burger.minimega": have} if have else {}
+    if images[1]:
+        got["burger.minimega.image"] = images[1]
+    host.responses[MM_LABELS] = done(json.dumps(got))
     host.responses[MM_FILE] = done(f"{hashes[0]}  /opt/minimega/lib/minimega.py\n")
     host.responses[MM_IN_PHENIX] = done(f"{hashes[1]}\n")
     rows = v.verify(res, settings, host)
@@ -256,6 +264,20 @@ def test_minimega_container_still_stock_fails(settings, monkeypatch):
 def test_leftover_swap_fails_a_board_without_minimega(settings, monkeypatch):
     (row,) = _mm_rows(settings, monkeypatch, None, MM_SHA)
     assert row.verdict == "FAIL" and MM_SHA[:12] in row.reason and "stock" in row.reason
+
+
+MM_PLAIN, MM_LAYERED = f"burger/minimega:{MM_SHA[:12]}", f"burger/minimega:{MM_SHA[:12]}-0123abcd"
+
+
+def test_the_plain_build_of_the_right_commit_fails_a_layered_board(settings, monkeypatch):
+    # burger-fr8: the commit matches, but the route's layer (arm64 kvm wrapper) is missing
+    row = _mm_rows(settings, monkeypatch, MM_SHA, MM_SHA, images=(MM_LAYERED, MM_PLAIN))[0]
+    assert row.verdict == "FAIL" and "0123abcd" in row.reason
+
+
+def test_the_layered_build_passes_a_layered_board(settings, monkeypatch):
+    row = _mm_rows(settings, monkeypatch, MM_SHA, MM_SHA, images=(MM_LAYERED, MM_LAYERED))[0]
+    assert row.verdict == "ok"
 
 
 def test_minimega_py_mismatch_fails(settings, monkeypatch):

@@ -32,8 +32,10 @@ minimega. `waterway-arm64` points it at the range's `docker/minimega-arm64.Docke
 (AAVMF firmware, qemu for x86 and arm guests, the `kvm` wrapper). A board run on a
 minimega PR or branch on that route builds the PR as `burger/minimega-base:<sha12>`,
 then builds the layer from a copy of its directory with its first `FROM` pointed at
-that base, tagged `burger/minimega:<sha12>`. The tag is cached by the PR's sha only:
-after editing the layer, remove the tag with `docker rmi` to rebuild it.
+that base, tagged `burger/minimega:<sha12>-<layer hash>`. The hash covers the files
+of the layer's directory that the build copies (not `tmp/`), so editing the Dockerfile or
+the `kvm` wrapper gives a new tag and a rebuild, and a plain `burger/minimega:<sha12>`
+built by a board on another route is never mistaken for the layered one.
 
 Topology asset paths `/phenix/topologies/<dir>` in the waterway and soap
 documents are rewritten to `<phenix dir>/topologies/burger-<dir>`, so your own

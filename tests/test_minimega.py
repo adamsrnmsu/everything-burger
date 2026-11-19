@@ -55,14 +55,43 @@ def test_build_image_puts_the_routes_layer_on_the_pr_build(settings, tmp_path):
         "# a comment\nFROM minimega:arm64\nCOPY kvm-wrapper.sh /usr/local/bin/kvm\n"
     )
     base = "burger/minimega-base:cccccccccccc"
-    assert minimega.build_image(host, wt, SHA, str(rng / "minimega-arm64.Dockerfile")) == TAG
+    tag = minimega.build_image(host, wt, SHA, str(rng / "minimega-arm64.Dockerfile"))
+    assert tag.startswith(TAG + "-") and tag != TAG
     ctx = settings.work / "minimega" / "layer"
     assert host.calls[-2] == [
         "docker", "build", "-f", str(wt / "docker" / "Dockerfile"), "-t", base, str(wt)
     ]  # fmt: skip
-    assert host.calls[-1] == ["docker", "build", "-t", TAG, str(ctx)]
+    assert host.calls[-1] == ["docker", "build", "-t", tag, str(ctx)]
     assert (ctx / "Dockerfile").read_text().splitlines()[1] == f"FROM {base}"
     assert (ctx / "kvm-wrapper.sh").is_file() and not (ctx / "tmp").exists()
+
+
+def layer(tmp_path, wrapper="#!/bin/sh\n"):
+    rng = tmp_path / "range" / "docker"
+    (rng / "tmp").mkdir(parents=True, exist_ok=True)
+    (rng / "kvm-wrapper.sh").write_text(wrapper)
+    dockerfile = rng / "minimega-arm64.Dockerfile"
+    dockerfile.write_text("FROM minimega:arm64\nCOPY kvm-wrapper.sh /k\n")
+    return str(rng / "minimega-arm64.Dockerfile")
+
+
+def test_a_plain_build_of_the_sha_does_not_stand_in_for_the_layered_one(settings, tmp_path):
+    # burger-fr8: a board without the route's layer built TAG; an arm64 board then reused it
+    host = FakeHost(settings=settings)  # every tag "exists"
+    tag = minimega.build_image(host, tmp_path / "minimega", SHA, layer(tmp_path))
+    assert tag != TAG
+    assert host.calls[0] == ["docker", "image", "inspect", tag]
+
+
+def test_editing_the_layer_or_its_files_changes_the_tag(settings, tmp_path):
+    host = FakeHost(settings=settings)
+    one = minimega.build_image(host, tmp_path / "minimega", SHA, layer(tmp_path))
+    two = minimega.build_image(host, tmp_path / "minimega", SHA, layer(tmp_path, "#!/bin/sh\nx\n"))
+    (tmp_path / "range" / "docker" / "tmp" / "state").write_text("bind-mount state")
+    three = minimega.build_image(
+        host, tmp_path / "minimega", SHA, layer(tmp_path, "#!/bin/sh\nx\n")
+    )
+    assert one != two == three  # tmp/ is not copied into the build, so it is not hashed
 
 
 def test_build_image_with_a_missing_layer_file(settings, tmp_path):
@@ -81,8 +110,9 @@ UP = "up -d --no-deps --force-recreate minimega"
 PY_AT = "/usr/local/lib/python3.12/dist-packages/minimega.py"
 
 
-def labels(settings, sha=None, work=None):
-    """The minimega container's labels: stock, or swapped by burger to `sha` (from `work`)."""
+def labels(settings, sha=None, work=None, image=None):
+    """The minimega container's labels: stock, or swapped by burger to `sha` (from `work`);
+    `image` is the tag the swap ran, absent on swaps from before burger-fr8."""
     files = "/srv/phenix/a.yml"
     if sha:
         files += f",{work or settings.work}/{update.OVERRIDE}"
@@ -92,6 +122,7 @@ def labels(settings, sha=None, work=None):
         "com.docker.compose.service": "minimega",
         "com.docker.compose.project": "stack",
         **({"burger.minimega": sha} if sha else {}),
+        **({minimega.IMAGE_LABEL: image} if image else {}),
     }
     return cp(json.dumps(got))
 
@@ -107,17 +138,19 @@ class MmHost(FakeHost):
         line = " ".join(str(c) for c in cmd)
         if line.startswith("docker compose") and " up " in line and not self.sticky:
             override = next((c for c in cmd if str(c).endswith(update.OVERRIDE)), None)
-            sha = yaml.safe_load(open(override))["services"]["minimega"]["labels"][
-                minimega.LABEL
-            ] if override else None  # fmt: skip
-            self.responses[INSPECT] = labels(self.s, sha)
+            got_labels = yaml.safe_load(open(override))["services"]["minimega"]["labels"] if (
+                override
+            ) else {}  # fmt: skip
+            self.responses[INSPECT] = labels(
+                self.s, got_labels.get(minimega.LABEL), image=got_labels.get(minimega.IMAGE_LABEL)
+            )
         return got
 
 
-def mm_host(settings, sha=None, running=(), work=None):
+def mm_host(settings, sha=None, running=(), work=None, image=None):
     host = MmHost(
-        {INSPECT: labels(settings, sha, work), f"docker exec phenix python3 -c {minimega.PY_FILE}":
-         cp(PY_AT + "\n")},
+        {INSPECT: labels(settings, sha, work, image),
+         f"docker exec phenix python3 -c {minimega.PY_FILE}": cp(PY_AT + "\n")},
         settings,
     )  # fmt: skip
     host.api_responses["/experiments"] = {
@@ -137,7 +170,11 @@ def test_swap_recreates_minimega_with_the_override(settings):
     assert override == settings.work / "minimega" / "compose.override.yml"
     assert yaml.safe_load(override.read_text()) == {
         "services": {
-            "minimega": {"image": TAG, "pull_policy": "never", "labels": {"burger.minimega": SHA}}
+            "minimega": {
+                "image": TAG,
+                "pull_policy": "never",
+                "labels": {"burger.minimega": SHA, minimega.IMAGE_LABEL: TAG},
+            }
         }
     }
     calls = joined(host)
@@ -163,6 +200,23 @@ def test_same_sha_is_a_no_op_even_while_up(settings):
     assert not any("compose" in c for c in joined(host))
     # a recreated phēnix container has the stock minimega.py again: put ours back
     assert any(f"phenix:{PY_AT}" in c for c in joined(host))
+
+
+def test_a_plain_build_running_is_swapped_for_the_layered_build_of_the_same_sha(settings):
+    # burger-fr8: same commit, but the board wants its route's layer on top
+    layered = TAG + "-0123abcd"
+    host = mm_host(settings, SHA)  # a swap from before burger-fr8: no image label, plain TAG
+    minimega.ensure(host, settings, SHA, layered)
+    override = yaml.safe_load(update.burger_override(settings).read_text())
+    assert override["services"]["minimega"]["image"] == layered
+    assert minimega.running_image(host, settings) == layered
+
+
+def test_the_same_image_is_a_no_op(settings):
+    layered = TAG + "-0123abcd"
+    host = mm_host(settings, SHA, running=["ebwes-x"], image=layered)
+    minimega.ensure(host, settings, SHA, layered)
+    assert not any("compose" in c for c in joined(host))
 
 
 def test_stock_board_on_a_stock_host_does_nothing(settings):

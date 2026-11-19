@@ -326,7 +326,13 @@ def test_build_marks_minimega_sha(settings, monkeypatch):
         ["docker", "build", "-f", str(rd / "minimega" / "docker" / "Dockerfile"),
          "-t", "burger/minimega:cccccccccccc", str(rd / "minimega")]
     ]  # fmt: skip
-    assert json.loads((rd / "out" / "built.json").read_text())["minimega"] == "c" * 40
+    # the image, not only the commit: a plain and a layered build differ (burger-fr8)
+    assert json.loads((rd / "out" / "built.json").read_text())["minimega"] == (
+        "burger/minimega:cccccccccccc"
+    )
+    assert json.loads((rd / "manifest.json").read_text())["minimega"]["image"] == (
+        "burger/minimega:cccccccccccc"
+    )
     man["minimega"]["sha"] = "d" * 40  # a new sync moved minimega: the build is stale
     (rd / "manifest.json").write_text(json.dumps(man))
     with pytest.raises(BurgerError, match="burger build baseline"):

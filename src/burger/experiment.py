@@ -25,7 +25,7 @@ from burger.vcs import board_dir, load_manifest
 def _built_key(man: dict) -> dict:
     key = {"apps": man["apps"]["head"], "bennu": (man.get("bennu") or {}).get("sha")}
     if mm := man.get("minimega"):  # only then, so boards built before this stay built
-        key["minimega"] = mm["sha"]
+        key["minimega"] = mm.get("image") or mm["sha"]  # the image says layered or not
     return key
 
 
@@ -102,7 +102,9 @@ def build(res: Resolved, settings: Settings, host) -> None:
             spec.get("pip_env", {}),
         )  # fmt: skip
     if mm := man.get("minimega"):
-        minimega.build_image(host, rd / "minimega", mm["sha"], res.route.minimega_layer)
+        mm["image"] = minimega.build_image(
+            host, rd / "minimega", mm["sha"], res.route.minimega_layer
+        )
     (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
     (out / "built.json").write_text(json.dumps(_built_key(man)))
     logger.info("switchboard '{}' built into {}", name, out)
@@ -112,7 +114,7 @@ def install(res: Resolved, settings: Settings, host) -> None:
     name = res.board.name
     man = load_manifest(settings, name)
     out = _require_built(res, settings, man)
-    mm = (man.get("minimega") or {}).get("sha")
+    mm, mm_image = (man.get("minimega") or {}).get("sha"), (man.get("minimega") or {}).get("image")
     if not mm:  # first: put stock back if a killed run left its minimega swapped in
         minimega.ensure(host, settings, None)
     stage = f"/tmp/burger/{name}"
@@ -136,7 +138,7 @@ def install(res: Resolved, settings: Settings, host) -> None:
         "installed apps {} (switchboard '{}') into {}", man["apps"]["head"][:10], name, where
     )
     if mm:
-        minimega.ensure(host, settings, mm)
+        minimega.ensure(host, settings, mm, mm_image)
 
 
 def services(res: Resolved, settings: Settings, host, action: str) -> None:
@@ -153,7 +155,8 @@ def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
     out = _require_built(res, settings, man)
     # `burger down` put stock minimega back; a board with its own must not start on stock.
     # Before miniccc is copied out below, so the VMs get the swapped container's miniccc.
-    minimega.ensure(host, settings, (man.get("minimega") or {}).get("sha"))
+    mm = man.get("minimega") or {}
+    minimega.ensure(host, settings, mm.get("sha"), mm.get("image"))
     if man.get("bennu"):
         (out / "00-burger-bennu.sh").write_text(bennu_startup(man))
     if res.requires.debs_packages:
