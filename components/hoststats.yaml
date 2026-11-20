@@ -4,7 +4,7 @@ type: hoststats
 about: >
   Polls host statistics until stopped. Start never returns on its own, so it
   runs in the background and only the stop entry ends it.
-routes: [waterway, soap, site]
+routes: [waterway, soap, site, waterway-arm64]
 stages: [start, stop]
 background: true
 config: {pollPeriod: 5}

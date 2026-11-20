@@ -1,0 +1,23 @@
+# Release candidate on the arm64 rig: minimega master under phenix PR 576, the probes for the
+# risky merges since 3.3.0 (bindings #1686/#1789, capture #1699/#1800/#1707, variables 576), and
+# the minimega-facing items. cc-windows-* stay off: Windows images are not on this route.
+# Named mmrelease, not mm-release: phenix limits experiment names to 15 characters
+# (ebwes-mm-release is 16).
+about: minimega master with phenix PR 576 on the arm64 range
+route: waterway-arm64
+apps: {prs: []}
+minimega: {branch: master, remote: upstream}
+phenix: {pr: 576}
+probes: [mm-bindings, mm-capture, workflow-vars]
+items:
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+  mm: on
+  pcap: on
+  tcpdump: on
+  vmstats: on
+  hoststats: on
+  disruption: on
+  cc-empty-output: on
+  cc-output-parsing: on

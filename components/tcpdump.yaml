@@ -3,7 +3,7 @@ kind: scorch
 type: tcpdump
 about: >
   Runs tcpdump inside the second RTU on every interface, filtered to the ICS port.
-routes: [waterway, soap]
+routes: [waterway, soap, waterway-arm64]
 stages: [start, stop]
 config:
   vms: [{hostname: "{route.rtus[1]}", iface: any, filter: "tcp port {route.ics_port}"}]
