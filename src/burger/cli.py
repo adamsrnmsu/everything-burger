@@ -35,7 +35,7 @@ from burger.switchboard import (
     resolve,
     with_minimega_flag,
 )
-from burger.ui import banner, results_table, setup_logging, summary_panel
+from burger.ui import banner, results_table, run_view, setup_logging, summary_panel
 from burger.verify import models_yaml
 
 TEMPLATES = Path(__file__).parent / "templates"
@@ -161,29 +161,49 @@ def _run(args, s, host) -> int:
 
 
 def _run_locked(args, s, host) -> int:
+    steps = ("sync", "build", "install", "up", "scorch", "verify")
+    with run_view(out, steps) as view:
+        return _run_steps(args, s, host, view)
+
+
+def _run_steps(args, s, host, view) -> int:
     name = args.board
+    mark = view or argparse.Namespace(start=lambda n: None, finish=lambda n, ok=True: None)
     timings: dict[str, float] = {}
     cmd = ""
     try:
         for cmd in ("sync", "build", "install", "up", "scorch"):
-            out.rule(f"{cmd} {name}", style="dim")
+            if not view:
+                out.rule(f"{cmd} {name}", style="dim")
+            mark.start(cmd)
             began = time.monotonic()
             step = argparse.Namespace(**{**vars(args), "cmd": cmd, "run": None})
             _one(step, s, host, name)
             timings[cmd] = time.monotonic() - began
+            mark.finish(cmd)
             if cmd == "sync":  # render and compose offline first: hostname/run errors before docker
                 res, rd = _board(s, name, args.linux_only, route=args.route), vcs.board_dir(s, name)
                 topo = res.route.topology_dir
                 stage = f"{s.phenix_dir}/burger/{name}"
                 render(res, vcs.load_manifest(s, name), rd / topo if topo else None, stage, s)
     except BaseException:
+        if cmd:
+            mark.finish(cmd, False)
         if cmd in ("up", "scorch"):  # the experiment exists: keep the evidence before teardown
             _salvage_fdlogs(args, s, host, name)
         if cmd in ("install", "up", "scorch"):
             _warn_swapped(s, host, name)
         raise
-    out.rule(f"verify {name}", style="dim")
-    code = _verify(_board(s, name, args.linux_only, route=args.route), s, host, timings, args.keep)
+    if not view:
+        out.rule(f"verify {name}", style="dim")
+    mark.start("verify")
+    code = 1
+    try:
+        code = _verify(
+            _board(s, name, args.linux_only, route=args.route), s, host, timings, args.keep
+        )
+    finally:
+        mark.finish("verify", code == 0)
     if code == 0 and not args.keep:  # a failing switchboard stays up to debug
         _one(argparse.Namespace(cmd="down"), s, host, name)
     return code

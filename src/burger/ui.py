@@ -1,4 +1,7 @@
+import os
 import sys
+import time
+from collections import deque
 from contextlib import contextmanager
 from importlib.resources import files
 from pathlib import Path
@@ -6,6 +9,8 @@ from pathlib import Path
 import pyfiglet
 from loguru import logger
 from rich.console import Console
+from rich.layout import Layout
+from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -89,11 +94,75 @@ def summary_panel(
                  border_style="red" if bad else "green", expand=False)  # fmt: skip
 
 
+_MARK = {"pending": ("·", "dim"), "running": ("▶", "yellow"), "ok": ("✓", "green"),
+         "FAIL": ("✗", "red")}  # fmt: skip
+
+
+class RunView:
+    """Two panes for ./burger run: step progress on top, a log tail below."""
+
+    def __init__(self, steps, tail: int = 50, clock=time.monotonic):
+        self.steps = {n: {"state": "pending", "began": 0.0, "secs": 0.0} for n in steps}
+        self.lines: deque[str] = deque(maxlen=tail)
+        self.clock = clock
+
+    def start(self, name: str) -> None:
+        self.steps[name].update(state="running", began=self.clock())
+
+    def finish(self, name: str, ok: bool = True) -> None:
+        st = self.steps[name]
+        st.update(state="ok" if ok else "FAIL", secs=self.clock() - st["began"])
+
+    def log(self, msg: str) -> None:
+        self.lines.extend(msg.rstrip("\n").split("\n"))
+
+    def __rich_console__(self, console, options):
+        table = Table.grid(padding=(0, 2))
+        for name, st in self.steps.items():
+            icon, style = _MARK[st["state"]]
+            secs = self.clock() - st["began"] if st["state"] == "running" else st["secs"]
+            table.add_row(
+                Text(icon, style=style), name, mmss(secs) if st["state"] != "pending" else ""
+            )
+        room = max(1, console.height - len(self.steps) - 4)  # the pane crops from the bottom
+        log = Text("\n").join(Text.from_ansi(x) for x in list(self.lines)[-room:])
+        layout = Layout()
+        layout.split_column(
+            Layout(Panel(table, title="steps", title_align="left"), size=len(self.steps) + 2),
+            Layout(Panel(log, title="log", title_align="left")),
+        )
+        yield layout
+
+
+_view: RunView | None = None
+
+
+def interactive(console: Console) -> bool:
+    """A real terminal that wants fancy output: not piped, not dumb, not NO_COLOR, not CI."""
+    return (console.is_terminal and not console.is_dumb_terminal
+            and not os.environ.get("NO_COLOR") and not os.environ.get("CI"))  # fmt: skip
+
+
+@contextmanager
+def run_view(console: Console, steps):
+    """Yield a RunView, live on a terminal, or None (today's plain lines) elsewhere."""
+    global _view
+    if not interactive(console):
+        yield None
+        return
+    _view = RunView(steps)
+    try:
+        with Live(_view, console=console, refresh_per_second=4):
+            yield _view
+    finally:
+        _view = None
+
+
 def setup_logging(work_dir: Path | None, verbose: bool) -> None:
     logger.remove()
     # sys.stderr looked up per message, so a live spinner's redirect keeps log lines above it
     logger.add(
-        lambda m: sys.stderr.write(m),
+        lambda m: _view.log(m) if _view else sys.stderr.write(m),
         level="DEBUG" if verbose else "INFO",
         format=_console_format,
         colorize=sys.stderr.isatty(),
@@ -107,6 +176,9 @@ def spinner(fallback=logger.info):
     """Yield say(msg, *args) for a loop that would print a line per pass. On a
     terminal it is one live status line (the text also goes to the log file at
     debug); elsewhere each call goes to `fallback`."""
+    if _view:  # the two-pane view is the live display; the text lands in its log pane
+        yield lambda msg, *args: logger.info(msg, *args)
+        return
     if not sys.stderr.isatty():
         yield fallback
         return

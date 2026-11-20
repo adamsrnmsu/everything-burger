@@ -540,3 +540,26 @@ def test_the_board_lock_is_released_when_the_command_fails(settings):
         raise BurgerError("boom")
     with cli.board_lock(settings, "baseline"):
         pass
+
+
+def test_run_view_marks_verify_failed_when_it_raises(monkeypatch):
+    """A crash inside verify must not leave the step 'running' in the last frame."""
+    marks = []
+    view = SimpleNamespace(
+        start=lambda n: marks.append((n, "start")), finish=lambda n, ok=True: marks.append((n, ok))
+    )
+    no_topology = SimpleNamespace(route=SimpleNamespace(topology_dir=None))
+    monkeypatch.setattr(cli, "_one", lambda *a: None)
+    monkeypatch.setattr(cli, "render", lambda *a: None)
+    monkeypatch.setattr(cli, "_board", lambda *a, **k: no_topology)
+    monkeypatch.setattr(cli.vcs, "load_manifest", lambda *a: {})
+    monkeypatch.setattr(cli.vcs, "board_dir", lambda *a: None)
+
+    def boom(*a):
+        raise config.BurgerError("verify broke")
+
+    monkeypatch.setattr(cli, "_verify", boom)
+    args = SimpleNamespace(board="baseline", linux_only=False, route=None, keep=False)
+    with pytest.raises(config.BurgerError):
+        cli._run_steps(args, SimpleNamespace(phenix_dir="/phenix"), None, view)
+    assert marks[-2:] == [("verify", "start"), ("verify", False)]
