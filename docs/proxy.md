@@ -98,6 +98,16 @@ registry mirror, and probes each mirror, and one public URL, through the proxy w
 
 ## Notes
 
+- `${VAR}` in the site file is expanded as the whole file loads, `dockerfile_extra`
+  included, and an unset one is an error. For a variable the Dockerfile should
+  expand itself, write `$VAR` without braces.
+- `mirrors.registry` is a plain prefix. A Harbor proxy-cache project serves
+  Docker Hub's official images under `library/`, so set
+  `registry: harbor.site/<project>/library/`.
+- An `https://` `mirrors.apt` needs `ca_certs` (it sets apt's `CAInfo` and runs
+  `update-ca-certificates`); without it a bare Ubuntu image cannot verify the mirror.
+- `mirrors.apt` also replaces `ports.ubuntu.com/ubuntu-ports` (arm64) with the
+  same URL, so the mirror must serve that repository too.
 - Values from the site file are baked into the local `burger-site/...` and
   bennu build images (`docker history` shows them). Keep secrets out of it;
   burger redacts `user:pass@` in URLs in its own logs and errors.

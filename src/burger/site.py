@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import ssl
 import urllib.error
@@ -36,7 +37,11 @@ _PEM = "-----BEGIN CERTIFICATE-----"
 _USERINFO = re.compile(r"(\w+://)[^/@\s]+@")
 _FROM = re.compile(r"^(\s*FROM\s+)((?:--\S+\s+)*)(\S+)(.*)$", re.IGNORECASE)
 _STAGE = re.compile(r"\bAS\s+(\S+)", re.IGNORECASE)
-_UBUNTU = ("http://archive.ubuntu.com/ubuntu", "http://security.ubuntu.com/ubuntu")
+_UBUNTU = (
+    "http://archive.ubuntu.com/ubuntu",
+    "http://security.ubuntu.com/ubuntu",
+    "http://ports.ubuntu.com/ubuntu-ports",  # arm64
+)
 
 
 def redact(text: str) -> str:
@@ -58,7 +63,9 @@ class Site:
             return None
         path = work / "site" / "ca-bundle.pem"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("".join(p.read_text().rstrip("\n") + "\n" for p in self.ca_certs))
+        text = "".join(p.read_text().rstrip("\n") + "\n" for p in self.ca_certs)
+        if not path.exists() or path.read_text() != text:  # git and gh call this per command
+            path.write_text(text)
         path.chmod(0o644)  # COPY keeps the mode; apt (_apt) and -u uid builds must read it
         return path
 
@@ -92,7 +99,10 @@ class Site:
             lines.append(f"COPY burger-site.crt {CA_IN_IMAGE}")
         env = self.env(CA_IN_IMAGE)
         if env:
-            lines.append("ENV " + " ".join(f"{k}={json.dumps(v)}" for k, v in env.items()))
+            quoted = {
+                k: json.dumps(v).replace("$", "\\$") for k, v in env.items()
+            }  # no $ expansion
+            lines.append("ENV " + " ".join(f"{k}={v}" for k, v in quoted.items()))
         apt = []
         if self.ca_certs:
             apt.append(f'Acquire::https::CAInfo "{CA_IN_IMAGE}";')
@@ -100,14 +110,16 @@ class Site:
             if self.proxy.get(key):
                 apt.append(f'Acquire::{scheme}::Proxy "{self.proxy[key]}";')
         if apt:
-            conf = "\\n".join(apt)
-            lines.append(f"RUN printf '{conf}\\n' > /etc/apt/apt.conf.d/99burger-site")
+            conf = "\\n".join(apt).replace("%", "%%")  # printf's format: a URL's %40 is literal
+            fmt = shlex.quote(conf + "\\n")
+            lines.append(f"RUN printf {fmt} > /etc/apt/apt.conf.d/99burger-site")
         if self.ca_certs:
             lines.append(
                 "RUN command -v update-ca-certificates >/dev/null && update-ca-certificates || true"
             )
         if self.mirrors.get("apt"):
-            subs = " ".join(f"-e 's#{u}#{self.mirrors['apt']}#g'" for u in _UBUNTU)
+            new = re.sub(r"([&#\\])", r"\\\1", self.mirrors["apt"])  # sed replacement specials
+            subs = " ".join("-e " + shlex.quote(f"s#{u}#{new}#g") for u in _UBUNTU)
             lines.append(
                 f"RUN if [ -f /etc/apt/sources.list ]; then sed -i {subs} /etc/apt/sources.list; fi"
             )
@@ -201,9 +213,12 @@ def load_site(env: Mapping[str, str] | None = None, home: Path | None = None) ->
     for key in ("git", "urls"):
         if not isinstance(mirrors.get(key) or {}, dict):
             raise BurgerError(f"{path}: mirrors.{key} must map origin URLs to mirror URLs")
+    mirrors = {k: v if isinstance(v, dict) or v is None else str(v) for k, v in mirrors.items()}
     if mirrors.get("registry") and not str(mirrors["registry"]).endswith("/"):
         mirrors = {**mirrors, "registry": f"{mirrors['registry']}/"}  # a prefix: reg/x + /ubuntu
     cas = []
+    if not isinstance(doc.get("ca_certs") or [], list):
+        raise BurgerError(f"{path}: ca_certs must be a list of PEM file paths")
     for i, ca in enumerate(doc.get("ca_certs") or []):
         ca = Path(str(ca)).expanduser()
         if not ca.is_file():
@@ -273,8 +288,11 @@ def build_dockerfile(
     host.run(["docker", "build", *plat, *_build_args(site), "-t", tag, ctx])
 
 
-def probe(url: str, site: Site, bundle: Path | None, timeout: int = 15) -> str | None:
-    """GET url through the site proxy, trusting the site CA. None on any answer below 500."""
+def probe(
+    url: str, site: Site, bundle: Path | None, timeout: int = 15, strict: bool = False
+) -> str | None:
+    """GET url through the site proxy, trusting the site CA. None on any answer below 500,
+    or below 400 when strict (a URL that must exist)."""
     proxies = {k: v for k, v in site.proxy.items() if k in ("http", "https")}
     host = urllib.parse.urlsplit(url).hostname or ""
     if urllib.request.proxy_bypass_environment(host, {"no": site.proxy.get("no_proxy", "")}):
@@ -287,6 +305,6 @@ def probe(url: str, site: Site, bundle: Path | None, timeout: int = 15) -> str |
         with opener.open(url, timeout=timeout):
             return None
     except urllib.error.HTTPError as e:
-        return None if e.code < 500 else f"HTTP {e.code}"
+        return None if e.code < (400 if strict else 500) else f"HTTP {e.code}"
     except (OSError, ValueError) as e:
         return redact(str(getattr(e, "reason", e)))

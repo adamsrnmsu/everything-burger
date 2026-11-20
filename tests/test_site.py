@@ -437,3 +437,53 @@ def test_build_dockerfile_with_site_patches_the_named_dockerfile(tmp_path):
     assert ctx != context and cmd[cmd.index("-f") + 1] == str(ctx / "docker" / "Dockerfile")
     assert "FROM reg.site/ubuntu:22.04" in (ctx / "docker" / "Dockerfile").read_text()
     assert (context / "docker" / "Dockerfile").read_text() == "FROM ubuntu:22.04\nRUN true\n"
+
+
+def test_ca_certs_must_be_a_list(tmp_path):
+    with pytest.raises(BurgerError, match="ca_certs must be a list"):
+        load_site(env=write_site(tmp_path, f"ca_certs: {ca(tmp_path)}\n"), home=tmp_path)
+
+
+def test_layer_escapes_percent_dollar_and_sed_specials(tmp_path):
+    text = "proxy: {https: 'http://u%40x:pa$s@p:8080'}\nmirrors: {apt: 'http://m/a&b#c'}\n"
+    layer = load_site(env=write_site(tmp_path, text), home=tmp_path).layer()
+    assert "u%%40x" in layer and "pa$s" in layer  # printf format, single-quoted
+    assert 'HTTPS_PROXY="http://u%40x:pa\\$s@p:8080"' in layer
+    assert "'s#http://archive.ubuntu.com/ubuntu#http://m/a\\&b\\#c#g'" in layer
+    assert "http://ports.ubuntu.com/ubuntu-ports" in layer
+
+
+def test_scalar_mirrors_are_strings(tmp_path):
+    site = load_site(env=write_site(tmp_path, "mirrors: {registry: 5, go: 7}\n"), home=tmp_path)
+    assert site.mirrors == {"registry": "5/", "go": "7"}
+
+
+def test_bundle_not_rewritten_when_unchanged(tmp_path):
+    site = load_site(env=write_site(tmp_path, f"ca_certs: [{ca(tmp_path)}]\n"), home=tmp_path)
+    bundle = site.bundle(tmp_path / "work")
+    os.utime(bundle, (1, 1))
+    site.bundle(tmp_path / "work")
+    assert bundle.stat().st_mtime == 1
+
+
+def test_probe_strict_fails_404(tmp_path):
+    import http.server
+    import threading
+
+    from burger.site import probe
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(404)
+            self.end_headers()
+
+        def log_message(self, *_a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        site = load_site(env=write_site(tmp_path, "mirrors: {}\n"), home=tmp_path)
+        assert probe(f"http://127.0.0.1:{srv.server_port}/x", site, None, strict=True) == "HTTP 404"
+    finally:
+        srv.shutdown()

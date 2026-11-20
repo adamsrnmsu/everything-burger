@@ -267,8 +267,11 @@ def test_preflight_site_rows(monkeypatch, tmp_path, capsys):
     host = _preflight_host(monkeypatch, load_site())
     probes = {}
 
-    def fake_probe(url, site, bundle, timeout=15):
+    stricts = {}
+
+    def fake_probe(url, site, bundle, timeout=15, strict=False):
         probes[url] = bundle
+        stricts[url] = strict
         return "connection refused" if "apt.site" in url else None
 
     monkeypatch.setattr(cli, "probe", fake_probe)
@@ -282,6 +285,10 @@ def test_preflight_site_rows(monkeypatch, tmp_path, capsys):
     assert ["docker", "pull", "reg.site/ubuntu:22.04"] in host.calls
     assert any(c[0] == "git" and "ls-remote" in c for c in host.calls)
     assert "https://apt.site/ubuntu/dists/jammy/Release" in probes
+    # apt's Release file must exist (a 404 fails); mirror roots may 404 and still work
+    assert {u for u, strict in stricts.items() if strict} == {
+        "https://apt.site/ubuntu/dists/jammy/Release"
+    }
 
 
 def test_preflight_gosumdb_off_warns(monkeypatch, tmp_path, capsys):
@@ -370,7 +377,7 @@ def test_preflight_fails_a_bundle_that_cannot_verify_a_public_host(monkeypatch, 
     host = FakeHost(site=load_site())
     seen = []
 
-    def fake_probe(url, site, bundle, timeout=15):
+    def fake_probe(url, site, bundle, timeout=15, **_k):
         seen.append(url)
         if "pypi.org" in url:
             return "[SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate"

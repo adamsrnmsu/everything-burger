@@ -333,7 +333,7 @@ def _site_rows(host, rows, chk) -> None:
         ("go", m.get("go")),
     ):
         if url:
-            err = probe(url, site, bundle)
+            err = probe(url, site, bundle, strict=key == "apt")  # Release must exist
             chk(redact(f"{key} mirror {url}"), err is None, err or "")
     if m.get("git"):
         res = host.run(["git", "ls-remote", REPOS["apps"], "HEAD"], check=False, capture=True)
