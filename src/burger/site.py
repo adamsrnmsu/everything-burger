@@ -270,14 +270,30 @@ def _build_args(site: Site) -> list[str]:
     return args
 
 
+def retarget_first_from(text: str, image: str) -> str:
+    """The Dockerfile with its first FROM pointed at `image` (flags and stage name kept)."""
+    lines, done = [], False
+    for line in text.splitlines():
+        m = None if done else _FROM.match(line)
+        lines.append(f"{m[1]}{m[2]}{image}{m[4]}" if m else line)
+        done = done or bool(m)
+    return "\n".join(lines) + "\n"
+
+
 def build_dockerfile(
-    host, context: Path, tag: str, platform: str | None = None, dockerfile: str = "Dockerfile"
+    host,
+    context: Path,
+    tag: str,
+    platform: str | None = None,
+    dockerfile: str = "Dockerfile",
+    build_args: tuple[str, ...] = (),
 ) -> None:
     """docker build of a Dockerfile we do not own: as is without a site, else from a
     patched copy of its context (site layer after each FROM, mirrors.urls applied).
     `dockerfile` is its path inside the context."""
     site = host.site
     plat = ["--platform", platform] if platform else []
+    plat += [a for kv in build_args for a in ("--build-arg", kv)]
     ctx = context if site is None else _context(host, re.sub(r"[/:]", "-", tag), context)
     plat += [] if dockerfile == "Dockerfile" else ["-f", ctx / dockerfile]
     if site is None:

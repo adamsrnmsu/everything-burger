@@ -12,6 +12,7 @@ REPOS = {
     "bennu": "https://github.com/sandialabs/sceptre-bennu.git",
     "topologies": "https://github.com/sandialabs/sceptre-phenix-topologies.git",
     "minimega": "https://github.com/sandia-minimega/minimega.git",
+    "phenix": "https://github.com/sandialabs/sceptre-phenix.git",
 }
 # Components whose start polls until phēnix stops it.
 # ponytail: hand-kept list; add a type here when its PR says "background".

@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from loguru import logger
 
 from burger import cli, config, experiment
 from burger import verify as v
@@ -198,7 +199,9 @@ def test_run_site_route_reaches_report_and_down(tmp_path, monkeypatch, capsys):
     assert man["topologies"] is None
     report = (tmp_path / "rtds" / "report.md").read_text()
     assert "topologies: `site route`" in report and "**PASS**" in report
-    assert host.calls[-1][3:6] == ["phenix", "config", "delete"]  # down ran last
+    # down ran last: after its config delete only the restores' label checks
+    last = max(i for i, c in enumerate(host.calls) if c[3:6] == ["phenix", "config", "delete"])
+    assert all(c[:2] == ["docker", "inspect"] for c in host.calls[last + 1 :])
 
 
 def test_run_renders_before_build(tmp_path, monkeypatch, capsys):
@@ -457,6 +460,16 @@ def test_sync_minimega_flag_reaches_the_board(monkeypatch):
     assert args.minimega == "branch:x@upstream"
 
 
+def test_phenix_flag_reaches_sync_and_run(monkeypatch):
+    seen = []
+    monkeypatch.setattr(cli.vcs, "sync", lambda res, s, host: seen.append(res.board))
+    monkeypatch.setattr(cli, "Host", lambda *_a: FakeHost())
+    assert main(["--quiet", "sync", "baseline", "--phenix", "pr:576"]) == 0
+    assert (seen[0].phenix, seen[0].phenix_from) == ({"pr": 576}, "flag")
+    args = cli._parser().parse_args(["run", "baseline", "--phenix", "pr:576"])
+    assert args.phenix == "pr:576"
+
+
 def test_bad_minimega_flag_is_one_line(monkeypatch, capsys):
     monkeypatch.setattr(cli, "Host", lambda *_a: FakeHost())
     assert main(["--quiet", "sync", "baseline", "--minimega", "tag:v1"]) == 1
@@ -473,9 +486,11 @@ def test_summary_says_minimega_stays_swapped_when_left_up():
         c.print(summary_panel("x", [], "r.md", **kw))
         return c.export_text()
 
-    assert "minimega stays swapped until ./burger down x" in text(left_up=True, swapped=True)
+    assert "minimega stays swapped until ./burger down x" in text(left_up=True, swapped="minimega")
+    assert "phenix stays swapped" in text(left_up=True, swapped="phenix")
+    assert "minimega and phenix stay swapped" in text(left_up=True, swapped="minimega and phenix")
     assert "minimega" not in text(left_up=True)
-    assert "minimega" not in text(left_up=False, swapped=True)
+    assert "minimega" not in text(left_up=False, swapped="minimega")
 
 
 @pytest.mark.parametrize(
@@ -563,3 +578,33 @@ def test_run_view_marks_verify_failed_when_it_raises(monkeypatch):
     with pytest.raises(config.BurgerError):
         cli._run_steps(args, SimpleNamespace(phenix_dir="/phenix"), None, view)
     assert marks[-2:] == [("verify", "start"), ("verify", False)]
+
+
+@pytest.mark.parametrize(
+    "labels,named",
+    [
+        ({"burger.phenix": "c" * 40}, "phenix stays swapped until ./burger down b"),
+        (
+            {"burger.minimega": "c" * 40, "burger.phenix": "c" * 40},
+            "minimega and phenix stay swapped until ./burger down b",
+        ),
+    ],
+)
+def test_warn_swapped_names_a_swapped_phenix(settings, labels, named):
+    def inspect(ctr):  # each container carries only its own label
+        mine = {k: v for k, v in labels.items() if k == f"burger.{ctr}"}
+        return subprocess.CompletedProcess([], 0, json.dumps(mine), "")
+
+    host = FakeHost(
+        {
+            f"docker inspect -f {{{{json .Config.Labels}}}} {c}": inspect(c)
+            for c in ("minimega", "phenix")
+        }
+    )
+    seen = []
+    sink = logger.add(lambda m: seen.append(str(m)))
+    try:
+        cli._warn_swapped(settings, host, "b")
+    finally:
+        logger.remove(sink)
+    assert any(named in m for m in seen)

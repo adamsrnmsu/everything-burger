@@ -105,13 +105,44 @@ Only `sync` (and so `run`) takes the flag: it writes the choice to
   the `down` of the last one restores. A failing run and `--keep` leave the
   experiment up, so minimega stays swapped until `./burger down <switchboard>`;
   the summary says so. When `run` dies in `install`, `up` or `scorch`, a warning
-  says so instead, if the minimega container carries burger's label.
+  says so instead, if the minimega or phēnix container carries burger's label.
   `./burger install <a board without minimega>` and
   `./burger update --only containers` also put stock minimega and its
   `minimega.py` back.
 
 The build happens on the phēnix host from a pushed ref: push the branch to your
 fork first, or point `BURGER_MINIMEGA_REPO` at a clone on that host.
+
+## Run a board on a phenix PR or branch
+
+The same as a minimega PR, for sceptre-phenix:
+
+```bash
+./burger run arm64 --phenix pr:576               # a sandialabs/sceptre-phenix PR
+./burger run main --phenix branch:my-fix         # a branch on your fork
+./burger run main --phenix branch:dev@upstream   # a branch on upstream
+```
+
+A board can carry it as a `phenix:` key ([switchboards](switchboards.md)); the flag wins
+and burger warns with the value it overrides. `sync` and `run` take the flag.
+
+- `sync` fetches it into `work/<switchboard>/phenix`; the manifest records `phenix`.
+- `build` runs `docker build` on its `docker/Dockerfile` as `docker/Dockerfile.burger`
+  (the route's `phenix_sed` applied first, `PHENIX_COMMIT` set, the first `FROM`, the
+  minimega stage, pointed at the board's minimega image so the bindings come from it) and tags
+  it `burger/phenix:<sha12>-<minimega hash>`; an existing tag is reused.
+- `install` recreates the compose `phenix` service on that image through its own override file
+  `work/phenix/compose.override.yml` (minimega's is `work/minimega/compose.override.yml`; the
+  two never overwrite each other), labelled `burger.phenix` and `burger.phenix.image`. It does
+  this first: a recreated phēnix has neither burger's apps nor the board's `minimega.py`, so
+  `install` then installs the apps, then swaps minimega. A board without `phenix:` puts stock
+  back here, which also undoes a swap a killed run left. Like minimega it refuses while an
+  experiment runs. phēnix must run under docker compose and `BURGER_PHENIX_CONTAINER` must
+  name its container.
+- `up` ensures the same before minimega. If it had to recreate phēnix (a `down` since
+  `install`), the apps are gone: run `install` again.
+- `verify` adds a `phenix container` row (the running container is the manifest's image).
+- `down` puts stock phēnix back once no other experiment runs.
 
 ## Bring a stale host up to main
 

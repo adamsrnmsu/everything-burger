@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from burger import __version__, experiment, fdlogs, invalid, minimega, update, vcs, verify
+from burger import __version__, experiment, fdlogs, invalid, minimega, phenix, update, vcs, verify
 from burger.bennu import bennu_check
 from burger.checks import Row
 from burger.compose import compose
@@ -33,9 +33,9 @@ from burger.switchboard import (
     all_switchboards,
     load_switchboard,
     resolve,
-    with_minimega_flag,
+    with_flag,
 )
-from burger.ui import banner, results_table, run_view, setup_logging, summary_panel
+from burger.ui import banner, results_table, run_view, setup_logging, stays_swapped, summary_panel
 from burger.verify import models_yaml
 
 TEMPLATES = Path(__file__).parent / "templates"
@@ -80,7 +80,8 @@ def _one(args, s, host, name: str) -> int:
         lo = getattr(args, "linux_only", False)
     res = _board(s, name, lo, route=getattr(args, "route", None))
     if cmd == "sync":  # the later steps read the manifest, so only sync takes the flag
-        res.board = with_minimega_flag(res.board, getattr(args, "minimega", None))
+        for key in ("minimega", "phenix"):
+            res.board = with_flag(res.board, key, getattr(args, key, None))
         vcs.sync(res, s, host)
     elif cmd == "build":
         experiment.build(res, s, host)
@@ -96,6 +97,7 @@ def _one(args, s, host, name: str) -> int:
         experiment.down(res, host)
         experiment.services(res, s, host, "stop")
         minimega.restore(host, s)
+        phenix.restore(host, s)
     elif cmd == "bennu-check":
         if not vcs.load_manifest(s, name)["bennu"]:
             raise BurgerError(f"switchboard '{name}' has no bennu build")
@@ -150,7 +152,8 @@ def _verify(res: Resolved, s, host, timings=None, keep=None) -> int:
     bad = any(r.verdict == "FAIL" for r in rows)
     report = vcs.board_dir(s, res.board.name) / "report.md"
     left_up = None if keep is None else bad or keep  # a failing switchboard stays up to debug
-    swapped = bool(vcs.load_manifest(s, res.board.name).get("minimega"))
+    man = vcs.load_manifest(s, res.board.name)
+    swapped = " and ".join(k for k in ("minimega", "phenix") if man.get(k))
     out.print(summary_panel(res.board.name, rows, report, timings, left_up, swapped))
     return 1 if bad else 0
 
@@ -210,14 +213,16 @@ def _run_steps(args, s, host, view) -> int:
 
 
 def _warn_swapped(s, host, name: str) -> None:
-    """A run that died after install swapped minimega prints no summary panel, so its
-    minimega note goes here. The container's label says whether the swap happened."""
+    """A run that died after install swapped minimega or phēnix prints no summary panel, so
+    its note goes here. The container's label says whether the swap happened."""
     try:
-        swapped = minimega.running_sha(host, s)
+        swapped = " and ".join(
+            k for k, m in (("minimega", minimega), ("phenix", phenix)) if m.running_sha(host, s)
+        )
     except Exception:  # already failing; do not mask the real error
         return
     if swapped:
-        logger.warning("minimega stays swapped until ./burger down {}", name)
+        logger.warning("{} until ./burger down {}", stays_swapped(swapped), name)
 
 
 def _salvage_fdlogs(args, s, host, name: str) -> None:
@@ -522,6 +527,10 @@ def _parser() -> argparse.ArgumentParser:
         "--minimega",
         {"help": "pr:N or branch:NAME[@fork|@upstream]; overrides the board's minimega"},
     )
+    px = (
+        "--phenix",
+        {"help": "pr:N or branch:NAME[@fork|@upstream]; overrides the board's phenix"},
+    )
     add(
         "run",
         "sync, build, install, up, scorch, verify, down",
@@ -531,10 +540,11 @@ def _parser() -> argparse.ArgumentParser:
         fc,
         keep,
         mm,
+        px,
         fn=_run,
         aliases=["round"],
     )
-    add("sync", "fetch PR heads and merge the switchboard's trees", lo, mm)
+    add("sync", "fetch PR heads and merge the switchboard's trees", lo, mm, px)
     add("build", "build the apps tarball, mirror binary and bennu", lo)
     add("install", "install the apps into phēnix", lo)
     add("up", "render and start the experiment", lo, to)

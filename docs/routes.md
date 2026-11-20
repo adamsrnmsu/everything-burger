@@ -37,6 +37,12 @@ of the layer's directory that the build copies (not `tmp/`), so editing the Dock
 the `kvm` wrapper gives a new tag and a rebuild, and a plain `burger/minimega:<sha12>`
 built by a board on another route is never mistaken for the layered one.
 
+A route's `phenix_sed` names a sed script applied to sceptre-phenix's `docker/Dockerfile`
+before a board on a phēnix PR or branch builds it. `waterway-arm64` points it at the range's
+`docker/phenix-arm64.sed` (arm64 downloads and checksums). The tag is
+`burger/phenix:<sha12>-<12 hex of the minimega image tag>`, or `-stock` without a board
+minimega, so one phēnix commit over two minimegas never shares a tag.
+
 Topology asset paths `/phenix/topologies/<dir>` in the waterway and soap
 documents are rewritten to `<phenix dir>/topologies/burger-<dir>`, so your own
 copy is not touched.

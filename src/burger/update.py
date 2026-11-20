@@ -13,6 +13,7 @@ import urllib.error
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml
 from loguru import logger
 from rich.table import Table
 from rich.text import Text
@@ -157,11 +158,13 @@ def wait_phenix(host, timeout: int, clock=time) -> None:
 
 
 OVERRIDE = "minimega/compose.override.yml"
+OVERRIDES = (OVERRIDE, "phenix/compose.override.yml")  # one per service burger swaps
 
 
-def burger_override(s: Settings) -> Path:
-    """The compose file burger adds to run its own minimega image (burger.minimega)."""
-    return s.work / OVERRIDE
+def burger_override(s: Settings, service: str = "minimega") -> Path:
+    """The compose file burger adds to run its own minimega (or phenix) image. One file per
+    service: each swap writes its own, so neither overwrites the other's."""
+    return s.work / service / "compose.override.yml"
 
 
 def container_labels(host, name: str) -> dict:
@@ -183,8 +186,27 @@ def compose_labels(host, name: str) -> dict | None:
         return None
     project = labels.get("com.docker.compose.project")
     # by name, not by this checkout's path: another checkout or BURGER_WORK may have swapped
-    own = [f for f in files.split(",") if not f.endswith(f"/{OVERRIDE}")]
+    own = [f for f in files.split(",") if not f.endswith(tuple(f"/{o}" for o in OVERRIDES))]
     return {"dir": wd, "files": own, "service": svc, "project": project}
+
+
+def recreate(host, ctr: str, override: Path, service: dict | None, timeout: int = 180) -> None:
+    """Recreate the compose service of container `ctr`, with `service` (image, labels) from
+    the `override` file, or stock for None. Burger's swaps of minimega and phēnix share this."""
+    c = compose_labels(host, ctr)
+    if c is None:
+        raise BurgerError(
+            f"container '{ctr}' is not managed by docker compose; it must run under "
+            "docker compose for burger to swap its image"
+        )
+    extra = []
+    if service:
+        override.parent.mkdir(parents=True, exist_ok=True)
+        override.write_text(yaml.safe_dump({"services": {c["service"]: service}}))
+        extra = ["-f", override]
+    # c's files never include burger's overrides, so without `extra` this is the stock service
+    host.run([*_compose(c), *extra, "up", "-d", "--no-deps", "--force-recreate", c["service"]])
+    wait_phenix(host, timeout)
 
 
 def _compose(c: dict) -> list[str]:

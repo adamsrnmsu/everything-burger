@@ -14,8 +14,10 @@
    `burger.minimega` label is the manifest's minimega commit, or absent for stock
    (`minimega container`). On a board with its own minimega, phēnix imports that
    container's `minimega.py`, compared by sha256 (`minimega.py in phēnix`).
+7. The phēnix container runs what the switchboard asked for: its `burger.phenix.image`
+   label is the manifest's phenix image, or absent for stock (`phenix container`).
 
-The report names the exact SHAs of `main`, each PR, bennu, minimega and the topologies
+The report names the exact SHAs of `main`, each PR, bennu, minimega, phenix and the topologies
 repo, from `work/<switchboard>/manifest.json`.
 
 ## Field-device logs

@@ -9,12 +9,13 @@ from urllib.parse import quote
 from loguru import logger
 
 from burger.config import GIT_ID, REPOS, BurgerError, Settings
-from burger.switchboard import Resolved, all_switchboards, load_switchboard, minimega_label
+from burger.switchboard import Resolved, all_switchboards, load_switchboard, pinned_label
 
 SLUGS = {
     "apps": "sandialabs/sceptre-phenix-apps",
     "bennu": "sandialabs/sceptre-bennu",
     "minimega": "sandia-minimega/minimega",
+    "phenix": "sandialabs/sceptre-phenix",
 }
 
 
@@ -174,19 +175,19 @@ def sync(res: Resolved, settings: Settings, host) -> dict:
             _merge_prs(host, rd / "bennu", attrs, board.name, spec["prs"])
         man["bennu"] = {**src, "sha": _rev(host, rd / "bennu", "HEAD")}
 
-    man["minimega"] = None
-    mspec = board.minimega
-    if mspec:
-        mrepo = _ensure_repo(host, settings, "minimega")
-        if "branch" in mspec:
-            ref = _fetch_branch(host, mrepo, "minimega", mspec)
+    pinned = {"minimega": board.minimega, "phenix": board.phenix}
+    for key, pspec in pinned.items():
+        man[key] = None
+        if not pspec:
+            continue
+        prepo = _ensure_repo(host, settings, key)
+        if "branch" in pspec:
+            ref = _fetch_branch(host, prepo, key, pspec)
         else:  # not _fetch: that also wants refs/heads/main, and minimega's is master
-            ref = f"refs/burger/pr/{mspec['pr']}"
-            host.git(
-                mrepo, "fetch", "--quiet", REPOS["minimega"], f"+refs/pull/{mspec['pr']}/head:{ref}"
-            )
-        _fresh_worktree(host, mrepo, rd / "minimega", ref)
-        man["minimega"] = {**mspec, "sha": _rev(host, mrepo, ref), "from": board.minimega_from}
+            ref = f"refs/burger/pr/{pspec['pr']}"
+            host.git(prepo, "fetch", "--quiet", REPOS[key], f"+refs/pull/{pspec['pr']}/head:{ref}")
+        _fresh_worktree(host, prepo, rd / key, ref)
+        man[key] = {**pspec, "sha": _rev(host, prepo, ref), "from": getattr(board, f"{key}_from")}
 
     topo = res.route.topology_dir  # a site route brings its own topology: nothing to archive
     man["topologies"] = None
@@ -211,7 +212,7 @@ def sync(res: Resolved, settings: Settings, host) -> dict:
         man["apps"]["head"][:10],
         f"branch {br['branch']}" if br else f"main + {len(prs)} PRs",
         f", bennu {bennu_label(man['bennu'])} {man['bennu']['sha'][:10]}" if spec else "",
-        f", minimega {minimega_label(mspec)} {man['minimega']['sha'][:10]}" if mspec else "",
+        "".join(f", {k} {pinned_label(v)} {man[k]['sha'][:10]}" for k, v in pinned.items() if v),
     )
     return man
 
@@ -252,7 +253,7 @@ def _moved_branches(host, synced: dict) -> set[str]:
 def _pr_sha(man: dict, key: str, n: int) -> str | None:
     if key == "apps":
         return man["apps"]["prs"].get(str(n))
-    b = man.get(key) or {}  # bennu or minimega
+    b = man.get(key) or {}  # bennu, minimega or phenix
     if "prs" in b:
         return b["prs"].get(str(n))
     return b["sha"] if b.get("pr") == n else None
@@ -270,8 +271,9 @@ def prs(settings: Settings, host, author: str) -> list[dict]:
         b = board.bennu or {}  # a bennu branch carries no PR
         for n in [b["pr"]] if "pr" in b else b.get("prs", []):
             carried["bennu"].setdefault(int(n), []).append(name)
-        if "pr" in (board.minimega or {}):  # a minimega branch carries no PR
-            carried["minimega"].setdefault(board.minimega["pr"], []).append(name)
+        for key in ("minimega", "phenix"):
+            if "pr" in (getattr(board, key) or {}):  # a branch carries no PR
+                carried[key].setdefault(getattr(board, key)["pr"], []).append(name)
         path = board_dir(settings, name) / "manifest.json"
         if path.is_file():
             synced[name] = json.loads(path.read_text())

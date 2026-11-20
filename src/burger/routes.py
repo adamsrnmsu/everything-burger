@@ -17,6 +17,7 @@ _FIELDS = {
     "image_map",
     "linux_poller",
     "minimega_layer",
+    "phenix_sed",
     *_LISTS,
 }
 
@@ -41,6 +42,8 @@ class Route:
     linux_poller: bool = False
     # A Dockerfile the range builds on top of upstream minimega; minimega boards get it too.
     minimega_layer: str | None = None
+    # A sed script applied to sceptre-phenix's docker/Dockerfile before a phenix: board builds it.
+    phenix_sed: str | None = None
 
     def skips_windows(self, linux_only: bool) -> bool:
         return linux_only and not self.linux_poller
@@ -66,6 +69,7 @@ def load_route(name: str, settings: Settings) -> Route:
         image_map=doc.get("image_map") or {},
         linux_poller=bool(doc.get("linux_poller")),
         minimega_layer=doc.get("minimega_layer"),
+        phenix_sed=doc.get("phenix_sed"),
         unset=unset,
         **{k: doc.get(k) or [] for k in _LISTS},
     )

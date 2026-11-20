@@ -2,11 +2,11 @@
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `BURGER_PHENIX_CONTAINER` | `phenix` | container running phēnix; empty for a native install |
+| `BURGER_PHENIX_CONTAINER` | `phenix` | container running phēnix; empty for a native install. A board with its own phēnix swaps this container's image and needs it set |
 | `BURGER_API` | `http://localhost:3000/api/v1` | phēnix REST API |
 | `BURGER_TOKEN` | unset | JWT, when phēnix auth is on |
 | `BURGER_WORK` | `work/` in the checkout | clones, worktrees, builds, results |
-| `BURGER_APPS_REPO`, `BURGER_BENNU_REPO`, `BURGER_TOPOLOGIES_REPO`, `BURGER_MINIMEGA_REPO` | `work/repos/*` | use an existing clone; burger only adds `refs/burger/*` and worktrees |
+| `BURGER_APPS_REPO`, `BURGER_BENNU_REPO`, `BURGER_TOPOLOGIES_REPO`, `BURGER_MINIMEGA_REPO`, `BURGER_PHENIX_REPO` | `work/repos/*` | use an existing clone; burger only adds `refs/burger/*` and worktrees |
 | `BURGER_TOPOLOGIES` | unset | topologies clone for `check` and the tests, so they need no `sync` |
 | `BURGER_MINIMEGA_CONTAINER` | `minimega` | container burger copies `miniccc` from and sends router cc commands through; empty disables both. A board with its own minimega swaps this container's image and needs it set |
 | `BURGER_FORK_OWNER` | the `gh` user | owner of the fork that `remote: fork` branches come from. Set it for a public fork and `gh` is not needed |

@@ -6,10 +6,10 @@ from burger.config import BurgerError
 from burger.switchboard import (
     all_switchboards,
     load_switchboard,
-    minimega_label,
-    parse_minimega_flag,
+    parse_flag,
+    pinned_label,
     resolve,
-    with_minimega_flag,
+    with_flag,
 )
 from tests.conftest import res
 
@@ -258,6 +258,29 @@ def test_minimega_errors(settings, tmp_path, body, msg):
         load_switchboard("t", write_board(settings, tmp_path, body))
 
 
+def test_phenix_key_mirrors_minimega(settings, tmp_path):
+    s = write_board(settings, tmp_path, "phenix: {pr: 576}\n")
+    assert load_switchboard("t", s).phenix == {"pr": 576}
+    s = write_board(settings, tmp_path, "phenix: {branch: foo}\n")
+    assert load_switchboard("t", s).phenix == {"branch": "foo", "remote": "fork"}
+    assert load_switchboard("baseline", settings).phenix is None
+    for body, msg in [
+        ("phenix: {pr: x}\n", "phenix.pr must be an integer"),
+        ("phenix: {}\n", "phenix needs 'pr' or 'branch'"),
+    ]:
+        with pytest.raises(BurgerError, match=msg):
+            load_switchboard("t", write_board(settings, tmp_path, body))
+
+
+def test_phenix_flag_overrides_the_boards(settings, tmp_path):
+    b = load_switchboard("t", write_board(settings, tmp_path, "phenix: {pr: 1}\n"))
+    new = with_flag(b, "phenix", "pr:576")
+    assert (new.phenix, new.phenix_from) == ({"pr": 576}, "flag")
+    assert b.phenix == {"pr": 1} and new.minimega is None
+    with pytest.raises(BurgerError, match="--phenix takes"):
+        with_flag(b, "phenix", "tag:v1")
+
+
 @pytest.mark.parametrize(
     "flag, spec",
     [
@@ -267,8 +290,8 @@ def test_minimega_errors(settings, tmp_path, body, msg):
         ("branch:a/b@upstream", {"branch": "a/b", "remote": "upstream"}),
     ],
 )
-def test_parse_minimega_flag(flag, spec):
-    assert parse_minimega_flag(flag) == spec
+def test_parse_flag(flag, spec):
+    assert parse_flag("minimega", flag) == spec
 
 
 @pytest.mark.parametrize(
@@ -276,7 +299,7 @@ def test_parse_minimega_flag(flag, spec):
 )
 def test_parse_minimega_flag_rejects(bad):
     with pytest.raises(BurgerError, match=r"pr:N or branch:NAME\[@fork\|@upstream\]"):
-        parse_minimega_flag(bad)
+        parse_flag("minimega", bad)
 
 
 def test_flag_overrides_board_with_warning(settings, tmp_path):
@@ -286,9 +309,9 @@ def test_flag_overrides_board_with_warning(settings, tmp_path):
     hid = logger.add(lambda m: got.append((m.record["level"].name, m.record["message"])), level=0)
     try:
         b = load_switchboard("t", write_board(settings, tmp_path, "minimega: {branch: foo}\n"))
-        assert with_minimega_flag(b, None) is b and b.minimega_from == "board"
-        new = with_minimega_flag(b, "pr:1782")
-        plain = with_minimega_flag(load_switchboard("baseline", settings), "pr:1782")
+        assert with_flag(b, "minimega", None) is b and b.minimega_from == "board"
+        new = with_flag(b, "minimega", "pr:1782")
+        plain = with_flag(load_switchboard("baseline", settings), "minimega", "pr:1782")
     finally:
         logger.remove(hid)
     assert new.minimega == {"pr": 1782} and new.minimega_from == "flag"
@@ -299,6 +322,6 @@ def test_flag_overrides_board_with_warning(settings, tmp_path):
     assert plain.minimega == {"pr": 1782}  # no board value: nothing to warn about
 
 
-def test_minimega_label():
-    assert minimega_label({"pr": 1782}) == "#1782"
-    assert minimega_label({"branch": "foo", "remote": "fork"}) == "fork/foo"
+def test_pinned_label():
+    assert pinned_label({"pr": 1782}) == "#1782"
+    assert pinned_label({"branch": "foo", "remote": "fork"}) == "fork/foo"

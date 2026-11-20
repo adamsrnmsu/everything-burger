@@ -9,7 +9,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from burger import minimega
+from burger import minimega, phenix
 from burger.bennu import bennu_startup, build_bennu
 from burger.checks.status import collect_status, evaluate
 from burger.compose import compose
@@ -26,6 +26,8 @@ def _built_key(man: dict) -> dict:
     key = {"apps": man["apps"]["head"], "bennu": (man.get("bennu") or {}).get("sha")}
     if mm := man.get("minimega"):  # only then, so boards built before this stay built
         key["minimega"] = mm.get("image") or mm["sha"]  # the image says layered or not
+    if px := man.get("phenix"):
+        key["phenix"] = px.get("image") or px["sha"]
     return key
 
 
@@ -105,6 +107,11 @@ def build(res: Resolved, settings: Settings, host) -> None:
         mm["image"] = minimega.build_image(
             host, rd / "minimega", mm["sha"], res.route.minimega_layer
         )
+    if px := man.get("phenix"):
+        px["image"] = phenix.build_image(
+            host, rd / "phenix", px["sha"], (man.get("minimega") or {}).get("image"),
+            res.route.phenix_sed,
+        )  # fmt: skip
     (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
     (out / "built.json").write_text(json.dumps(_built_key(man)))
     logger.info("switchboard '{}' built into {}", name, out)
@@ -115,6 +122,10 @@ def install(res: Resolved, settings: Settings, host) -> None:
     man = load_manifest(settings, name)
     out = _require_built(res, settings, man)
     mm, mm_image = (man.get("minimega") or {}).get("sha"), (man.get("minimega") or {}).get("image")
+    px = man.get("phenix") or {}
+    # First, stock when the board has none: a recreated phēnix loses the apps and minimega.py
+    # installed below, and a killed run may have left its swap behind.
+    phenix.ensure(host, settings, px.get("sha"), px.get("image"))
     if not mm:  # first: put stock back if a killed run left its minimega swapped in
         minimega.ensure(host, settings, None)
     stage = f"/tmp/burger/{name}"
@@ -155,7 +166,8 @@ def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
     out = _require_built(res, settings, man)
     # `burger down` put stock minimega back; a board with its own must not start on stock.
     # Before miniccc is copied out below, so the VMs get the swapped container's miniccc.
-    mm = man.get("minimega") or {}
+    px, mm = man.get("phenix") or {}, man.get("minimega") or {}
+    phenix.ensure(host, settings, px.get("sha"), px.get("image"))
     minimega.ensure(host, settings, mm.get("sha"), mm.get("image"))
     if man.get("bennu"):
         (out / "00-burger-bennu.sh").write_text(bennu_startup(man))

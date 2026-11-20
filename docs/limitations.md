@@ -52,7 +52,8 @@
   that has the ref. The build runs in a git worktree, whose `.git` is a file, so
   `minimega -e version` in the built image may show no commit; `verify` reads the
   commit from the container's `burger.minimega` label instead. phēnix itself is
-  not rebuilt: its Go binary does not import the minimega repo.
+  not rebuilt for a minimega board: its Go binary does not import the minimega repo
+  (a `phenix:` board builds its own, see the run book).
 - `./burger update --only containers` on a host whose minimega a board swapped
   recreates the stock minimega container and then copies its `minimega.py` into
   phēnix, as `./burger down <switchboard>` does. If compose does not recreate

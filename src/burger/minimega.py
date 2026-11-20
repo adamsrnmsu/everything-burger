@@ -4,13 +4,12 @@ import hashlib
 import shutil
 from pathlib import Path
 
-import yaml
 from loguru import logger
 
 from burger import update  # update imports experiment, which imports this: use it at call time
 from burger.checks import Row
 from burger.config import BurgerError, Settings
-from burger.site import _FROM, build_dockerfile
+from burger.site import build_dockerfile, retarget_first_from
 
 LABEL = "burger.minimega"  # on the minimega container burger swapped in: the commit it runs
 IMAGE_LABEL = "burger.minimega.image"  # and the image tag, which also says whether it is layered
@@ -68,12 +67,7 @@ def build_image(host, wt: Path, sha: str, layer: str | None = None) -> str:
         ctx = host.s.work / "minimega" / "layer"
         shutil.rmtree(ctx, ignore_errors=True)
         shutil.copytree(src.parent, ctx, ignore=shutil.ignore_patterns("tmp", ".git"))
-        lines, done = [], False
-        for line in src.read_text().splitlines():
-            m = None if done else _FROM.match(line)
-            lines.append(f"{m[1]}{m[2]}{base}{m[4]}" if m else line)
-            done = done or bool(m)
-        (ctx / "Dockerfile").write_text("\n".join(lines) + "\n")
+        (ctx / "Dockerfile").write_text(retarget_first_from(src.read_text(), base))
         build_dockerfile(host, ctx, tag)
     return tag
 
@@ -115,13 +109,7 @@ def _recreate(
 ) -> None:
     """Recreate the compose minimega service: on burger's `image` of `sha`, or stock for None.
     This kills every VM, so the callers check that no experiment runs."""
-    c = update.compose_labels(host, s.mm_ctr)
-    if c is None:
-        raise BurgerError(
-            f"container '{s.mm_ctr}' is not managed by docker compose; minimega must run "
-            "under docker compose for burger to swap its image"
-        )
-    extra = []
+    service = None
     if sha:
         image = image or image_tag(sha)
         service = {
@@ -129,15 +117,7 @@ def _recreate(
             "pull_policy": "never",
             "labels": {LABEL: sha, IMAGE_LABEL: image},
         }
-        path = update.burger_override(s)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(yaml.safe_dump({"services": {c["service"]: service}}))
-        extra = ["-f", path]
-    # c's files never include burger's override, so without `extra` this is the stock service
-    host.run(
-        [*update._compose(c), *extra, "up", "-d", "--no-deps", "--force-recreate", c["service"]]
-    )
-    update.wait_phenix(host, timeout)
+    update.recreate(host, s.mm_ctr, update.burger_override(s), service, timeout)
     if not sha and running_sha(host, s):  # the override came back: its path did not match
         raise BurgerError(
             f"minimega container '{s.mm_ctr}' still runs burger's build after the restore; "
