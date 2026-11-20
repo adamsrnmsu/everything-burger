@@ -342,3 +342,25 @@ def test_build_marks_minimega_sha(settings, monkeypatch):
 def test_built_key_without_minimega_is_unchanged():
     # boards built before minimega support keep their built.json
     assert experiment._built_key(MAN) == {"apps": MAN["apps"]["head"], "bennu": MAN["bennu"]["sha"]}
+
+
+def test_up_clears_the_stage_dir_before_putting_files(settings, monkeypatch, tmp_path):
+    r = res(settings)
+    out = tmp_path / "out"
+    out.mkdir()
+    monkeypatch.setattr(experiment, "board_dir", lambda s, n: tmp_path)
+    monkeypatch.setattr(experiment, "load_manifest", lambda s, n: {})
+    monkeypatch.setattr(experiment, "_require_built", lambda *a: out)
+    monkeypatch.setattr(experiment.minimega, "ensure", lambda *a: None)
+    monkeypatch.setattr(experiment, "render", lambda *a: ({}, {}))
+    monkeypatch.setattr(experiment, "down", lambda *a: None)
+    monkeypatch.setattr(experiment, "services", lambda *a: None)
+    monkeypatch.setattr(experiment, "wait_running", lambda *a: None)
+    monkeypatch.setattr(experiment, "fix_routers", lambda *a: None)
+    host = FakeHost(settings=settings)
+    experiment.up(r, settings, host, 1)
+    stage = f"{settings.phenix_dir}/burger/{r.board.name}"
+    lines = [" ".join(c) for c in host.calls]
+    rm = next(i for i, c in enumerate(lines) if c.endswith(f"rm -rf {stage}"))
+    put = next(i for i, c in enumerate(lines) if c.endswith(f"mkdir -p {stage}"))
+    assert rm < put

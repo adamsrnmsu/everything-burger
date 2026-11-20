@@ -202,6 +202,7 @@ def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
     if topo_dir:  # the site route's assets are already where its scenario says
         topo_name = res.route.topology_dir
         host.put(topo_dir, f"{settings.phenix_dir}/topologies/burger-{topo_name}")
+    host.ctr("rm", "-rf", stage_dir)  # a previous run's leftovers would ride along with the put
     host.put(out, stage_dir)
     host.phenix("config", "create", f"{stage_dir}/topology.json", f"{stage_dir}/scenario.json")
     host.phenix("experiment", "create", exp, "-t", exp, "-s", exp)
