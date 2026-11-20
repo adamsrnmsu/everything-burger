@@ -50,7 +50,7 @@ To debug, run the steps by hand:
 ./burger verify metadata      # report: work/main/report.md; RTU logs: results/fdlogs/<host>/
 ./burger down metadata
 ./burger bennu-check bennu    # bennu's own docker harness on the board's bennu PR
-./burger mm-check main        # minimega #1684's cc_filtered, while ebwes-main is up (--keep)
+./burger probe main mm-bindings # host-side probes (none named: the board's own) while ebwes-main is up (--keep)
 ```
 
 One board runs one command at a time: `run` and every step command take a lock

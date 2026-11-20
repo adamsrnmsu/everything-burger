@@ -308,3 +308,13 @@ def test_report_names_the_minimega(settings, monkeypatch):
     man["minimega"] = {"branch": "foo", "remote": "fork", "sha": "c" * 40, "from": "board"}
     text = v.render_report(res, man, {"linux_only": False}, [])
     assert "- minimega: fork/foo `cccccccccc` (board)" in text
+
+
+def test_verify_runs_the_boards_probes_after_the_running_row(settings, monkeypatch):
+    res, host = setup(settings, monkeypatch)
+    res.board.probes = ["mm-bindings"]
+    monkeypatch.setitem(
+        v.probes.PROBES, "mm-bindings", lambda *a: [Row("mm-bindings", "x", "ok", "", [])]
+    )
+    checks = [r.check for r in v.verify(res, settings, host)]
+    assert checks.index("x") == checks.index("experiment + VMs running") + 1

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import yaml
 
-from burger import fdlogs, minimega, phenix
+from burger import fdlogs, minimega, phenix, probes
 from burger.checks import CheckContext, Row, run_checks
 from burger.checks.status import evaluate
 from burger.compose import compose, health_checks, item_locations
@@ -123,6 +123,8 @@ def verify(res: Resolved, settings, host) -> list[Row]:
     ]
     bad = not_running(host, res.board.exp)
     rows.append(Row("-", "experiment + VMs running", "FAIL" if bad else "ok", bad, []))
+    if res.board.probes:
+        rows += probes.run(host, settings, res, man)
     models_yaml(res, rd_out / "models.yaml", f"{settings.phenix_dir}/burger/{name}")
     rows += _validate_rows(res, settings, host, rd_out / "models.yaml")
     topo_file = rd_out / "topology.json"

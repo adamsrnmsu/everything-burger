@@ -13,7 +13,7 @@ from burger.routes import Route, load_route
 
 _FIELDS = {
     "about", "route", "apps", "bennu", "items", "overrides", "runs", "linux_only", "fdlogs",
-    "services", "minimega", "phenix",
+    "services", "minimega", "phenix", "probes",
 }  # fmt: skip
 _BENNU_KEYS = {"pr", "prs", "branch", "remote", "install", "pip", "pip_env"}
 _APPS_KEYS = {"prs", "branch", "remote", "contains"}
@@ -47,6 +47,7 @@ class Switchboard:
     minimega_from: str = "board"  # "flag" when --minimega chose it
     phenix: dict | None = None  # like minimega: run on this sceptre-phenix
     phenix_from: str = "board"  # "flag" when --phenix chose it
+    probes: list[str] = field(default_factory=list)  # burger.probes run by verify
 
 
 @dataclass
@@ -146,6 +147,13 @@ def load_switchboard(name: str, settings: Settings) -> Switchboard:
         elif "branch" not in bennu:
             raise BurgerError(f"{path}: bennu needs 'pr', 'prs' or 'branch'")
     pinned = {k: _pinned(path, k, doc.get(k)) for k in ("minimega", "phenix")}
+    probes = doc.get("probes") or []
+    if not (isinstance(probes, list) and all(isinstance(n, str) for n in probes)):
+        raise BurgerError(f"{path}: probes must be a list of probe names, not {probes!r}")
+    from burger.probes import PROBES  # late: probes import experiment, which imports this
+
+    if bad := [n for n in probes if n not in PROBES]:
+        raise BurgerError(f"{path}: unknown probe '{bad[0]}' (known: {', '.join(PROBES)})")
     for key in ("items", "apps", "overrides"):
         if not isinstance(doc.get(key) or {}, dict):
             raise BurgerError(f"{path}: {key} must be a mapping, not {doc[key]!r}")
@@ -173,6 +181,7 @@ def load_switchboard(name: str, settings: Settings) -> Switchboard:
         apps_branch=branch,
         fdlogs=_fdlogs(path, doc.get("fdlogs")),
         **pinned,
+        probes=probes,
     )
 
 

@@ -17,13 +17,23 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from burger import __version__, experiment, fdlogs, invalid, minimega, phenix, update, vcs, verify
+from burger import (
+    __version__,
+    experiment,
+    fdlogs,
+    invalid,
+    minimega,
+    phenix,
+    probes,
+    update,
+    vcs,
+    verify,
+)
 from burger.bennu import bennu_check
 from burger.checks import Row
 from burger.compose import compose
 from burger.config import REPOS, BurgerError, Settings
 from burger.items import all_items, load_item
-from burger.mmcheck import mm_check
 from burger.render import render
 from burger.routes import load_route
 from burger.shell import Host
@@ -74,7 +84,12 @@ def _state_linux_only(s: Settings, name: str) -> bool:
 def _one(args, s, host, name: str) -> int:
     """One pipeline step on one switchboard; the exit code."""
     cmd = args.cmd
-    if cmd in ("scorch", "verify", "down"):  # the experiment was brought up with its own flag
+    if cmd in (
+        "scorch",
+        "verify",
+        "down",
+        "probe",
+    ):  # the experiment was brought up with its own flag
         lo = _state_linux_only(s, name)
     else:
         lo = getattr(args, "linux_only", False)
@@ -102,8 +117,10 @@ def _one(args, s, host, name: str) -> int:
         if not vcs.load_manifest(s, name)["bennu"]:
             raise BurgerError(f"switchboard '{name}' has no bennu build")
         bennu_check(host, vcs.board_dir(s, name) / "bennu")
-    elif cmd == "mm-check":
-        mm_check(host, s, res.board.exp, res.route.values.get("rtus", []))
+    elif cmd == "probe":
+        rows = probes.run(host, s, res, vcs.load_manifest(s, name), args.names or None)
+        out.print(results_table(rows))
+        return int(any(r.verdict == "FAIL" for r in rows))
     return 0
 
 
@@ -552,7 +569,11 @@ def _parser() -> argparse.ArgumentParser:
     add("verify", "check install, experiment, models and SCORCH results")
     add("down", "delete the experiment and configs")
     add("bennu-check", "run bennu's docker test harness on the board's bennu PR")
-    add("mm-check", "minimega #1684's cc_filtered in the board's running experiment")
+    add(
+        "probe",
+        "run the board's probes (or the named ones) against its running experiment",
+        ("names", {"nargs": "*", "metavar": "name"}),
+    )
     add(
         "preflight",
         "check the phēnix host can run the boards",
