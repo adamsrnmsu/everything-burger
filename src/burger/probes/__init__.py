@@ -8,10 +8,10 @@ from loguru import logger
 from burger.checks import Row
 from burger.config import BurgerError
 from burger.experiment import not_running
-from burger.probes import mm_bindings
+from burger.probes import mm_bindings, mm_capture
 
 # host, settings, resolved board, manifest -> rows (each row's item is the probe name)
-PROBES: dict[str, Callable] = {"mm-bindings": mm_bindings.run}
+PROBES: dict[str, Callable] = {"mm-bindings": mm_bindings.run, "mm-capture": mm_capture.run}
 
 
 def run(host, s, res, man, names: list[str] | None = None) -> list[Row]:
