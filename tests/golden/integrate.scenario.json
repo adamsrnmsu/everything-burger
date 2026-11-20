@@ -448,6 +448,33 @@
               "metadata": {
                 "vms": [
                   {
+                    "configure": [
+                      {
+                        "args": "systemctl disable --now snort >/dev/null 2>&1 || true\ncat > /etc/snort/snort.conf <<'CONF'\nconfig checksum_mode: none\npreprocessor perfmonitor: time 5 file /var/log/snort/snort.stats pktcnt 1\noutput alert_full: alert\noutput log_unified2: filename snort.log, limit 128, nostamp\nalert tcp any any -> any 502 (msg:\"burger modbus\"; sid:1000001; rev:1;)\nCONF\n",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ],
+                    "hostname": "rtu-1"
+                  }
+                ]
+              },
+              "name": "snort-conf",
+              "type": "cc"
+            },
+            {
+              "metadata": {
+                "hostname": "rtu-1",
+                "interface": "IF0",
+                "waitDuration": 20
+              },
+              "name": "snort",
+              "type": "snort"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
                     "hostname": "rtu-1",
                     "start": [
                       {
@@ -494,11 +521,14 @@
               "cleanup": [
                 "disruption",
                 "pipe",
-                "iperf"
+                "iperf",
+                "snort"
               ],
               "configure": [
                 "disruption",
-                "iperf"
+                "iperf",
+                "snort-conf",
+                "snort"
               ],
               "name": "integrate",
               "start": [
@@ -510,6 +540,7 @@
                 "vmstats",
                 "qos",
                 "iperf",
+                "snort",
                 "cc-empty-output",
                 "cc-output-parsing",
                 "disruption"
@@ -521,7 +552,8 @@
                 "hoststats",
                 "vmstats",
                 "qos",
-                "iperf"
+                "iperf",
+                "snort"
               ]
             },
             {
