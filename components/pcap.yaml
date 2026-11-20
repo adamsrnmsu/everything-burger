@@ -12,3 +12,9 @@ verify:
   - files: {glob: "*.pcap", min: 1}
   # The traffic is SCADA/OPC polling: skipped without the Windows nodes.
   - pcap: {glob: "*.pcap", tcp_port: "{route.ics_port}", min_packets: 10, windows: true}
+# The arm64 range's OPC poller speaks DNP3 to the RTUs (:20000); ics_port stays 502 for
+# the items that hit each RTU's Modbus server.
+waterway-arm64:
+  verify:
+    - files: {glob: "*.pcap", min: 1}
+    - pcap: {glob: "*.pcap", tcp_port: 20000, min_packets: 10}

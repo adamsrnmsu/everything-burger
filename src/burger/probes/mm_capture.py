@@ -15,7 +15,6 @@ from burger.checks import Row
 from burger.config import BurgerError
 
 ITEM = "mm-capture"
-BRIDGE = "mega_bridge"  # minimega's OVS bridge (cli.MEGA_BRIDGE; cli imports probes)
 PREFIX = "burger-mmcap-"
 CLASSIC = {b"\xa1\xb2\xc3\xd4", b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\x3c\x4d", b"\x4d\x3c\xb2\xa1"}
 PCAPNG = b"\x0a\x0d\x0d\x0a"
@@ -126,16 +125,24 @@ class Probe:
         self.ok("capture pcap delete vm", self.vms[0])
         return f"{len(self.frames(f, CLASSIC))} frames, classic pcap"
 
+    def vm_bridge(self) -> str:
+        """The bridge of the first VM's first NIC (phēnix's is the topology's, e.g. `phenix`):
+        minimega makes a capture on any bridge name, so a wrong one captures nothing."""
+        rows = [r for r in self.table(".columns name,bridge vm info") if r["name"] == self.vms[0]]
+        if not rows:
+            raise BurgerError(f"{self.vms[0]} not in vm info")
+        return rows[0]["bridge"].strip("[]").split(",")[0].strip()
+
     def bridge(self):
         vlan = int(self.table("vlans")[0]["vlan"])
-        f = self.name("bridge")
-        self.ok("capture pcap bridge", BRIDGE, f, f"vlans={vlan}")
+        f, br = self.name("bridge"), self.vm_bridge()
+        self.ok("capture pcap bridge", br, f, f"vlans={vlan}")
         self.wait()
-        self.ok("capture pcap delete bridge", BRIDGE)
+        self.ok("capture pcap delete bridge", br)
         frames = self.frames(f, CLASSIC)
         if bad := {vlan_of(x) for x in frames} - {vlan}:
             raise BurgerError(f"frames tagged {sorted(map(str, bad))}, not only {vlan}")
-        return f"{len(frames)} frames, all tagged {vlan}"
+        return f"{len(frames)} frames on {br}, all tagged {vlan}"
 
     def namespace(self):
         f = self.name("ns", "pcapng")

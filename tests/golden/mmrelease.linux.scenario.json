@@ -200,7 +200,7 @@
               "metadata": {
                 "vms": [
                   {
-                    "filter": "tcp port 502",
+                    "filter": "tcp port 20000",
                     "hostname": "rtu-2",
                     "iface": "any"
                   }
@@ -292,21 +292,21 @@
               ],
               "name": "mmrelease",
               "start": [
-                "mm",
                 "pcap",
                 "tcpdump",
-                "vmstats",
+                "mm",
                 "hoststats",
+                "vmstats",
                 "cc-empty-output",
                 "cc-output-parsing",
                 "disruption"
               ],
               "stop": [
-                "mm",
                 "pcap",
                 "tcpdump",
-                "vmstats",
-                "hoststats"
+                "mm",
+                "hoststats",
+                "vmstats"
               ]
             }
           ]

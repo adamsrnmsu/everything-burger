@@ -133,3 +133,15 @@ def test_git_ignores_ctime_fsmonitor_and_auto_gc(tmp_path, monkeypatch):
         ("maintenance.auto", "false"),
     ]:
         assert host.run(["git", "config", key], capture=True).stdout.strip() == want
+
+
+def test_mm_turns_an_error_line_into_a_failure(monkeypatch, tmp_path):
+    """minimega -e exits 0 when the command fails and prints `Error (host): ...` on stderr."""
+    host = Host(Settings.from_env(tmp_path))
+    err = "INFO got command: `namespace e capture`\nError (rig): snaplen must be from 14 to 65535\n"
+    monkeypatch.setattr(host, "run", lambda cmd, **k: subprocess.CompletedProcess(cmd, 0, "", err))
+    assert host.mm("e", "capture").returncode == 1
+    monkeypatch.setattr(
+        host, "run", lambda cmd, **k: subprocess.CompletedProcess(cmd, 0, "id,path\n", "INFO ok\n")
+    )
+    assert host.mm("e", "capture").returncode == 0

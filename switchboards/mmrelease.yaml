@@ -21,3 +21,11 @@ items:
   disruption: on
   cc-empty-output: on
   cc-output-parsing: on
+runs:
+  # pcap first, as on main: the pcap app starts with `clear capture pcap`, which stops every
+  # capture in the namespace, so mm's bridge capture must start after it.
+  - name: mmrelease
+    configure: [disruption]
+    start: [pcap, tcpdump, mm, hoststats, vmstats, cc-empty-output, cc-output-parsing, disruption]
+    stop: [pcap, tcpdump, mm, hoststats, vmstats]
+    cleanup: [disruption]

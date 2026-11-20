@@ -68,14 +68,16 @@ class FakeMM(FakeHost):
             self.files.clear()
             return out()
         words = cmd[-1].removeprefix("namespace ebwes-main ").split()
-        if any(cmd[-1].endswith(r) for r in self.refuse):
-            return out("", 1)
+        if any(cmd[-1].endswith(r) for r in self.refuse):  # as minimega -e: exit 0, Error line
+            return subprocess.CompletedProcess(cmd, 0, "", "Error (rig): refused\n")
         if words[:2] == ["capture", "pcap"] and words[2] == "delete":
             self.delete(words[3:])
         elif words[:2] == ["capture", "pcap"]:
             self.start(words[2:])
         elif words[-1] == "capture":
             return out(self.table(["id", "path"], [[i, f"{DIR}/{n}"] for i, n, *_ in self.caps]))
+        elif words[-2:] == ["vm", "info"]:
+            return out('name,bridge\nrtu-1,"[phenix, phenix]"\nrtu-2,"[phenix]"\n')
         elif words[-1] == "vlans":
             return out("alias,vlan\nEXP_1,101\n")
         elif words[-2:] == ["bridge", "mirrors"]:
@@ -122,6 +124,8 @@ def test_all_steps_pass(settings, monkeypatch):
     assert set(verdicts(rows).values()) == {"ok"}, rows
     assert len(rows) == 6 and {r.item for r in rows} == {"mm-capture"}
     assert host.caps == [] and host.files == {}  # captures stopped, files removed
+    started = "namespace ebwes-main capture pcap bridge phenix "
+    assert any(c[-1].startswith(started) for c in host.calls)  # the VMs' bridge
 
 
 def test_wrong_vlan_and_accepted_options_fail(settings, monkeypatch):
