@@ -16,10 +16,39 @@
               "image": "bennu.qc2"
             }
           ],
-          "os_type": "linux",
           "memory": 512,
+          "os_type": "linux",
           "vcpus": 2
         },
+        "injections": [
+          {
+            "description": "burger: install bennu PR build",
+            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/00-burger-bennu.sh"
+          },
+          {
+            "description": "burger: bennu PR build",
+            "dst": "/root/burger-bennu.deb",
+            "src": "/phenix/burger/x/bennu.deb"
+          },
+          {
+            "description": "burger: pybennu PR build",
+            "dst": "/root/pybennu-6.0.0-py3-none-any.whl",
+            "src": "/phenix/burger/x/pybennu-6.0.0-py3-none-any.whl"
+          },
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
         "network": {
           "interfaces": [
             {
@@ -33,36 +62,7 @@
             }
           ]
         },
-        "type": "VirtualMachine",
-        "injections": [
-          {
-            "src": "/phenix/burger/x/00-burger-bennu.sh",
-            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
-            "description": "burger: install bennu PR build",
-            "permissions": "0755"
-          },
-          {
-            "src": "/phenix/burger/x/bennu.deb",
-            "dst": "/root/burger-bennu.deb",
-            "description": "burger: bennu PR build"
-          },
-          {
-            "src": "/phenix/burger/x/pybennu-6.0.0-py3-none-any.whl",
-            "dst": "/root/pybennu-6.0.0-py3-none-any.whl",
-            "description": "burger: pybennu PR build"
-          },
-          {
-            "src": "/phenix/burger/x/burger-miniccc",
-            "dst": "/root/burger-miniccc",
-            "description": "burger: miniccc from the minimega container"
-          },
-          {
-            "src": "/phenix/burger/x/01-burger-miniccc.sh",
-            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
-            "description": "burger: install and start miniccc",
-            "permissions": "0755"
-          }
-        ]
+        "type": "VirtualMachine"
       },
       {
         "general": {
@@ -78,6 +78,35 @@
           "os_type": "linux",
           "vcpus": 1
         },
+        "injections": [
+          {
+            "description": "burger: install bennu PR build",
+            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/00-burger-bennu.sh"
+          },
+          {
+            "description": "burger: bennu PR build",
+            "dst": "/root/burger-bennu.deb",
+            "src": "/phenix/burger/x/bennu.deb"
+          },
+          {
+            "description": "burger: pybennu PR build",
+            "dst": "/root/pybennu-6.0.0-py3-none-any.whl",
+            "src": "/phenix/burger/x/pybennu-6.0.0-py3-none-any.whl"
+          },
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
         "network": {
           "interfaces": [
             {
@@ -99,36 +128,7 @@
             }
           ]
         },
-        "type": "VirtualMachine",
-        "injections": [
-          {
-            "src": "/phenix/burger/x/00-burger-bennu.sh",
-            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
-            "description": "burger: install bennu PR build",
-            "permissions": "0755"
-          },
-          {
-            "src": "/phenix/burger/x/bennu.deb",
-            "dst": "/root/burger-bennu.deb",
-            "description": "burger: bennu PR build"
-          },
-          {
-            "src": "/phenix/burger/x/pybennu-6.0.0-py3-none-any.whl",
-            "dst": "/root/pybennu-6.0.0-py3-none-any.whl",
-            "description": "burger: pybennu PR build"
-          },
-          {
-            "src": "/phenix/burger/x/burger-miniccc",
-            "dst": "/root/burger-miniccc",
-            "description": "burger: miniccc from the minimega container"
-          },
-          {
-            "src": "/phenix/burger/x/01-burger-miniccc.sh",
-            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
-            "description": "burger: install and start miniccc",
-            "permissions": "0755"
-          }
-        ]
+        "type": "VirtualMachine"
       },
       {
         "general": {
@@ -144,6 +144,35 @@
           "os_type": "linux",
           "vcpus": 1
         },
+        "injections": [
+          {
+            "description": "burger: install bennu PR build",
+            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/00-burger-bennu.sh"
+          },
+          {
+            "description": "burger: bennu PR build",
+            "dst": "/root/burger-bennu.deb",
+            "src": "/phenix/burger/x/bennu.deb"
+          },
+          {
+            "description": "burger: pybennu PR build",
+            "dst": "/root/pybennu-6.0.0-py3-none-any.whl",
+            "src": "/phenix/burger/x/pybennu-6.0.0-py3-none-any.whl"
+          },
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
         "network": {
           "interfaces": [
             {
@@ -165,36 +194,7 @@
             }
           ]
         },
-        "type": "VirtualMachine",
-        "injections": [
-          {
-            "src": "/phenix/burger/x/00-burger-bennu.sh",
-            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
-            "description": "burger: install bennu PR build",
-            "permissions": "0755"
-          },
-          {
-            "src": "/phenix/burger/x/bennu.deb",
-            "dst": "/root/burger-bennu.deb",
-            "description": "burger: bennu PR build"
-          },
-          {
-            "src": "/phenix/burger/x/pybennu-6.0.0-py3-none-any.whl",
-            "dst": "/root/pybennu-6.0.0-py3-none-any.whl",
-            "description": "burger: pybennu PR build"
-          },
-          {
-            "src": "/phenix/burger/x/burger-miniccc",
-            "dst": "/root/burger-miniccc",
-            "description": "burger: miniccc from the minimega container"
-          },
-          {
-            "src": "/phenix/burger/x/01-burger-miniccc.sh",
-            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
-            "description": "burger: install and start miniccc",
-            "permissions": "0755"
-          }
-        ]
+        "type": "VirtualMachine"
       },
       {
         "general": {
@@ -210,6 +210,35 @@
           "os_type": "linux",
           "vcpus": 1
         },
+        "injections": [
+          {
+            "description": "burger: install bennu PR build",
+            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/00-burger-bennu.sh"
+          },
+          {
+            "description": "burger: bennu PR build",
+            "dst": "/root/burger-bennu.deb",
+            "src": "/phenix/burger/x/bennu.deb"
+          },
+          {
+            "description": "burger: pybennu PR build",
+            "dst": "/root/pybennu-6.0.0-py3-none-any.whl",
+            "src": "/phenix/burger/x/pybennu-6.0.0-py3-none-any.whl"
+          },
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
         "network": {
           "interfaces": [
             {
@@ -231,36 +260,7 @@
             }
           ]
         },
-        "type": "VirtualMachine",
-        "injections": [
-          {
-            "src": "/phenix/burger/x/00-burger-bennu.sh",
-            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
-            "description": "burger: install bennu PR build",
-            "permissions": "0755"
-          },
-          {
-            "src": "/phenix/burger/x/bennu.deb",
-            "dst": "/root/burger-bennu.deb",
-            "description": "burger: bennu PR build"
-          },
-          {
-            "src": "/phenix/burger/x/pybennu-6.0.0-py3-none-any.whl",
-            "dst": "/root/pybennu-6.0.0-py3-none-any.whl",
-            "description": "burger: pybennu PR build"
-          },
-          {
-            "src": "/phenix/burger/x/burger-miniccc",
-            "dst": "/root/burger-miniccc",
-            "description": "burger: miniccc from the minimega container"
-          },
-          {
-            "src": "/phenix/burger/x/01-burger-miniccc.sh",
-            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
-            "description": "burger: install and start miniccc",
-            "permissions": "0755"
-          }
-        ]
+        "type": "VirtualMachine"
       },
       {
         "general": {
@@ -276,6 +276,35 @@
           "os_type": "linux",
           "vcpus": 1
         },
+        "injections": [
+          {
+            "description": "burger: install bennu PR build",
+            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/00-burger-bennu.sh"
+          },
+          {
+            "description": "burger: bennu PR build",
+            "dst": "/root/burger-bennu.deb",
+            "src": "/phenix/burger/x/bennu.deb"
+          },
+          {
+            "description": "burger: pybennu PR build",
+            "dst": "/root/pybennu-6.0.0-py3-none-any.whl",
+            "src": "/phenix/burger/x/pybennu-6.0.0-py3-none-any.whl"
+          },
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
         "network": {
           "interfaces": [
             {
@@ -297,38 +326,12 @@
             }
           ]
         },
-        "type": "VirtualMachine",
-        "injections": [
-          {
-            "src": "/phenix/burger/x/00-burger-bennu.sh",
-            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
-            "description": "burger: install bennu PR build",
-            "permissions": "0755"
-          },
-          {
-            "src": "/phenix/burger/x/bennu.deb",
-            "dst": "/root/burger-bennu.deb",
-            "description": "burger: bennu PR build"
-          },
-          {
-            "src": "/phenix/burger/x/pybennu-6.0.0-py3-none-any.whl",
-            "dst": "/root/pybennu-6.0.0-py3-none-any.whl",
-            "description": "burger: pybennu PR build"
-          },
-          {
-            "src": "/phenix/burger/x/burger-miniccc",
-            "dst": "/root/burger-miniccc",
-            "description": "burger: miniccc from the minimega container"
-          },
-          {
-            "src": "/phenix/burger/x/01-burger-miniccc.sh",
-            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
-            "description": "burger: install and start miniccc",
-            "permissions": "0755"
-          }
-        ]
+        "type": "VirtualMachine"
       },
       {
+        "advanced": {
+          "qemu-append": "-device qemu-xhci -device usb-host,vendorid=0x0cd5,productid=0x0004"
+        },
         "general": {
           "hostname": "siren"
         },
@@ -342,6 +345,47 @@
           "os_type": "linux",
           "vcpus": 1
         },
+        "injections": [
+          {
+            "dst": "/siren/s7-labjack.json",
+            "src": "/phenix/topologies/burger-soap/injects/siren/s7-labjack.json"
+          },
+          {
+            "dst": "/siren/siren.json",
+            "src": "/phenix/topologies/burger-soap/injects/siren/siren.json"
+          },
+          {
+            "dst": "/etc/phenix/startup/99_siren-start.sh",
+            "src": "/phenix/topologies/burger-soap/injects/siren/siren-start.sh"
+          },
+          {
+            "description": "burger: install bennu PR build",
+            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/00-burger-bennu.sh"
+          },
+          {
+            "description": "burger: bennu PR build",
+            "dst": "/root/burger-bennu.deb",
+            "src": "/phenix/burger/x/bennu.deb"
+          },
+          {
+            "description": "burger: pybennu PR build",
+            "dst": "/root/pybennu-6.0.0-py3-none-any.whl",
+            "src": "/phenix/burger/x/pybennu-6.0.0-py3-none-any.whl"
+          },
+          {
+            "description": "burger: miniccc from the minimega container",
+            "dst": "/root/burger-miniccc",
+            "src": "/phenix/burger/x/burger-miniccc"
+          },
+          {
+            "description": "burger: install and start miniccc",
+            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/01-burger-miniccc.sh"
+          }
+        ],
         "network": {
           "interfaces": [
             {
@@ -354,51 +398,7 @@
             }
           ]
         },
-        "injections": [
-          {
-            "src": "/phenix/topologies/burger-soap/injects/siren/s7-labjack.json",
-            "dst": "/siren/s7-labjack.json"
-          },
-          {
-            "src": "/phenix/topologies/burger-soap/injects/siren/siren.json",
-            "dst": "/siren/siren.json"
-          },
-          {
-            "src": "/phenix/topologies/burger-soap/injects/siren/siren-start.sh",
-            "dst": "/etc/phenix/startup/99_siren-start.sh"
-          },
-          {
-            "src": "/phenix/burger/x/00-burger-bennu.sh",
-            "dst": "/etc/phenix/startup/00-burger-bennu.sh",
-            "description": "burger: install bennu PR build",
-            "permissions": "0755"
-          },
-          {
-            "src": "/phenix/burger/x/bennu.deb",
-            "dst": "/root/burger-bennu.deb",
-            "description": "burger: bennu PR build"
-          },
-          {
-            "src": "/phenix/burger/x/pybennu-6.0.0-py3-none-any.whl",
-            "dst": "/root/pybennu-6.0.0-py3-none-any.whl",
-            "description": "burger: pybennu PR build"
-          },
-          {
-            "src": "/phenix/burger/x/burger-miniccc",
-            "dst": "/root/burger-miniccc",
-            "description": "burger: miniccc from the minimega container"
-          },
-          {
-            "src": "/phenix/burger/x/01-burger-miniccc.sh",
-            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
-            "description": "burger: install and start miniccc",
-            "permissions": "0755"
-          }
-        ],
-        "type": "VirtualMachine",
-        "advanced": {
-          "qemu-append": "-device qemu-xhci -device usb-host,vendorid=0x0cd5,productid=0x0004"
-        }
+        "type": "VirtualMachine"
       }
     ]
   }

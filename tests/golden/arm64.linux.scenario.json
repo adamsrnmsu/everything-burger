@@ -2,30 +2,31 @@
   "apiVersion": "phenix.sandia.gov/v2",
   "kind": "Scenario",
   "metadata": {
-    "name": "ebwes-arm64",
     "annotations": {
       "topology": "ebwes-arm64"
-    }
+    },
+    "name": "ebwes-arm64"
   },
   "spec": {
     "apps": [
       {
-        "name": "sceptre",
         "assetDir": "/phenix/topologies/waterway-arm64",
         "hosts": [
           {
             "hostname": "waterway-provider",
             "metadata": {
-              "type": "provider",
-              "simulator": "Simulink",
               "publish_endpoint": "udp://*;239.0.0.1:40000",
               "publish_points": "/phenix/topologies/waterway-arm64/injects/publishPoints.txt",
-              "solver": "/phenix/topologies/waterway-arm64/injects/simulinksolver"
+              "simulator": "Simulink",
+              "solver": "/phenix/topologies/waterway-arm64/injects/simulinksolver",
+              "type": "provider"
             }
           },
           {
             "hostname": "rtu-1",
             "metadata": {
+              "infrastructure": "waterway",
+              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
               "modbus": [
                 {
                   "name": "lowerwater",
@@ -52,8 +53,6 @@
                   "type": "boat-sensor"
                 }
               ],
-              "infrastructure": "waterway",
-              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
               "provider": "waterway-provider",
               "type": "fd-server"
             }
@@ -61,6 +60,8 @@
           {
             "hostname": "rtu-2",
             "metadata": {
+              "infrastructure": "waterway",
+              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
               "modbus": [
                 {
                   "name": "upperwater",
@@ -87,39 +88,35 @@
                   "type": "boat-sensor"
                 }
               ],
-              "infrastructure": "waterway",
-              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
               "provider": "waterway-provider",
               "type": "fd-server"
             }
           }
-        ]
+        ],
+        "name": "sceptre"
       },
       {
-        "name": "scorch",
         "metadata": {
           "components": [
             {
-              "name": "health",
-              "type": "cc",
               "metadata": {
                 "vms": [
                   {
                     "hostname": "rtu-1",
                     "start": [
                       {
-                        "type": "exec",
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
                         "wait": true
                       }
                     ]
@@ -128,18 +125,18 @@
                     "hostname": "rtu-2",
                     "start": [
                       {
-                        "type": "exec",
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
                         "wait": true
                       }
                     ]
@@ -148,19 +145,21 @@
                     "hostname": "waterway-provider",
                     "start": [
                       {
-                        "type": "exec",
                         "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "pgrep -f '(^|/)simulinksolver( |$)'",
+                        "type": "exec",
                         "wait": true
                       }
                     ]
                   }
                 ]
-              }
+              },
+              "name": "health",
+              "type": "cc"
             }
           ],
           "runs": [
@@ -171,7 +170,8 @@
               ]
             }
           ]
-        }
+        },
+        "name": "scorch"
       }
     ]
   }

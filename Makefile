@@ -5,7 +5,7 @@ BOARD ?= baseline
 export BURGER_TOPOLOGIES ?= $(wildcard $(CURDIR)/work/repos/topologies)
 
 .DEFAULT_GOAL := help
-.PHONY: help install list dry-run run docs check test format
+.PHONY: help install list dry-run run docs check test goldens format
 
 help: ## show these targets
 	@awk -F':.*## ' '/^[a-z-]+:.*## /{printf "  make %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -35,6 +35,9 @@ check: ## lint: ruff and vulture
 
 test: ## run the tests
 	$(BIN)python -m pytest
+
+goldens: ## rewrite tests/golden from the current render; BOARDS="a b" for some
+	$(BIN)python scripts/regen_goldens.py $(BOARDS)
 
 format: ## fix formatting and lint
 	$(BIN)ruff format .

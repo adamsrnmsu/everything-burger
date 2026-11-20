@@ -213,7 +213,7 @@
                         "wait": true
                       },
                       {
-                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -q 'bus-'",
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq bus-",
                         "type": "exec",
                         "wait": true
                       }
@@ -246,7 +246,7 @@
                         "wait": true
                       },
                       {
-                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -q 'bus-'",
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq bus-",
                         "type": "exec",
                         "wait": true
                       }
@@ -279,7 +279,7 @@
                         "wait": true
                       },
                       {
-                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -q 'bus-'",
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq bus-",
                         "type": "exec",
                         "wait": true
                       }
@@ -312,7 +312,7 @@
                         "wait": true
                       },
                       {
-                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -q 'bus-'",
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq bus-",
                         "type": "exec",
                         "wait": true
                       }
@@ -356,12 +356,17 @@
                         "args": "test -s /var/log/bennu/pybennu-siren.log",
                         "type": "exec",
                         "wait": true
+                      },
+                      {
+                        "args": "grep -Eq ' \\| DEBUG +\\| ' /var/log/bennu/pybennu-siren.log",
+                        "type": "exec",
+                        "wait": true
                       }
                     ]
                   }
                 ]
               },
-              "name": "siren-log",
+              "name": "health-siren",
               "type": "cc"
             }
           ],
@@ -375,7 +380,7 @@
             {
               "name": "extras-siren",
               "start": [
-                "siren-log"
+                "health-siren"
               ]
             }
           ]

@@ -173,9 +173,9 @@
                     "hostname": "rtu-1",
                     "start": [
                       {
-                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
                         "type": "exec",
-                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
                         "wait": true
                       },
                       {
@@ -189,21 +189,13 @@
                         "wait": true
                       },
                       {
-                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query",
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
                         "type": "exec",
-                        "validator": "grep -q 'lock' || { echo \"$1: provider query returned no waterway tags\" >&2; exit 1; }",
                         "wait": true
                       },
                       {
-                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
                         "type": "exec",
-                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
-                        "wait": true
-                      },
-                      {
-                        "args": "ss -Htn state established '( sport = :502 )' | wc -l",
-                        "type": "exec",
-                        "validator": "[ \"$(cat)\" -gt 0 ] || { echo \"$1: nothing is polling Modbus :502\" >&2; exit 1; }",
                         "wait": true
                       }
                     ]
@@ -212,9 +204,9 @@
                     "hostname": "rtu-2",
                     "start": [
                       {
-                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
                         "type": "exec",
-                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
                         "wait": true
                       },
                       {
@@ -228,21 +220,13 @@
                         "wait": true
                       },
                       {
-                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query",
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
                         "type": "exec",
-                        "validator": "grep -q 'lock' || { echo \"$1: provider query returned no waterway tags\" >&2; exit 1; }",
                         "wait": true
                       },
                       {
-                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
                         "type": "exec",
-                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
-                        "wait": true
-                      },
-                      {
-                        "args": "ss -Htn state established '( sport = :502 )' | wc -l",
-                        "type": "exec",
-                        "validator": "[ \"$(cat)\" -gt 0 ] || { echo \"$1: nothing is polling Modbus :502\" >&2; exit 1; }",
                         "wait": true
                       }
                     ]
@@ -251,9 +235,9 @@
                     "hostname": "simulink-provider",
                     "start": [
                       {
-                        "args": "cat /var/log/burger-bennu.log 2>&1",
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
                         "type": "exec",
-                        "validator": "log=$(cat); grep -Eq 'Setting up bennu' <<<\"$log\" || { echo \"$1: dpkg -i of the PR build failed: $(tail -3 <<<\"$log\")\" >&2; exit 1; }",
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
                         "wait": true
                       },
                       {
@@ -264,12 +248,6 @@
                       {
                         "args": "pgrep -f '(^|/)simulinksolver( |$)'",
                         "type": "exec",
-                        "wait": true
-                      },
-                      {
-                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "type": "exec",
-                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
                         "wait": true
                       }
                     ]
@@ -335,7 +313,7 @@
                   }
                 ]
               },
-              "name": "mm-capture",
+              "name": "mm",
               "type": "mm"
             },
             {
@@ -343,16 +321,16 @@
                 "current_disruption": "baseline",
                 "run_duration": 30
               },
-              "name": "wait",
+              "name": "disruption",
               "type": "disruption"
             },
             {
-              "name": "pipe",
-              "type": "pipe",
               "metadata": {
-                "pipe": "burger",
-                "data": "hello-from-burger"
-              }
+                "data": "hello-from-burger",
+                "pipe": "burger"
+              },
+              "name": "pipe",
+              "type": "pipe"
             }
           ],
           "runs": [
@@ -363,17 +341,25 @@
               ]
             },
             {
-              "name": "hardening",
+              "cleanup": [
+                "disruption",
+                "pipe"
+              ],
+              "configure": [
+                "disruption"
+              ],
+              "name": "harden",
               "start": [
                 "pcap",
                 "tcpdump",
-                "mm-capture",
-                "wait"
+                "mm",
+                "pipe",
+                "disruption"
               ],
               "stop": [
                 "pcap",
                 "tcpdump",
-                "mm-capture"
+                "mm"
               ]
             }
           ]

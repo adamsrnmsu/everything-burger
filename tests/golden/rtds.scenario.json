@@ -39,6 +39,21 @@
                         "type": "exec",
                         "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
                         "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)pybennu-power-solver( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -Eq ' \\| (INFO|DEBUG) +\\| ' /var/log/bennu/pybennu-power-solver.log",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "! grep -E ' \\| (ERROR|CRITICAL) +\\| ' /var/log/bennu/pybennu-power-solver.log",
+                        "type": "exec",
+                        "wait": true
                       }
                     ]
                   }
@@ -46,15 +61,6 @@
               },
               "name": "health",
               "type": "cc"
-            },
-            {
-              "metadata": {
-                "current_disruption": "baseline",
-                "permutation": 0,
-                "run_duration": 120
-              },
-              "name": "baseline",
-              "type": "disruption"
             },
             {
               "metadata": {
@@ -91,6 +97,15 @@
               "metadata": {},
               "name": "collector",
               "type": "collector"
+            },
+            {
+              "metadata": {
+                "current_disruption": "baseline",
+                "permutation": 0,
+                "run_duration": 120
+              },
+              "name": "disruption",
+              "type": "disruption"
             }
           ],
           "runs": [
@@ -112,7 +127,7 @@
               "start": [
                 "rtds",
                 "providerdata",
-                "baseline"
+                "disruption"
               ],
               "stop": [
                 "providerdata",

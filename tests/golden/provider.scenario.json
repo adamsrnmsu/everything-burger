@@ -25,37 +25,8 @@
         "name": "tap"
       },
       {
-        "hosts": [
-          {
-            "hostname": "netmonitor",
-            "metadata": {
-              "interface": "mirror",
-              "vlans": [
-                "EXP"
-              ]
-            }
-          }
-        ],
-        "metadata": {
-          "directGRE": {
-            "enabled": true,
-            "mirrorBridge": "phenix",
-            "mirrorVLAN": "MIRROR"
-          }
-        },
-        "name": "mirror"
-      },
-      {
         "assetDir": "/phenix/topologies/burger-soap",
         "hosts": [
-          {
-            "hostname": "ignition",
-            "metadata": {
-              "labels": [
-                "ignition"
-              ]
-            }
-          },
           {
             "hostname": "power-provider",
             "metadata": {
@@ -181,7 +152,7 @@
                     "hostname": "power-provider",
                     "start": [
                       {
-                        "args": "pgrep -f pybennu-power-solver",
+                        "args": "pgrep -f '(^|/)pybennu-power-solver( |$)'",
                         "type": "exec",
                         "wait": true
                       }
@@ -191,15 +162,6 @@
               },
               "name": "health",
               "type": "cc"
-            },
-            {
-              "metadata": {
-                "current_disruption": "baseline",
-                "permutation": 0,
-                "run_duration": 60
-              },
-              "name": "baseline",
-              "type": "disruption"
             },
             {
               "metadata": {
@@ -222,6 +184,15 @@
               "metadata": {},
               "name": "collector",
               "type": "collector"
+            },
+            {
+              "metadata": {
+                "current_disruption": "baseline",
+                "permutation": 0,
+                "run_duration": 60
+              },
+              "name": "disruption",
+              "type": "disruption"
             }
           ],
           "runs": [
@@ -243,7 +214,7 @@
               "start": [
                 "rtds",
                 "providerdata",
-                "baseline"
+                "disruption"
               ],
               "stop": [
                 "providerdata",

@@ -130,6 +130,12 @@
                         "wait": true
                       },
                       {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
                         "type": "exec",
                         "wait": true
@@ -140,15 +146,8 @@
                         "wait": true
                       },
                       {
-                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query",
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
                         "type": "exec",
-                        "validator": "grep -q 'lock' || { echo \"$1: provider query returned no waterway tags\" >&2; exit 1; }",
-                        "wait": true
-                      },
-                      {
-                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "type": "exec",
-                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
                         "wait": true
                       }
                     ]
@@ -169,6 +168,12 @@
                         "wait": true
                       },
                       {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
                         "type": "exec",
                         "wait": true
@@ -179,15 +184,8 @@
                         "wait": true
                       },
                       {
-                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query",
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
                         "type": "exec",
-                        "validator": "grep -q 'lock' || { echo \"$1: provider query returned no waterway tags\" >&2; exit 1; }",
-                        "wait": true
-                      },
-                      {
-                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "type": "exec",
-                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
                         "wait": true
                       }
                     ]
@@ -208,6 +206,12 @@
                         "wait": true
                       },
                       {
+                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
+                        "type": "exec",
+                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
                         "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
                         "type": "exec",
                         "wait": true
@@ -215,12 +219,6 @@
                       {
                         "args": "pgrep -f '(^|/)simulinksolver( |$)'",
                         "type": "exec",
-                        "wait": true
-                      },
-                      {
-                        "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "type": "exec",
-                        "validator": "v=$(cat); [ \"$v\" = 6.0.1.abc1234 ] || { echo \"$1 runs bennu $v, want 6.0.1.abc1234\" >&2; exit 1; }",
                         "wait": true
                       }
                     ]

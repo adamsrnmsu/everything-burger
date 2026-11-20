@@ -39,3 +39,9 @@ out of the hooks (they need `BURGER_TOPOLOGIES`); run `make test` before pushing
 BURGER_TOPOLOGIES=../sceptre-phenix-topologies make test    # tests skip without topologies
 make check                                                  # ruff and vulture
 ```
+
+The render tests compare against `tests/golden/<board>[.linux].{topology,scenario}.json`. When
+a change moves a render on purpose, `BURGER_TOPOLOGIES=../sceptre-phenix-topologies make goldens`
+rewrites them from the same render path the tests use (`make goldens BOARDS="main harden"` for
+some boards), as `json.dumps(doc, indent=2, sort_keys=True)` plus a newline. Read the diff. Boards
+whose topology directory is missing from the checkout are skipped, so use a checkout that has them.

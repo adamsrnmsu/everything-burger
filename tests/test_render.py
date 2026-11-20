@@ -81,11 +81,6 @@ def test_every_switchboard_has_a_golden_case():
 def test_golden_topology(settings, topologies, name, linux_only):
     _, _, topo, _ = build(settings, topologies, name, linux_only)
     want = golden(name, linux_only, "topology")
-    if name == "provider":  # soap's drop_nodes now apply
-        gone = {"ignition", "netmonitor", "attacker"}
-        want["spec"]["nodes"] = [
-            n for n in want["spec"]["nodes"] if n["general"]["hostname"] not in gone
-        ]
     assert topo == want
 
 
@@ -93,12 +88,6 @@ def test_golden_topology(settings, topologies, name, linux_only):
 def test_golden_scenario_apps(settings, topologies, name, linux_only):
     _, _, _, scen = build(settings, topologies, name, linux_only)
     want = non_scorch(golden(name, linux_only, "scenario"))
-    if name == "provider":
-        want = [a for a in want if a["name"] != "mirror"]
-        gone = {"ignition", "netmonitor", "attacker"}
-        for a in want:
-            if a.get("hosts"):
-                a["hosts"] = [h for h in a["hosts"] if h["hostname"] not in gone]
     assert non_scorch(scen) == want
 
 

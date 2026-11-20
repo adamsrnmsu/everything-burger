@@ -2,17 +2,16 @@
   "apiVersion": "phenix.sandia.gov/v2",
   "kind": "Scenario",
   "metadata": {
-    "name": "ebwes-opcexp",
-    "created": "",
-    "updated": "",
     "annotations": {
       "topology": "ebwes-opcexp"
-    }
+    },
+    "created": "",
+    "name": "ebwes-opcexp",
+    "updated": ""
   },
   "spec": {
     "apps": [
       {
-        "name": "sceptre",
         "assetDir": "/phenix/topologies/burger-waterway",
         "hosts": [
           {
@@ -66,6 +65,11 @@
           {
             "hostname": "rtu-1",
             "metadata": {
+              "infrastructure": "waterway",
+              "labels": [
+                "elk"
+              ],
+              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
               "modbus": [
                 {
                   "name": "lowerwater",
@@ -92,11 +96,6 @@
                   "type": "boat-sensor"
                 }
               ],
-              "infrastructure": "waterway",
-              "labels": [
-                "elk"
-              ],
-              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
               "provider": "simulink-provider",
               "type": "fd-server"
             }
@@ -104,6 +103,11 @@
           {
             "hostname": "rtu-2",
             "metadata": {
+              "infrastructure": "waterway",
+              "labels": [
+                "elk"
+              ],
+              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
               "modbus": [
                 {
                   "name": "upperwater",
@@ -130,53 +134,46 @@
                   "type": "boat-sensor"
                 }
               ],
-              "infrastructure": "waterway",
-              "labels": [
-                "elk"
-              ],
-              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
               "provider": "simulink-provider",
               "type": "fd-server"
             }
           }
-        ]
+        ],
+        "name": "sceptre"
       },
       {
-        "name": "scorch",
         "metadata": {
           "components": [
             {
-              "name": "health",
-              "type": "cc",
               "metadata": {
                 "vms": [
                   {
                     "hostname": "rtu-1",
                     "start": [
                       {
-                        "type": "exec",
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "wait": true,
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
+                        "type": "exec",
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
+                        "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
+                        "type": "exec",
                         "wait": true
                       }
                     ]
@@ -185,29 +182,29 @@
                     "hostname": "rtu-2",
                     "start": [
                       {
-                        "type": "exec",
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "wait": true,
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
+                        "type": "exec",
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
+                        "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
                         "wait": true
                       },
                       {
-                        "type": "exec",
                         "args": "ss -Htn state established '( sport = :502 )' | grep -q .",
+                        "type": "exec",
                         "wait": true
                       }
                     ]
@@ -216,52 +213,54 @@
                     "hostname": "simulink-provider",
                     "start": [
                       {
-                        "type": "exec",
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
-                        "wait": true,
-                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }"
-                      },
-                      {
                         "type": "exec",
-                        "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
+                        "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
                         "wait": true
                       },
                       {
+                        "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
                         "type": "exec",
+                        "wait": true
+                      },
+                      {
                         "args": "pgrep -f '(^|/)simulinksolver( |$)'",
+                        "type": "exec",
                         "wait": true
                       }
                     ]
                   }
                 ]
-              }
+              },
+              "name": "health",
+              "type": "cc"
             },
             {
-              "name": "es-stub",
-              "type": "cc",
               "metadata": {
                 "vms": [
                   {
                     "hostname": "simulink-provider",
                     "start": [
                       {
+                        "args": "cat > /tmp/burger-es-stub.py <<'PY'\nimport http.server\nclass H(http.server.BaseHTTPRequestHandler):\n    def do_GET(self):\n        body = b\"{}\"\n        self.send_response(200)\n        self.send_header(\"X-Elastic-Product\", \"Elasticsearch\")\n        self.send_header(\"Content-Type\", \"application/json\")\n        self.send_header(\"Content-Length\", str(len(body)))\n        self.end_headers()\n        self.wfile.write(body)\n    def log_message(self, *a):\n        pass\nhttp.server.HTTPServer((\"0.0.0.0\", 9200), H).serve_forever()\nPY\nsetsid nohup python3 /tmp/burger-es-stub.py </dev/null >/tmp/burger-es-stub.log 2>&1 &\nfor i in 1 2 3 4 5; do\n  ss -ltn | grep -q ':9200 ' && exit 0\n  sleep 1\ndone\necho 'es stub is not listening on 9200' >&2\nexit 1\n",
                         "type": "exec",
-                        "wait": true,
-                        "args": "cat > /tmp/burger-es-stub.py <<'PY'\nimport http.server\nclass H(http.server.BaseHTTPRequestHandler):\n    def do_GET(self):\n        body = b\"{}\"\n        self.send_response(200)\n        self.send_header(\"X-Elastic-Product\", \"Elasticsearch\")\n        self.send_header(\"Content-Type\", \"application/json\")\n        self.send_header(\"Content-Length\", str(len(body)))\n        self.end_headers()\n        self.wfile.write(body)\n    def log_message(self, *a):\n        pass\nhttp.server.HTTPServer((\"0.0.0.0\", 9200), H).serve_forever()\nPY\nsetsid nohup python3 /tmp/burger-es-stub.py </dev/null >/tmp/burger-es-stub.log 2>&1 &\nfor i in 1 2 3 4 5; do\n  ss -ltn | grep -q ':9200 ' && exit 0\n  sleep 1\ndone\necho 'es stub is not listening on 9200' >&2\nexit 1\n"
+                        "wait": true
                       }
                     ]
                   }
                 ]
-              }
+              },
+              "name": "es-stub",
+              "type": "cc"
             },
             {
-              "name": "opcexport-live",
-              "type": "opcexport",
               "metadata": {
-                "opc_hostname": "opc",
                 "elastic_ip": "172.16.1.2",
-                "elastic_port": 9200
-              }
+                "elastic_port": 9200,
+                "opc_hostname": "opc"
+              },
+              "name": "opcexport-live",
+              "type": "opcexport"
             }
           ],
           "runs": [
@@ -272,23 +271,24 @@
               ]
             },
             {
-              "name": "opcexport",
+              "cleanup": [
+                "opcexport-live"
+              ],
               "configure": [
                 "opcexport-live"
               ],
+              "name": "opcexport",
               "start": [
                 "es-stub",
                 "opcexport-live"
               ],
               "stop": [
                 "opcexport-live"
-              ],
-              "cleanup": [
-                "opcexport-live"
               ]
             }
           ]
-        }
+        },
+        "name": "scorch"
       }
     ]
   }

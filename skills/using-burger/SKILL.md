@@ -71,8 +71,7 @@ named check, then the in-VM logs above. Then `scorch <board>` again, or raise
 - Then run the tests (`make test`), with `BURGER_TOPOLOGIES` pointing at a
   sceptre-phenix-topologies checkout so the render tests run. If a golden
   differs because of your change, regenerate only that board's
-  `tests/golden/<board>*.json`: with `scripts/regen_goldens.py` if it exists,
-  otherwise as `json.dumps(doc, indent=2, sort_keys=True)`. Read the diff.
+  `tests/golden/<board>*.json` with `make goldens BOARDS=<board>`. Read the diff.
 
 ## On the rig
 
