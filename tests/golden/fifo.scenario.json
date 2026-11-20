@@ -168,7 +168,7 @@
                         "wait": true
                       },
                       {
-                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "args": "pgrep -f '(^|/)(bennu-field-device|bennu-field-deviced)( |$)'",
                         "type": "exec",
                         "wait": true
                       },
@@ -205,7 +205,7 @@
                         "wait": true
                       },
                       {
-                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "args": "pgrep -f '(^|/)(bennu-field-device|bennu-field-deviced)( |$)'",
                         "type": "exec",
                         "wait": true
                       },
@@ -242,7 +242,7 @@
                         "wait": true
                       },
                       {
-                        "args": "pgrep -f '(^|/)bennu-simulink-provider(-helics)?( |$)'",
+                        "args": "pgrep -f '(^|/)(bennu-simulink-provider|bennu-simulink-provider-helics)( |$)'",
                         "type": "exec",
                         "wait": true
                       },

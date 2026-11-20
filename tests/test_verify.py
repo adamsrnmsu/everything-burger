@@ -57,7 +57,7 @@ def test_health_attribution_unique_command(settings, monkeypatch):
     checks, rows, bad = _health_rows(
         settings,
         monkeypatch,
-        lambda cs: next(c for c in cs if "simulink-provider(" in c[2]["args"]),
+        lambda cs: next(c for c in cs if "simulink-provider-helics)" in c[2]["args"]),
     )
     sp = [(c, r) for c, r in zip(checks, rows, strict=True) if c[1] == bad[1]]
     n = [c for c, _ in sp].index(bad)

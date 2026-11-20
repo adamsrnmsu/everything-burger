@@ -142,6 +142,10 @@ def test_check_keys_cover_every_check():
     "check, run",
     [
         ({"process": {"host": "h", "name": "bennu-x"}}, "pgrep -f '(^|/)bennu-x( |$)'"),
+        (
+            {"process": {"host": "h", "name": ["a", "b.c"]}},
+            "pgrep -f '(^|/)(a|b.c)( |$)'",
+        ),
         ({"port": {"host": "h", "port": 502}}, "ss -Hltn '( sport = :502 )' | grep -q ."),
         (
             {"port": {"host": "h", "port": "502", "state": "established"}},
@@ -162,6 +166,8 @@ def test_process_and_port_expand_to_vm(settings, check, run):
     [
         ({"process": {"host": "h", "name": "x; reboot"}}, "must match"),
         ({"process": {"host": "h", "name": "x'y"}}, "must match"),
+        ({"process": {"host": "h", "name": ["ok", "x|y"]}}, "must match"),
+        ({"process": {"host": "h", "name": []}}, "list is empty"),
         ({"port": {"host": "h", "port": "502; reboot"}}, "must be an integer"),
         ({"port": {"host": "h", "port": 22, "state": "closed"}}, "must be listening or"),
     ],

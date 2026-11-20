@@ -211,9 +211,14 @@ def _expand(entry: dict, path: Path) -> dict:
     if name not in ("process", "port"):
         return entry
     if name == "process":
-        if not _NAME.fullmatch(str(spec["name"])):
-            raise BurgerError(f"{path}: process name {spec['name']!r} must match [A-Za-z0-9._-]+")
-        run = f"pgrep -f '(^|/){spec['name']}( |$)'"
+        names = spec["name"] if isinstance(spec["name"], list) else [spec["name"]]
+        if not names:
+            raise BurgerError(f"{path}: process name list is empty")
+        for n in names:
+            if not _NAME.fullmatch(str(n)):
+                raise BurgerError(f"{path}: process name {n!r} must match [A-Za-z0-9._-]+")
+        pattern = str(names[0]) if len(names) == 1 else f"({'|'.join(map(str, names))})"
+        run = f"pgrep -f '(^|/){pattern}( |$)'"
     else:
         state = spec.get("state", "listening")
         if state not in _SS:

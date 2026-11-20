@@ -73,7 +73,7 @@ def test_health_waterway_covers_old_checks(settings):
         "-Hltn",
         "state established",
         "bennu-probe",
-        "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+        "pgrep -f '(^|/)(bennu-field-device|bennu-field-deviced)( |$)'",
     ):
         assert want in args
     linux = "\n".join(

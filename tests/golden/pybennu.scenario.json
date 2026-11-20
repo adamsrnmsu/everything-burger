@@ -208,7 +208,7 @@
                         "wait": true
                       },
                       {
-                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "args": "pgrep -f '(^|/)(bennu-field-device|bennu-field-deviced)( |$)'",
                         "type": "exec",
                         "wait": true
                       },
@@ -241,7 +241,7 @@
                         "wait": true
                       },
                       {
-                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "args": "pgrep -f '(^|/)(bennu-field-device|bennu-field-deviced)( |$)'",
                         "type": "exec",
                         "wait": true
                       },
@@ -274,7 +274,7 @@
                         "wait": true
                       },
                       {
-                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "args": "pgrep -f '(^|/)(bennu-field-device|bennu-field-deviced)( |$)'",
                         "type": "exec",
                         "wait": true
                       },
@@ -307,7 +307,7 @@
                         "wait": true
                       },
                       {
-                        "args": "pgrep -f '(^|/)bennu-field-deviced?( |$)'",
+                        "args": "pgrep -f '(^|/)(bennu-field-device|bennu-field-deviced)( |$)'",
                         "type": "exec",
                         "wait": true
                       },
