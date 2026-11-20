@@ -31,8 +31,7 @@ def _install_checks(man: dict) -> list[dict]:
 
 def _version_check(deb: str | None) -> dict:
     """The PR build's version, or with no deb built, that bennu is installed at all."""
-    # No ${...} in any cc string: SCORCH templating eats it. And a command with
-    # a validator must print something: cc.py crashes on empty stdout.
+    # No ${...} in any cc string: SCORCH templating eats it.
     return _check(
         "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
         f'v=$(cat); [ "$v" = {shlex.quote(deb)} ] || '

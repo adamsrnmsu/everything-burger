@@ -29,10 +29,6 @@
     likely an image built without `phenix image inject-miniexe`, not a defect
     in `bennu.qc2` itself. `up` injects the minimega container's own `miniccc`
     either way, so the agent always matches the server.
-  - phenix-apps `scorch/cc/cc.py` crashes (`'NoneType' object has no attribute
-    'encode'`) when a command with a validator prints nothing; every health
-    command with a validator prints something. Reported as
-    [sceptre-phenix-apps#186](https://github.com/sandialabs/sceptre-phenix-apps/issues/186).
   - The vrouter app reports success when the minirouter CLI cannot reach its
     control socket, leaving router interfaces down. Once the VMs run, `up`
     re-sends each router's interface addresses over cc (busybox-safe `ip addr

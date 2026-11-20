@@ -231,8 +231,8 @@ def build_bennu(
 
 def bennu_check(host, wt: Path) -> None:
     """bennu's own docker harness (build, smoke, ctest, pytest, gotest) on the
-    build's bennu PR: the coverage for pybennu (#56) and gobennu (#57), which
-    waterway never runs."""
+    build's bennu PR: the coverage for pybennu and gobennu, which waterway never
+    runs."""
     if host.site:  # run.sh builds its image only when the tag is missing: give it ours
         build_dockerfile(host, wt / "docker" / "test", "bennu-verify:22.04-lint")
     host.run(
