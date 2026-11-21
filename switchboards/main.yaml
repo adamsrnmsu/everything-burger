@@ -51,6 +51,7 @@ items:
   apps/helics: on
   bennu/helics-otsim: on
   apps/helics-no-broker: on
+  apps/wireguard: on
   bennu/field-device: on
   bennu/simulink-provider: on
   bennu/modbus-polled: on

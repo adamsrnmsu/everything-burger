@@ -1,0 +1,9 @@
+# The wireguard app on the arm64 rig: a two-peer config between the RTUs, plus the range's
+# field devices for health. No tunnel comes up (no wireguard-tools in the images).
+about: "wireguard app on upstream main, on the arm64 waterway range"
+route: waterway-arm64
+apps: {prs: []}
+items:
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  apps/wireguard: on
