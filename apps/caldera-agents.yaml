@@ -1,0 +1,36 @@
+name: caldera-agents
+kind: app
+type: caldera
+about: >
+  The caldera phenix app deploying Sandcat agents. requires.caldera_server injects the
+  same `caldera` VM the caldera component drives (CALDERA_NODE, ICS 10.1.1.210), so the
+  app declares no `servers` of its own and points each host at it as `caldera` (interface 0,
+  the ICS address). The app turns that into /etc/phenix/startup/90-sandcat-agent.sh on
+  every listed Linux VM. A pass means each script targets http://10.1.1.210:8888, and
+  live that the Caldera server answers its API and lists the agents. Not covered: the
+  app's own `servers` nodes (burger injects the server instead), facts/adversary/config
+  injects, the Firefox bookmark/autostart files, Windows agents.
+routes: [waterway, waterway-arm64]
+hosts:
+  - hostname: "{route.rtus[0]}"
+    metadata: {server: caldera}
+  - hostname: "{route.rtus[1]}"
+    metadata: {server: caldera}
+requires: {caldera_server: true}
+verify:
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "grep -F 'server=\"http://10.1.1.210:8888\"' /etc/phenix/startup/90-sandcat-agent.sh"
+  - vm:
+      host: "{route.rtus[1]}"
+      run: "grep -F 'server=\"http://10.1.1.210:8888\"' /etc/phenix/startup/90-sandcat-agent.sh"
+  # live: the injected server answers its API (the image's default red key), and both
+  # agents the app deployed check in (polled: the agents start with the VMs)
+  - vm:
+      host: caldera
+      run: "for i in $(seq 30); do curl -sf -H 'KEY: ADMIN123' http://localhost:8888/api/v2/agents | grep -q '\"host\": *\"{route.rtus[0]}\"' && break; sleep 5; done; curl -sf -H 'KEY: ADMIN123' http://localhost:8888/api/v2/agents | grep -o '\"host\": *\"[^\"]*\"'"
+      expect: "{route.rtus[0]}"
+  - vm:
+      host: caldera
+      run: "curl -sf -H 'KEY: ADMIN123' http://localhost:8888/api/v2/agents | grep -o '\"host\": *\"[^\"]*\"'"
+      expect: "{route.rtus[1]}"

@@ -1,0 +1,10 @@
+# The caldera phenix app on the arm64 rig: Sandcat agents injected into both RTUs, pointing
+# at the caldera VM burger injects (requires.caldera_server, caldera-arm64.qc2). The
+# caldera component is not on this board (see `caldera`).
+about: "caldera app: Sandcat agents on the RTUs, checking in to the injected Caldera server"
+route: waterway-arm64
+apps: {prs: []}
+items:
+  apps/caldera-agents: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
