@@ -294,58 +294,75 @@ def _load(path) -> dict:
         raise BurgerError(f"{path}: {e}") from None
 
 
-def render(
-    res: Resolved, man: dict, topology_dir: Path | None, stage_dir: str, settings: Settings
-) -> tuple[dict, dict]:
-    """Build the switchboard's topology and scenario documents from its route's files."""
-    route, req, name = res.route, res.requires, res.board.exp
-    base = route.base
-    if base:
-        topo, scen = _load(base["topology"]), _load(base["scenario"])
+def _load_docs(route, topology_dir: Path | None, name: str) -> tuple[dict, dict]:
+    """The route's topology and scenario, renamed to the switchboard's experiment."""
+    if route.base:
+        topo, scen = _load(route.base["topology"]), _load(route.base["scenario"])
     else:
         topo = _load(Path(topology_dir) / route.files[0])
         scen = _load(Path(topology_dir) / route.files[1])
     topo["metadata"]["name"] = name
     scen["metadata"]["name"] = name
     scen["metadata"].setdefault("annotations", {})["topology"] = name
+    return topo, scen
 
-    nodes = topo["spec"]["nodes"]
-    dropped = set(route.drop_nodes) - set(req.keep_nodes)
+
+def _drop_nodes(res: Resolved, nodes: list[dict], scen: dict) -> None:
+    """Remove the route's dropped nodes (and Windows under --linux-only) and their app hosts;
+    an app whose every host went is removed too (soap's mirror to netmonitor)."""
+    dropped = set(res.route.drop_nodes) - set(res.requires.keep_nodes)
     if res.linux_only:
-        dropped |= {
-            n["general"]["hostname"] for n in nodes if n["hardware"]["os_type"] == "windows"
-        }
-    if dropped:
-        nodes[:] = [n for n in nodes if n["general"]["hostname"] not in dropped]
-        apps = []
-        for app in scen["spec"]["apps"]:
-            if app.get("hosts"):
-                app["hosts"] = [h for h in app["hosts"] if h["hostname"] not in dropped]
-                if not app["hosts"]:  # every host dropped (soap's mirror to netmonitor)
-                    continue
-            apps.append(app)
-        scen["spec"]["apps"] = apps
-    injected = []
-    if req.monitor:
-        injected.append(copy.deepcopy(MONITOR_NODE))
-    has_kali = any(n["general"]["hostname"] == "kali" for n in nodes)  # the mitm topology has one
-    if req.attacker and not has_kali:
-        injected.append(copy.deepcopy(KALI_NODE))
-    if req.traffic_gen:
-        injected.extend(copy.deepcopy(TRAFFIC_NODES))
-    if req.caldera_server:
-        injected.append(copy.deepcopy(CALDERA_NODE))
+        dropped |= {n["general"]["hostname"] for n in nodes if _is_windows(n)}
+    if not dropped:
+        return
+    nodes[:] = [n for n in nodes if n["general"]["hostname"] not in dropped]
+    apps = []
+    for app in scen["spec"]["apps"]:
+        if app.get("hosts"):
+            app["hosts"] = [h for h in app["hosts"] if h["hostname"] not in dropped]
+            if not app["hosts"]:
+                continue
+        apps.append(app)
+    scen["spec"]["apps"] = apps
+
+
+def _is_windows(node: dict) -> bool:
+    return node["hardware"].get("os_type") == "windows"
+
+
+def _required_nodes(req) -> list[dict]:
+    """The nodes burger's own items need: they are injected and get burger's miniccc."""
+    return [
+        *([MONITOR_NODE] if req.monitor else []),
+        *([KALI_NODE] if req.attacker else []),
+        *(TRAFFIC_NODES if req.traffic_gen else []),
+        *([CALDERA_NODE] if req.caldera_server else []),
+    ]
+
+
+def _add_nodes(route, req, nodes: list[dict]) -> None:
+    """Inject the required nodes the topology lacks (the mitm topology has its own kali)."""
+    have = {n["general"]["hostname"] for n in nodes}
+    added = [copy.deepcopy(n) for n in _required_nodes(req) if n["general"]["hostname"] not in have]
     if route.arm64:
-        for n in injected:
+        for n in added:
             arm64_node(n, route.image_map)
-    nodes.extend(injected)
-    if req.mgmt_vlan:  # exercise case-insensitive mgmt VLAN matching (#158)
-        for n in nodes:
-            for iface in n["network"]["interfaces"]:
-                if iface.get("vlan") == "MGMT":
-                    iface["vlan"] = req.mgmt_vlan
+    nodes.extend(added)
+
+
+def _rename_mgmt_vlan(nodes: list[dict], vlan: str | None) -> None:
+    """Exercise case-insensitive mgmt VLAN matching (#158)."""
+    if not vlan:
+        return
+    for n in nodes:
+        for iface in n["network"]["interfaces"]:
+            if iface.get("vlan") == "MGMT":
+                iface["vlan"] = vlan
+
+
+def _check_hosts(res: Resolved, nodes: list[dict], bennu_nodes: list[str]) -> None:
     hosts = {n["general"]["hostname"] for n in nodes}
-    bennu_nodes = route.bennu_nodes if man.get("bennu") else []
+    req = res.requires
     for key, want in (
         ("bennu_nodes", bennu_nodes),
         ("cc_nodes", req.cc_nodes),
@@ -358,32 +375,45 @@ def render(
             raise BurgerError(
                 f"switchboard '{res.board.name}' {key} {missing} are not in the topology"
             )
-    for n in nodes:
-        if n["general"]["hostname"] in bennu_nodes:
-            n.setdefault("injections", []).extend(bennu_injections(man, stage_dir))
-    if settings.mm_ctr:  # Windows images carry their own working miniccc
-        cc_hosts = (
-            set(req.cc_nodes or route.bennu_nodes)
-            | ({"monitor"} if req.monitor else set())
-            | ({"kali"} if req.attacker else set())
-            | ({n["general"]["hostname"] for n in TRAFFIC_NODES} if req.traffic_gen else set())
-            | ({"caldera"} if req.caldera_server else set())
-        )
-        for n in nodes:
-            if n["general"]["hostname"] in cc_hosts and n["hardware"].get("os_type") != "windows":
-                n.setdefault("injections", []).extend(miniccc_injections(stage_dir))
-    for n in nodes:
-        if n["general"]["hostname"] in req.debs_nodes:
-            n.setdefault("injections", []).extend(debs_injections(stage_dir))
-        if req.iperf_static and n["general"]["hostname"] in req.iperf_nodes:
-            n.setdefault("injections", []).extend(iperf_injections(stage_dir, req.iperf_static))
-        if n["general"]["hostname"] in req.goart_nodes:
-            n.setdefault("injections", []).extend(goart_injections(stage_dir))
 
+
+def _injections(res, man, stage_dir, settings, nodes) -> list[tuple[set, list[dict]]]:
+    """Which hosts get which injections, in the order a node receives them."""
+    req = res.requires
+    bennu_nodes = res.route.bennu_nodes if man.get("bennu") else []
+    cc_hosts = set()
+    if settings.mm_ctr:  # Windows images carry their own working miniccc
+        linux = {n["general"]["hostname"] for n in nodes if not _is_windows(n)}
+        cc_hosts = linux & (
+            set(req.cc_nodes or res.route.bennu_nodes)
+            | {n["general"]["hostname"] for n in _required_nodes(req)}
+        )
+    return [
+        (set(bennu_nodes), bennu_injections(man, stage_dir) if bennu_nodes else []),
+        (cc_hosts, miniccc_injections(stage_dir)),
+        (set(req.debs_nodes), debs_injections(stage_dir)),
+        (
+            set(req.iperf_nodes) if req.iperf_static else set(),
+            iperf_injections(stage_dir, req.iperf_static),
+        ),
+        (set(req.goart_nodes), goart_injections(stage_dir)),
+    ]
+
+
+def _inject(nodes: list[dict], injections: list[tuple[set, list[dict]]]) -> None:
+    for n in nodes:
+        for hosts, files in injections:
+            if n["general"]["hostname"] in hosts:
+                n.setdefault("injections", []).extend(copy.deepcopy(files))
+
+
+def _scenario_apps(res: Resolved, man: dict, scen: dict) -> None:
+    """The base scenario's apps, then the items' apps, then the switchboard's SCORCH
+    pipeline (which replaces any the base scenario already has)."""
     components, runs = compose(res, man)
     extra = []
     for i in res.items:
-        # mgmt-vlan-alias only renames the VLAN above; it is not a scenario app.
+        # mgmt-vlan-alias only renames the VLAN; it is not a scenario app.
         if i.kind == "app" and not i.requires.get("mgmt_vlan"):
             app = {"name": i.type or i.name}
             if i.config:
@@ -391,21 +421,37 @@ def render(
             if i.hosts:
                 app["hosts"] = copy.deepcopy(i.hosts)
             extra.append(app)
-    # The switchboard's pipeline replaces any the base scenario already has.
     scen["spec"]["apps"] = [a for a in scen["spec"]["apps"] if a["name"] != "scorch"]
     scen["spec"]["apps"] += extra
     scen["spec"]["apps"].append(
         {"name": "scorch", "metadata": {"components": components, "runs": runs}}
     )
 
+
+def _replace(doc: dict, old: str, new: str) -> dict:
+    return json.loads(json.dumps(doc).replace(old, new))
+
+
+def render(
+    res: Resolved, man: dict, topology_dir: Path | None, stage_dir: str, settings: Settings
+) -> tuple[dict, dict]:
+    """Build the switchboard's topology and scenario documents from its route's files."""
+    route = res.route
+    topo, scen = _load_docs(route, topology_dir, res.board.exp)
+    nodes = topo["spec"]["nodes"]
+    _drop_nodes(res, nodes, scen)
+    _add_nodes(route, res.requires, nodes)
+    _rename_mgmt_vlan(nodes, res.requires.mgmt_vlan)
+    _check_hosts(res, nodes, route.bennu_nodes if man.get("bennu") else [])
+    _inject(nodes, _injections(res, man, stage_dir, settings, nodes))
+    _scenario_apps(res, man, scen)
+
     # Items that stage assets (requires-free `assets:`) reference them with the
     # {asset_dir} token; it resolves to where `up` puts them under the stage dir.
-    asset_dir = f"{stage_dir}/assets"
-    scen = json.loads(json.dumps(scen).replace("{asset_dir}", asset_dir))
-
-    if base:  # its assets are already where its scenario says
+    scen = _replace(scen, "{asset_dir}", f"{stage_dir}/assets")
+    if route.base:  # its assets are already where its scenario says
         return topo, scen
     # Both documents: soap's topology injects from its asset directory too.
     stock = f"/phenix/topologies/{route.topology_dir}"
     ours = f"{settings.phenix_dir}/topologies/burger-{route.topology_dir}"
-    return tuple(json.loads(json.dumps(d).replace(stock, ours)) for d in (topo, scen))
+    return _replace(topo, stock, ours), _replace(scen, stock, ours)
