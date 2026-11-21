@@ -1,0 +1,17 @@
+name: scale-wind-bad-density
+kind: app
+type: scale
+about: >
+  A scale wind_turbine profile with containers_per_node 7. A turbine is six containers, so
+  the density must be a multiple of 6 and configure must reject 7 ("Input should be a
+  multiple of 6") rather than split a turbine across two VMs. Validate-only: judged with the
+  app's configure stage under --dry-run (see scale-unknown-plugin).
+routes: []
+expect_invalid: "Input should be a multiple of 6"
+config:
+  profiles:
+    - name: farm
+      plugin: wind_turbine
+      count: 2
+      containers_per_node: 7
+      container_template: {external_network: {name: EXT, network: 192.168.100.0/24}}

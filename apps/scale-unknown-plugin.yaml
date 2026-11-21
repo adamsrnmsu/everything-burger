@@ -1,0 +1,12 @@
+name: scale-unknown-plugin
+kind: app
+type: scale
+about: >
+  The scale app with a profile naming a plugin nothing registered. configure must stop with
+  "Failed to load scale plugin 'nosuch'" (and list the plugins it has) rather than skip the
+  profile, so a typo never silently builds no nodes. Validate-only: `burger check` and
+  `burger verify` run the app's configure stage with --dry-run and pass when it fails with
+  that message. Needs a synced board, and `uv` or this board's apps installed in phēnix.
+routes: []
+expect_invalid: "Failed to load scale plugin 'nosuch'"
+config: {profiles: [{name: typo, plugin: nosuch, count: 1}]}

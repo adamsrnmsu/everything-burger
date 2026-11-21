@@ -1,0 +1,10 @@
+# The standalone wind-turbine app on the arm64 rig. It writes /etc/ot-sim/config.xml on the
+# same nodes as the otsim item, so it has its own board; field-device and the provider are
+# the range's own, for health.
+about: "wind-turbine app on upstream main, on the arm64 waterway range"
+route: waterway-arm64
+apps: {prs: []}
+items:
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  apps/wind-turbine: on

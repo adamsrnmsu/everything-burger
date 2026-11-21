@@ -1,0 +1,101 @@
+{
+  "metadata": {
+    "name": "t",
+    "annotations": {}
+  },
+  "spec": {
+    "experimentName": "t",
+    "baseDir": "/tmp/fx",
+    "topology": {
+      "nodes": [
+        {
+          "general": {
+            "hostname": "rtu-1"
+          }
+        },
+        {
+          "type": "VirtualMachine",
+          "general": {
+            "hostname": "v2-node-1",
+            "vm_type": "kvm"
+          },
+          "hardware": {
+            "vcpus": 1,
+            "memory": 512,
+            "os_type": "linux",
+            "drives": [
+              {
+                "image": "minimeta.qc2"
+              }
+            ]
+          },
+          "network": {
+            "interfaces": [
+              {
+                "name": "ens1",
+                "type": "ethernet",
+                "proto": "manual",
+                "vlan": "0"
+              }
+            ]
+          },
+          "injections": [
+            {
+              "src": "/private/tmp/fx/scale/v2-node-1-startup.sh",
+              "dst": "/etc/phenix/startup/999-scale.sh"
+            }
+          ]
+        },
+        {
+          "type": "VirtualMachine",
+          "general": {
+            "hostname": "v2-node-2",
+            "vm_type": "kvm"
+          },
+          "hardware": {
+            "vcpus": 1,
+            "memory": 512,
+            "os_type": "linux",
+            "drives": [
+              {
+                "image": "minimeta.qc2"
+              }
+            ]
+          },
+          "network": {
+            "interfaces": [
+              {
+                "name": "ens1",
+                "type": "ethernet",
+                "proto": "manual",
+                "vlan": "0"
+              }
+            ]
+          },
+          "injections": [
+            {
+              "src": "/private/tmp/fx/scale/v2-node-2-startup.sh",
+              "dst": "/etc/phenix/startup/999-scale.sh"
+            }
+          ]
+        }
+      ]
+    },
+    "scenario": {
+      "apps": [
+        {
+          "name": "scale",
+          "metadata": {
+            "profiles": [
+              {
+                "name": "b",
+                "plugin": "builtin",
+                "count": 2
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -56,6 +56,11 @@ items:
   apps/wireguard: on
   apps/protonuke: on
   apps/protonuke-newline: on
+  apps/scale-unknown-plugin: on
+  apps/scale-wind-no-external-network: on
+  apps/scale-wind-bad-density: on
+  apps/scale-builtin-expands: on
+  apps/scale-wind-expands: on
   bennu/field-device: on
   bennu/simulink-provider: on
   bennu/modbus-polled: on

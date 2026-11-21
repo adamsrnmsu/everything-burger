@@ -1,0 +1,12 @@
+name: scale-wind-no-external-network
+kind: app
+type: scale
+about: >
+  A scale wind_turbine profile without container_template.external_network. The plugin
+  needs it for each turbine's main controller address, so configure must reject the profile
+  ("external_network must be defined"), not build VMs whose containers have no uplink.
+  Validate-only: judged with the app's configure stage under --dry-run (see
+  scale-unknown-plugin).
+routes: []
+expect_invalid: "external_network must be defined in container_template"
+config: {profiles: [{name: farm, plugin: wind_turbine, count: 2}]}

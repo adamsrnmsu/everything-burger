@@ -1,0 +1,115 @@
+name: wind-turbine
+kind: app
+type: wind-turbine
+about: >
+  The standalone wind-turbine app (deprecated upstream in favour of the scale app's
+  wind_turbine plugin) writing one OT-sim config per turbine role onto waterway-arm64's
+  Linux nodes: rtu-1 the main controller, rtu-2 the anemometer, the provider the yaw
+  controller, opc / historian / hmi the three blades. Each gets /etc/ot-sim/config.xml
+  (the anemometer also /etc/ot-sim/data/weather.csv, staged from assets/wind (flat, as {asset_dir}/weather.csv)). A pass
+  means each VM got the config of its role with the right modules, tags and endpoints:
+  the main controller a Modbus client per controlled node and a DNP3 outstation, the
+  others a Modbus server. ot-sim is not in the arm64 range's images, so nothing runs the
+  configs; HELICS, node-red and the ground-truth module are not covered. It writes the same
+  /etc/ot-sim/config.xml as the otsim item on the rtus and the provider, so the two never
+  share a board: the `wind` board runs this one.
+routes: [waterway-arm64]
+assets: [assets/wind/weather.csv]
+requires:
+  # cc_nodes replaces the route's bennu nodes as the hosts miniccc goes to, so list them too
+  cc_nodes: ["{route.rtus[0]}", "{route.rtus[1]}", "{route.provider}", opc, historian, hmi]
+config:
+  templates:
+    default:
+      main-controller:
+        turbine: {type: E-126/4200, hubHeight: 135, roughnessLength: 0.15}
+        logic: {speedTag: speed.high, directionTag: dir.high, directionError: 0.04}
+        weather:
+          columns:
+            - {name: wind_speed, tags: [{name: speed.high, height: 58.2}, {name: speed.med, height: 36.6}, {name: speed.low, height: 15.0}]}
+            - {name: temperature, tags: [{name: temp.high, height: 58.2}, {name: temp.low, height: 3.0}]}
+            - {name: pressure, tags: [{name: pressure, height: 0.0}]}
+      anemometer:
+        weather:
+          replayData: "{asset_dir}/weather.csv"
+          columns:
+            - {name: Windspeed 58.2m, tag: speed.high}
+            - {name: Windspeed 36.6m, tag: speed.med}
+            - {name: Windspeed 15.0m, tag: speed.low}
+            - {name: Wind Direction 58.2m, tag: dir.high}
+            - {name: Wind Direction 36.6m, tag: dir.med}
+            - {name: Wind Direction 15.0m, tag: dir.low}
+            - {name: Temperature 58.2m, tag: temp.high}
+            - {name: Temperature 3.0m, tag: temp.low}
+            - {name: Barometric Pressure, tag: pressure}
+      yaw-controller:
+        yaw: {initialPosition: 0, degreePerSecond: 0.1}
+hosts:
+  - hostname: "{route.rtus[0]}"
+    metadata:
+      type: main-controller
+      template: default
+      controllers:
+        anemometer: "{route.rtus[1]}"
+        yaw: "{route.provider}"
+        blades: [opc, historian, hmi]
+  - hostname: "{route.rtus[1]}"
+    metadata: {type: anemometer, template: default}
+  - hostname: "{route.provider}"
+    metadata: {type: yaw-controller, template: default}
+verify:
+  # main controller (rtu-1): the power-output and DNP3 modules, a Modbus client per
+  # controlled node (anemometer rtu-2, yaw on the provider's only IP, three blades) and
+  # a DNP3 outstation on its own IF0
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "grep -q ot-sim-wind-turbine-power-output-module /etc/ot-sim/config.xml && grep -q ot-sim-dnp3-module /etc/ot-sim/config.xml"
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "grep -A1 'modbus name=.rtu-2. mode=.client.' /etc/ot-sim/config.xml"
+      expect: "<endpoint>10.1.1.102:502</endpoint>"
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "grep -A1 'modbus name=.waterway-provider. mode=.client.' /etc/ot-sim/config.xml"
+      expect: "<endpoint>172.16.1.2:502</endpoint>"
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "grep -A1 'modbus name=.opc. mode=.client.' /etc/ot-sim/config.xml | grep -q '<endpoint>10.1.2.50:502</endpoint>' && grep -A1 'modbus name=.historian. mode=.client.' /etc/ot-sim/config.xml | grep -q '<endpoint>10.1.2.60:502</endpoint>' && grep -A1 'modbus name=.hmi. mode=.client.' /etc/ot-sim/config.xml | grep -q '<endpoint>10.1.2.70:502</endpoint>'"
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "grep -A1 'dnp3 name=.dnp3-outstation. mode=.server.' /etc/ot-sim/config.xml"
+      expect: "<endpoint>10.1.1.101:20000</endpoint>"
+  # anemometer (rtu-2): a Modbus server on its IF0 serving the weather tags, the replay
+  # file staged from assets/wind (flat, as {asset_dir}/weather.csv) into the VM and named by the config
+  - vm:
+      host: "{route.rtus[1]}"
+      run: "grep -A1 'modbus name=.modbus-outstation. mode=.server.' /etc/ot-sim/config.xml"
+      expect: "<endpoint>10.1.1.102:502</endpoint>"
+  - vm:
+      host: "{route.rtus[1]}"
+      run: "grep -q '<tag>speed.high</tag>' /etc/ot-sim/config.xml && grep -q ot-sim-wind-turbine-anemometer-module /etc/ot-sim/config.xml"
+  - vm:
+      host: "{route.rtus[1]}"
+      run: "head -1 /etc/ot-sim/data/weather.csv"
+      expect: "Windspeed 58.2m"
+  # yaw controller (provider): a Modbus server on its only (mgmt) IP and the yaw logic
+  - vm:
+      host: "{route.provider}"
+      run: "grep -A1 'modbus name=.modbus-outstation. mode=.server.' /etc/ot-sim/config.xml"
+      expect: "<endpoint>172.16.1.2:502</endpoint>"
+  - vm:
+      host: "{route.provider}"
+      run: "grep -q '<tag>yaw.setpoint</tag>' /etc/ot-sim/config.xml && grep -q '<logic name=.yaw-controller.>' /etc/ot-sim/config.xml"
+  # blades: a Modbus server each on its own IF0, serving the feathered coil
+  - vm:
+      host: opc
+      run: "grep -A1 'modbus name=.modbus-outstation. mode=.server.' /etc/ot-sim/config.xml"
+      expect: "<endpoint>10.1.2.50:502</endpoint>"
+  - vm:
+      host: historian
+      run: "grep -A1 'modbus name=.modbus-outstation. mode=.server.' /etc/ot-sim/config.xml"
+      expect: "<endpoint>10.1.2.60:502</endpoint>"
+  - vm:
+      host: hmi
+      run: "grep -A1 'modbus name=.modbus-outstation. mode=.server.' /etc/ot-sim/config.xml"
+      expect: "<endpoint>10.1.2.70:502</endpoint>"

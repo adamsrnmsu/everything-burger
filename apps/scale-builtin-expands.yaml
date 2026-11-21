@@ -1,0 +1,32 @@
+name: scale-builtin-expands
+kind: app
+type: scale
+about: >
+  The scale app's builtin plugin on two profiles, one pinned to 1.0.0 and one on the latest
+  (2.0.0, which prefixes hostnames with v2-). Pinned: 23 containers at 5 per VM is 5 VMs,
+  node-1 to node-5. Latest: count 2 is 2 VMs, v2-node-1 and v2-node-2. A pass means configure
+  adds exactly those 7 nodes to the topology, each with scale's startup script injected at
+  /etc/phenix/startup/999-scale.sh. No board can run them: scale's VMs default to
+  minimeta.qc2 (the rig has no such image), carry no arm64 hardware block and no miniccc,
+  and their startup script waits for a minimega inside the VM. Judged offline by `burger check`
+  and `burger verify` on the synced board's apps (`expect_nodes`). Not covered: post-start (the
+  minimega .mm files and container addressing), containers actually launching.
+routes: []
+expect_nodes:
+  node-1: [/etc/phenix/startup/999-scale.sh]
+  node-2: [/etc/phenix/startup/999-scale.sh]
+  node-3: [/etc/phenix/startup/999-scale.sh]
+  node-4: [/etc/phenix/startup/999-scale.sh]
+  node-5: [/etc/phenix/startup/999-scale.sh]
+  v2-node-1: [/etc/phenix/startup/999-scale.sh]
+  v2-node-2: [/etc/phenix/startup/999-scale.sh]
+config:
+  profiles:
+    - name: pinned
+      plugin: {name: builtin, version: "1.0.0"}
+      containers: 23
+      containers_per_node: 5
+      container_template: {rootfs: foobar.tgz}
+    - name: latest
+      plugin: builtin
+      count: 2
