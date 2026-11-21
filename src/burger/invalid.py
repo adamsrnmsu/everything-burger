@@ -36,37 +36,45 @@ def expected(res: Resolved, kind: str) -> list[Item]:
     return [i for i in [*res.items, *res.validate_only] if i.expect_invalid and i.kind == kind]
 
 
-def judge(output: str, expect: dict[str, str]) -> tuple[list[str], list[Row]]:
-    """Read phenix-scorch-validate output against {component: regex}.
-
-    Returns the `invalid` records no item expected, and a row per expected item.
-    A record can span lines (pydantic's message does), so split on the status words.
-    """
+def _records(output: str, names) -> tuple[list[str], dict]:
+    """The `invalid` records no item expected, and {name: (status, record)} for those expected."""
     unexpected, found = [], {}
     for rec in _RECORD.split(output):
         # a record is its first line plus the indented ones; the rest is log noise
         head, *more = rec.split("\n")
         rec = "\n".join([head, *(ln for ln in more[: _indented(more)])])
         m = _HEAD.match(rec)
-        if m and m[2] in expect:
+        if m and m[2] in names:
             if m[1] != "warning":
                 found[m[2]] = (m[1], rec)
         elif rec.startswith("invalid"):
             unexpected.append(" ".join(rec.split()))
-    rows = []
-    for name, want in expect.items():
-        kind, rec = found.get(name, ("", ""))
-        msg = " ".join(rec.split()).split("): ", 1)[-1][:200]  # drop the path and name
-        if kind == "invalid" and re.search(want, rec):
-            row = ("ok", msg)
-        elif kind == "invalid":
-            row = ("FAIL", f"rejected, but not matching /{want}/: {msg}")
-        elif kind:
-            row = ("FAIL", f"{kind}, want it rejected: {msg}")
-        else:
-            row = ("FAIL", "the validator did not report this component")
-        rows.append(Row(name, f"rejected by {VALIDATOR}", *row, []))
-    return unexpected, rows
+    return unexpected, found
+
+
+def _expected_row(name: str, want: str, kind: str, rec: str) -> Row:
+    msg = " ".join(rec.split()).split("): ", 1)[-1][:200]  # drop the path and name
+    if kind == "invalid" and re.search(want, rec):
+        row = ("ok", msg)
+    elif kind == "invalid":
+        row = ("FAIL", f"rejected, but not matching /{want}/: {msg}")
+    elif kind:
+        row = ("FAIL", f"{kind}, want it rejected: {msg}")
+    else:
+        row = ("FAIL", "the validator did not report this component")
+    return Row(name, f"rejected by {VALIDATOR}", *row, [])
+
+
+def judge(output: str, expect: dict[str, str]) -> tuple[list[str], list[Row]]:
+    """Read phenix-scorch-validate output against {component: regex}.
+
+    Returns the `invalid` records no item expected, and a row per expected item.
+    A record can span lines (pydantic's message does), so split on the status words.
+    """
+    unexpected, found = _records(output, expect)
+    return unexpected, [
+        _expected_row(name, want, *found.get(name, ("", ""))) for name, want in expect.items()
+    ]
 
 
 def _skip(items, why: str) -> list[Row]:
@@ -111,6 +119,47 @@ def _stage(host, entry: str, stage: str, stdin: str):
     return host.run([*pre, entry, stage, "--dry-run"], check=False, capture=True, input=stdin)
 
 
+def _app_experiment(res: Resolved, item: Item, topo: dict, workdir: Path) -> dict:
+    return {
+        "metadata": {"name": res.board.exp, "annotations": {}},
+        "spec": {
+            "experimentName": res.board.exp,
+            "baseDir": str(workdir / item.name),
+            "topology": topo["spec"],
+            "scenario": {"apps": [{"name": item.type, "metadata": item.config}]},
+        },
+    }
+
+
+def _dry_run_stages(res: Resolved, settings, host, src: Path, item: Item, stdin: str):
+    """(stage, result) of the first stage that exits non-zero, else of the last stage."""
+    entry = f"phenix-app-{item.type}"
+    for stage in ("configure", "pre-start"):
+        got = host.run(
+            [*UV, src, entry, stage, "--dry-run"], check=False, capture=True, input=stdin
+        )
+        if got.returncode == 127:  # no uv: use the apps installed in phēnix, if they are
+            if not _installed(res, settings, host):  # this board's; needs no index
+                break
+            got = _stage(host, entry, stage, stdin)
+        if got.returncode:
+            break
+    return stage, got
+
+
+def _app_row(item: Item, stage: str, got) -> list[Row]:
+    out = f"{got.stdout}{got.stderr}"
+    label = f"{item.type} {stage} rejects"
+    if got.returncode == 127:
+        return _skip([item], "uv not found, and this board's apps are not installed in phēnix")
+    if not got.returncode:
+        return [Row(item.name, label, "FAIL", "every stage accepted the config", [])]
+    if re.search(item.expect_invalid, out):
+        return [Row(item.name, label, "ok", "", [])]
+    tail = " ".join(out.split())[-200:]
+    return [Row(item.name, label, "FAIL", f"not matching /{item.expect_invalid}/: {tail}", [])]
+
+
 def app_rows(res: Resolved, settings, host, topo: dict, workdir: Path) -> list[Row]:
     """The app items that must be rejected: run the app's early stages on `topo`."""
     items = expected(res, "app")
@@ -121,37 +170,6 @@ def app_rows(res: Resolved, settings, host, topo: dict, workdir: Path) -> list[R
         return _skip(items, f"apps not synced; burger sync {res.board.name}")
     rows = []
     for item in items:
-        exp = {
-            "metadata": {"name": res.board.exp, "annotations": {}},
-            "spec": {
-                "experimentName": res.board.exp,
-                "baseDir": str(workdir / item.name),
-                "topology": topo["spec"],
-                "scenario": {"apps": [{"name": item.type, "metadata": item.config}]},
-            },
-        }
-        for stage in ("configure", "pre-start"):
-            entry, stdin = f"phenix-app-{item.type}", json.dumps(exp)
-            got = host.run(
-                [*UV, src, entry, stage, "--dry-run"], check=False, capture=True, input=stdin
-            )
-            if got.returncode == 127:  # no uv: use the apps installed in phēnix, if they are
-                if not _installed(res, settings, host):  # this board's; needs no index
-                    break
-                got = _stage(host, entry, stage, stdin)
-            if got.returncode:
-                break
-        out = f"{got.stdout}{got.stderr}"
-        label = f"{item.type} {stage} rejects"
-        if got.returncode == 127:
-            rows += _skip([item], "uv not found, and this board's apps are not installed in phēnix")
-        elif not got.returncode:
-            rows.append(Row(item.name, label, "FAIL", "every stage accepted the config", []))
-        elif re.search(item.expect_invalid, out):
-            rows.append(Row(item.name, label, "ok", "", []))
-        else:
-            tail = " ".join(out.split())[-200:]
-            rows.append(
-                Row(item.name, label, "FAIL", f"not matching /{item.expect_invalid}/: {tail}", [])
-            )
+        stdin = json.dumps(_app_experiment(res, item, topo, workdir))
+        rows += _app_row(item, *_dry_run_stages(res, settings, host, src, item, stdin))
     return rows

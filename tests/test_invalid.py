@@ -240,3 +240,24 @@ def test_app_rows_read_the_rejection_like_the_real_host(settings, tmp_path):
     assert row.verdict == "FAIL" and row.reason.endswith("y" * 200)
     assert row.reason.startswith("not matching /") and ": " + "y" * 200 in row.reason
     assert len(row.reason.rsplit(": ", 1)[1]) == 200
+
+
+def test_app_row_names_the_stage_that_decided(settings, tmp_path):
+    synced(settings, "base")
+    r = res(settings, "base")
+    err = "root broker not found in topology: node missinghost does not exist"
+    topo = {"spec": {}}
+    host = StrictHost({"uv run": cp(1, "", err)}, settings)
+    assert (
+        invalid.app_rows(r, settings, host, topo, tmp_path)[0].check == "helics configure rejects"
+    )
+    host = StrictHost({"uv run": cp(0)}, settings)
+    assert (
+        invalid.app_rows(r, settings, host, topo, tmp_path)[0].check == "helics pre-start rejects"
+    )
+    host = StrictHost(settings=settings)  # configure passes, pre-start rejects
+    calls = iter([cp(0), cp(1, "", err)])
+    host.run = lambda cmd, check=True, capture=False, **kw: next(calls)
+    assert (
+        invalid.app_rows(r, settings, host, topo, tmp_path)[0].check == "helics pre-start rejects"
+    )

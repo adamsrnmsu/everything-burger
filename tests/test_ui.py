@@ -114,3 +114,39 @@ def test_console_format_icons_by_level():
     assert "<green>✓</green>" in fmt("SUCCESS") and "<yellow>!</yellow>" in fmt("WARNING")
     assert "<dim>·</dim>" in fmt("DEBUG") and "<blue>•</blue>" in fmt("INFO")
     assert fmt("INFO").endswith(" {message}\n{exception}")
+
+
+def test_spinner_in_each_display(monkeypatch):
+    from contextlib import contextmanager
+
+    seen = []
+    with ui.spinner(lambda msg, *a: seen.append(("plain", msg, a))) as say:  # not a terminal
+        say("waiting {}", 1)
+    assert seen == [("plain", "waiting {}", (1,))]
+
+    monkeypatch.setattr(ui, "_view", ui.RunView(STEPS))
+    logged = []
+    sink = ui.logger.add(lambda m: logged.append(m.record["message"]), level="INFO")
+    with ui.spinner() as say:  # the two-pane view: the text goes to the log
+        say("{} left", 3)
+    ui.logger.remove(sink)
+    assert logged == ["3 left"]
+    monkeypatch.setattr(ui, "_view", None)
+
+    class Status:
+        def update(self, text):
+            seen.append(("status", str(text)))
+
+    class FakeConsole:
+        def __init__(self, stderr=False):
+            seen.append(("console", stderr))
+
+        @contextmanager
+        def status(self, text):
+            yield Status()
+
+    monkeypatch.setattr(ui, "Console", FakeConsole)
+    monkeypatch.setattr(ui.sys.stderr, "isatty", lambda: True, raising=False)
+    with ui.spinner() as say:  # a terminal: one live status line
+        say("pass {}", 2)
+    assert seen[-2:] == [("console", True), ("status", "pass 2")]
