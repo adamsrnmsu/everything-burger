@@ -892,7 +892,10 @@ def test_leftover_rows_on_a_real_hosts_semantics(monkeypatch):
     cli._leftover_rows(host, rows)
     (row,) = rows
     assert "leftover ebwes-a-0, vx0" in row.reason
-    for failing in ({"ip -o link": _cp(1)}, {"docker exec minimega ovs-vsctl": _cp(1)}):
+    for failing in (
+        {"docker exec minimega ip -o link": _cp(1)},
+        {"docker exec minimega ovs-vsctl": _cp(1)},
+    ):
         cli._leftover_rows(StrictHost(failing), [])  # check=False: no raise
 
 
@@ -992,20 +995,17 @@ def test_list_keeps_the_first_column_on_one_line(monkeypatch):
     from rich.console import Console
 
     buf = io.StringIO()
-    monkeypatch.setattr(cli, "out", Console(file=buf, width=40))
-    long = "x" * 30
+    monkeypatch.setattr(cli, "out", Console(file=buf, width=60))
+    long = "x" * 25
     items = [
         SimpleNamespace(
-            path=Path(f"components/{long}.yaml"), kind="scorch", routes=[], about="about " * 5
+            path=Path(f"components/{long}.yaml"), kind="scorch", routes=[], about="about " * 12
         )
     ]
     monkeypatch.setattr(cli, "all_items", lambda s: items)
     monkeypatch.setattr(cli, "all_switchboards", lambda s: [])
     cli._list(None, Settings.from_env(), None)
-    assert (
-        sum(ln.count("x") for ln in buf.getvalue().splitlines()) == 30 or "\u2026" in buf.getvalue()
-    )
-    assert [ln for ln in buf.getvalue().splitlines() if "x" in ln][1:] == []  # one line only
+    assert long in buf.getvalue()  # the name is never squeezed for the about column
 
 
 def test_new_twice_in_one_kind_reuses_the_directory(tmp_path, monkeypatch):
@@ -1197,3 +1197,15 @@ def test_main_error_line_is_not_highlighted(monkeypatch):
 def test_main_without_a_command_prints_usage_and_exits_2(capsys):
     assert main([]) == 2
     assert capsys.readouterr().err.startswith("usage: burger")
+
+
+@pytest.mark.parametrize(
+    "tty,quiet,shown", [(True, False, True), (True, True, False), (False, False, False)]
+)
+def test_banner_only_on_a_terminal_without_quiet(monkeypatch, tty, quiet, shown):
+    drawn = []
+    monkeypatch.setattr(cli, "banner", lambda con: drawn.append(con))
+    monkeypatch.setattr(cli, "Host", lambda *_a: FakeHost())
+    monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: tty)
+    assert main([*(["--quiet"] if quiet else []), "list"]) == 0
+    assert bool(drawn) is shown
