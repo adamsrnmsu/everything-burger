@@ -16,7 +16,7 @@ from burger.compose import compose
 from burger.config import BurgerError, Settings
 from burger.items import STAGES, load_item
 from burger.switchboard import load_switchboard
-from tests.fakes import FakeHost
+from tests.fakes import FakeHost, StrictHost
 
 ROOT = Path(__file__).resolve().parents[1]
 pytestmark = pytest.mark.usefixtures("vm_password")
@@ -727,19 +727,6 @@ def test_step_exit_code_is_the_worst_board(settings, monkeypatch):
 
 def _cp(rc=0, out="", err=""):
     return subprocess.CompletedProcess([], rc, out, err)
-
-
-class StrictHost(FakeHost):
-    """FakeHost that behaves like the real Host: no stdout without capture, and a nonzero
-    exit raises unless the caller passed check=False."""
-
-    def run(self, cmd, check=True, capture=False, **kw):
-        res = super().run(cmd, check, capture, **kw)
-        if not capture:
-            res = subprocess.CompletedProcess(res.args, res.returncode, None, None)
-        if check and res.returncode:
-            raise BurgerError(f"{cmd[0]} failed")
-        return res
 
 
 def _preflight_rows(monkeypatch, responses, linux_only=True, api=None):

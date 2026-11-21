@@ -8,30 +8,12 @@ import yaml
 from burger import verify as v
 from burger.checks import Row, run_checks
 from burger.compose import health_checks
-from burger.config import BurgerError
 from burger.items import load_item
 from burger.routes import load_route
 from burger.switchboard import load_switchboard, resolve
 from burger.vcs import board_dir
 from tests.conftest import MAN, make_ctx
-from tests.fakes import FakeHost
-
-
-def enforce(res, cmd, check, capture):
-    """The real Host's contract on a canned result: a nonzero exit raises unless check=False,
-    and stdout/stderr exist only when capture=True."""
-    if check and res.returncode:
-        raise BurgerError(f"command failed ({res.returncode}): {' '.join(map(str, cmd))}")
-    if capture:
-        return res
-    return subprocess.CompletedProcess(res.args, res.returncode, None, None)
-
-
-class StrictHost(FakeHost):
-    """FakeHost that keeps the real Host's contract. Code that forgets a flag fails here."""
-
-    def run(self, cmd, check=True, capture=False, **kw):
-        return enforce(super().run(cmd, check, capture, **kw), cmd, check, capture)
+from tests.fakes import FakeHost, StrictHost
 
 
 def setup(

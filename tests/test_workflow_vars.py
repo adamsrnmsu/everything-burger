@@ -6,8 +6,7 @@ import pytest
 from burger.config import BurgerError
 from burger.probes import workflow_vars
 from tests.conftest import res as resolved
-from tests.fakes import FakeHost
-from tests.test_verify import enforce
+from tests.fakes import FakeHost, enforce
 
 FILE_VARS = {"BV_A": "from-file", "BV_B": "file-b"}
 

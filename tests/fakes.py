@@ -1,6 +1,6 @@
 import subprocess
 
-from burger.config import Settings
+from burger.config import BurgerError, Settings
 from burger.shell import Host
 
 
@@ -33,3 +33,20 @@ class FakeHost(Host):
 
     def api(self, path):
         return self.api_responses.get(path)
+
+
+def enforce(res, cmd, check, capture):
+    """The real Host's contract on a canned result: a nonzero exit raises unless check=False,
+    and stdout/stderr exist only when capture=True."""
+    if check and res.returncode:
+        raise BurgerError(f"command failed ({res.returncode}): {' '.join(map(str, cmd))}")
+    if capture:
+        return res
+    return subprocess.CompletedProcess(res.args, res.returncode, None, None)
+
+
+class StrictHost(FakeHost):
+    """FakeHost that keeps the real Host's contract. Code that forgets a flag fails here."""
+
+    def run(self, cmd, check=True, capture=False, **kw):
+        return enforce(super().run(cmd, check, capture, **kw), cmd, check, capture)

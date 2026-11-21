@@ -5,8 +5,8 @@ from burger.cli import main
 from burger.items import all_items
 from burger.vcs import board_dir
 from tests.conftest import res
-from tests.fakes import FakeHost
-from tests.test_verify import StrictHost, setup
+from tests.fakes import FakeHost, StrictHost
+from tests.test_verify import setup
 
 # What phenix-scorch-validate prints: one record per component, pydantic's message
 # spans indented lines, and loguru writes to the same stream.

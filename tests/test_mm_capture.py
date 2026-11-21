@@ -7,8 +7,7 @@ from typing import ClassVar
 from burger import probes
 from burger.probes import mm_capture
 from tests.conftest import res as resolved
-from tests.fakes import FakeHost
-from tests.test_verify import enforce
+from tests.fakes import FakeHost, enforce
 
 DIR = "/phenix/images"
 
