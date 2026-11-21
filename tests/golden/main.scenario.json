@@ -168,6 +168,11 @@
           {
             "hostname": "rtu-1",
             "metadata": {
+              "helics": {
+                "broker": {
+                  "hostname": "rtu-2|IF0"
+                }
+              },
               "modbus": [
                 {
                   "name": "bus-01",
@@ -233,7 +238,7 @@
                         "wait": true
                       },
                       {
-                        "args": "grep -A1 '<io name=.helics-federate.>' /etc/ot-sim/config.xml | grep -Eq '<broker-endpoint>10.1.1.101</broker-endpoint>'",
+                        "args": "grep -A1 '<io name=.helics-federate.>' /etc/ot-sim/config.xml | grep -Eq '<broker-endpoint>10.1.1.102:24000</broker-endpoint>'",
                         "type": "exec",
                         "wait": true
                       },
@@ -253,7 +258,7 @@
                         "wait": true
                       },
                       {
-                        "args": "grep -q 'helics_broker .* -f1 ' /etc/phenix/startup/90-helics-broker.sh",
+                        "args": "grep -q 'helics_broker .*--name rtu-1 .*--subbrokers 1 .* -f1 ' /etc/phenix/startup/90-helics-broker.sh",
                         "type": "exec",
                         "wait": true
                       },
@@ -300,6 +305,11 @@
                       },
                       {
                         "args": "grep -A1 'dnp3-outstation. mode=.server.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.1.102:20000</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'helics_broker .*--name rtu-2 .*--broker 10.1.1.101 --local_interface 10.1.1.102:24000 .* -f1 ' /etc/phenix/startup/90-helics-broker.sh",
                         "type": "exec",
                         "wait": true
                       },

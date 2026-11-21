@@ -2,20 +2,30 @@ name: helics-otsim
 kind: bennu
 type: helics-otsim
 about: >
-  The helics app counting the federates other apps announce. apps/otsim's fd-server on
-  the first RTU carries a helics/federate annotation (fed-count 1, broker = the root),
-  and the helics app runs after it (the board lists apps/otsim before apps/helics: helics
-  reads annotations at pre-start, so it must run after every app that adds them). A
-  pass means the root broker's start script asks for one federate (-f1, not -f0) and the
-  federate got helics's wait-for-broker script for the root's IP. helics_broker itself
-  is not in bennu.qc2, so the scripts are checked, not a running federation. Needs
-  apps/otsim and apps/helics on, in that order.
+  The helics app building a broker tree from the federates other apps announce.
+  apps/otsim's fd-server on the first RTU carries a helics/federate annotation
+  (fed-count 1) naming a broker on the second RTU at 10.1.1.102:24000, not the root,
+  and the helics app runs after it (the board lists apps/otsim before apps/helics:
+  helics reads annotations at pre-start, so it must run after every app that adds
+  them). A pass means the second RTU got a sub-broker start script with the root as
+  parent, listening on 10.1.1.102:24000 for one federate; the root's script counts that
+  federate and the sub-broker (-f1 --subbrokers 1, not -f0); and the federate got
+  helics's wait-for-broker script for the root's IP. helics_broker itself is not in
+  bennu.qc2, so the scripts are checked, not a running federation. Needs apps/otsim and
+  apps/helics on, in that order. Not covered: an annotation broker without a port or
+  as hostname|iface (burger-75h; ot-sim always writes ip:24000, and items cannot
+  annotate nodes).
 routes: [waterway, waterway-arm64]
-# Addresses are waterway's (and the arm64 range's): rtu-1 IF0 is 10.1.1.101.
+# Addresses are waterway's (and the arm64 range's): rtu-1 IF0 10.1.1.101, rtu-2 10.1.1.102.
 verify:
+  # the root broker on rtu-1 (helics renders each start script on one line)
   - vm:
       host: "{route.rtus[0]}"
-      run: "grep -q 'helics_broker .* -f1 ' /etc/phenix/startup/90-helics-broker.sh"
+      run: "grep -q 'helics_broker .*--name {route.rtus[0]} .*--subbrokers 1 .* -f1 ' /etc/phenix/startup/90-helics-broker.sh"
+  # the sub-broker on rtu-2, under the root
+  - vm:
+      host: "{route.rtus[1]}"
+      run: "grep -q 'helics_broker .*--name {route.rtus[1]} .*--broker 10.1.1.101 --local_interface 10.1.1.102:24000 .* -f1 ' /etc/phenix/startup/90-helics-broker.sh"
   - vm:
       host: "{route.rtus[0]}"
       run: "grep -q 'ping .* 10.1.1.101 ' /etc/phenix/startup/5-wait-broker.sh"

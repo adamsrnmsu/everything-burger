@@ -5,8 +5,11 @@ about: >
   The ot-sim app writing OT-sim configs for a three-tier chain on the Linux nodes:
   the first RTU an fd-server with two Modbus devices (a bus and a breaker, from the
   default power-distribution mapping), the second RTU a fep polling it, and the
-  provider an fd-client polling the fep. The HELICS broker is the helics item's root
-  ({route.rtus[0]}|IF0) with no base-fed-count, so the app writes no broker script of
+  provider an fd-client polling the fep. The app-level HELICS broker is the helics
+  item's root ({route.rtus[0]}|IF0), but the fd-server's own metadata points its
+  federate at a broker on the second RTU ({route.rtus[1]}|IF0): not the root, so ot-sim
+  gives it the sub-broker port (10.1.1.102:24000) and helics must start a sub-broker
+  there (bennu/helics-otsim). No base-fed-count, so ot-sim writes no broker script of
   its own. A pass means each VM got /etc/ot-sim/config.xml with the right modules and
   endpoints. ot-sim is not in bennu.qc2, so nothing runs the configs; node-red, logic
   and the API TLS options are not covered.
@@ -17,6 +20,7 @@ hosts:
   - hostname: "{route.rtus[0]}"
     metadata:
       type: fd-server
+      helics: {broker: {hostname: "{route.rtus[1]}|IF0"}}
       modbus:
         - {name: bus-01, type: bus}
         - {name: brkr-01, type: breaker}
@@ -26,11 +30,11 @@ hosts:
     metadata: {type: fd-client, connected_rtus: ["{route.rtus[1]}"]}
 # Addresses are waterway's: rtu-1 10.1.1.101, rtu-2 10.1.1.102 (IF0).
 verify:
-  # fd-server: an I/O module federated to the helics root broker on rtu-1 itself
+  # fd-server: an I/O module federated to the sub-broker on rtu-2 (not the root: :24000)
   - vm:
       host: "{route.rtus[0]}"
       run: "grep -A1 '<io name=.helics-federate.>' /etc/ot-sim/config.xml"
-      expect: "<broker-endpoint>10.1.1.101</broker-endpoint>"
+      expect: "<broker-endpoint>10.1.1.102:24000</broker-endpoint>"
   # fd-server: a Modbus server on its own IF0, carrying both devices' registers
   - vm:
       host: "{route.rtus[0]}"
