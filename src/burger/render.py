@@ -192,20 +192,35 @@ systemctl restart miniccc 2>/dev/null ||
 """  # noqa: E501
 
 
-def miniccc_injections(stage_dir):
+def _injection(src: str, dst: str, description: str, executable: bool = False) -> dict:
+    """One phēnix file injection; `executable` gives it mode 0755."""
+    inj = {"src": src, "dst": dst, "description": f"burger: {description}"}
+    if executable:
+        inj["permissions"] = "0755"
+    return inj
+
+
+def _staged_with_startup(stage_dir, payload, dst, what, script, does):
+    """A file or directory `payload` staged into the VM at `dst`, and the startup
+    `script` (in /etc/phenix/startup, run in name order) that installs it."""
     return [
-        {
-            "src": f"{stage_dir}/burger-miniccc",
-            "dst": "/root/burger-miniccc",
-            "description": "burger: miniccc from the minimega container",
-        },
-        {
-            "src": f"{stage_dir}/01-burger-miniccc.sh",
-            "dst": "/etc/phenix/startup/01-burger-miniccc.sh",
-            "description": "burger: install and start miniccc",
-            "permissions": "0755",
-        },
+        _injection(f"{stage_dir}/{payload}", dst, what),
+        _injection(f"{stage_dir}/{script}", f"/etc/phenix/startup/{script}", does, executable=True),
     ]
+
+
+# _staged_with_startup arguments: payload, its VM path, what it is, script, what it does
+MINICCC_STAGE = (
+    "burger-miniccc",
+    "/root/burger-miniccc",
+    "miniccc from the minimega container",
+    "01-burger-miniccc.sh",
+    "install and start miniccc",
+)
+
+
+def miniccc_injections(stage_dir):
+    return _staged_with_startup(stage_dir, *MINICCC_STAGE)
 
 
 DEBS_STARTUP = """#!/bin/bash
@@ -217,31 +232,28 @@ find /root/burger-debs -name '*.deb' -exec dpkg -i {} + >/var/log/burger-debs.lo
 """
 
 
+DEBS_STAGE = (
+    "debs/",
+    "/root/burger-debs/",
+    "the round's packages",
+    "02-burger-debs.sh",
+    "install the round's packages",
+)
+
+
 def debs_injections(stage_dir):
-    return [
-        {
-            "src": f"{stage_dir}/debs/",
-            "dst": "/root/burger-debs/",
-            "description": "burger: the round's packages",
-        },
-        {
-            "src": f"{stage_dir}/02-burger-debs.sh",
-            "dst": "/etc/phenix/startup/02-burger-debs.sh",
-            "description": "burger: install the round's packages",
-            "permissions": "0755",
-        },
-    ]
+    return _staged_with_startup(stage_dir, *DEBS_STAGE)
 
 
 def iperf_injections(stage_dir, version):
     name = f"iperf3-{version}"
     return [
-        {
-            "src": f"{stage_dir}/{name}",
-            "dst": f"/usr/local/bin/{name}",
-            "description": f"burger: static iperf3 {version}",
-            "permissions": "0755",
-        }
+        _injection(
+            f"{stage_dir}/{name}",
+            f"/usr/local/bin/{name}",
+            f"static iperf3 {version}",
+            executable=True,
+        )
     ]
 
 
@@ -250,12 +262,12 @@ def goart_injections(stage_dir):
     # (its default goartPath), so burger injects the binary rather than the
     # component sending it. The binary is staged from assets/art/goart.
     return [
-        {
-            "src": f"{stage_dir}/goart",
-            "dst": "/phenix/art/goart",
-            "description": "burger: goart (Atomic Red Team runner) for the art component",
-            "permissions": "0755",
-        }
+        _injection(
+            f"{stage_dir}/goart",
+            "/phenix/art/goart",
+            "goart (Atomic Red Team runner) for the art component",
+            executable=True,
+        )
     ]
 
 
