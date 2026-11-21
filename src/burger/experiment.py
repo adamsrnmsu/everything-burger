@@ -443,6 +443,22 @@ def _write_attempt_log(res, settings, i: int, attempt: int, output: str):
     return log
 
 
+def _health_intro(host, settings, exp, i, settle, first_cap, clock) -> None:
+    wait_for_cc(host, settings, exp, clock=clock)
+    logger.info(
+        "run {} (health): retrying until healthy, for at most {} s after the first "
+        "attempt (--settle); the first attempt is capped at {} s",
+        i,
+        settle,
+        first_cap,
+    )
+
+
+def _check_busy(exp: str, busy: int) -> None:
+    if busy > 20:
+        raise BurgerError(f"SCORCH on {exp} still busy after 10 min")
+
+
 def _scorch_run(res, settings, host, runs, i, judge, settle, clock, first_cap) -> None:
     """Run i of the scorch: health retries until healthy or --settle runs out."""
     exp, run = res.board.exp, runs[i]
@@ -451,14 +467,7 @@ def _scorch_run(res, settings, host, runs, i, judge, settle, clock, first_cap) -
     health = run.get("name") == "health"
     deadline = None  # set when the first attempt ends: VM boot time is not billed to --settle
     if health:
-        wait_for_cc(host, settings, exp, clock=clock)
-        logger.info(
-            "run {} (health): retrying until healthy, for at most {} s after the first "
-            "attempt (--settle); the first attempt is capped at {} s",
-            i,
-            settle,
-            first_cap,
-        )
+        _health_intro(host, settings, exp, i, settle, first_cap, clock)
     busy = attempt = 0
     with spinner() as say:
         while True:
@@ -473,8 +482,7 @@ def _scorch_run(res, settings, host, runs, i, judge, settle, clock, first_cap) -
             # out without spending the attempt (or the deadline) on it.
             if "already running" in stderr:
                 busy += 1
-                if busy > 20:
-                    raise BurgerError(f"SCORCH on {exp} still busy after 10 min")
+                _check_busy(exp, busy)
                 say("SCORCH is still finishing a previous run; retrying in 30 s")
                 clock.sleep(30)
                 continue
