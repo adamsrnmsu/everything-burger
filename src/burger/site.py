@@ -103,6 +103,14 @@ class Site:
                 k: json.dumps(v).replace("$", "\\$") for k, v in env.items()
             }  # no $ expansion
             lines.append("ENV " + " ".join(f"{k}={v}" for k, v in quoted.items()))
+        lines += self._apt_lines()
+        if self.dockerfile_extra.strip():
+            lines += self.dockerfile_extra.strip().splitlines()
+        return "\n".join(lines)
+
+    def _apt_lines(self) -> list[str]:
+        """Dockerfile lines for apt: the CA and proxy conf, the CA refresh, the mirror rewrite."""
+        lines = []
         apt = []
         if self.ca_certs:
             apt.append(f'Acquire::https::CAInfo "{CA_IN_IMAGE}";')
@@ -123,9 +131,7 @@ class Site:
             lines.append(
                 f"RUN if [ -f /etc/apt/sources.list ]; then sed -i {subs} /etc/apt/sources.list; fi"
             )
-        if self.dockerfile_extra.strip():
-            lines += self.dockerfile_extra.strip().splitlines()
-        return "\n".join(lines)
+        return lines
 
     def tag(self) -> str:
         """12 hex of what a site image is made of (the expanded layer, the registry and the
@@ -193,22 +199,18 @@ def _check_fields(path: Path, where: str, doc: dict, allowed: set[str]) -> None:
             )
 
 
-def load_site(env: Mapping[str, str] | None = None, home: Path | None = None) -> Site | None:
-    env = os.environ if env is None else env
+def _site_path(env: Mapping[str, str], home: Path | None) -> Path | None:
     if env.get("BURGER_SITE_CONFIG"):
         path = Path(env["BURGER_SITE_CONFIG"]).expanduser()
         if not path.is_file():
             raise BurgerError(f"BURGER_SITE_CONFIG points at {path}, which does not exist")
-    else:
-        path = (home or Path.home()) / ".config" / "burger" / "site.yaml"
-        if not path.is_file():
-            return None
-    doc, unset = load_yaml(path, SITE_FIELDS, env)
-    if unset:
-        raise BurgerError(f"{path}: unset environment variables: {', '.join(sorted(set(unset)))}")
-    proxy = doc.get("proxy") or {}
+        return path
+    path = (home or Path.home()) / ".config" / "burger" / "site.yaml"
+    return path if path.is_file() else None
+
+
+def _mirrors(path: Path, doc: dict) -> dict:
     mirrors = doc.get("mirrors") or {}
-    _check_fields(path, "proxy", proxy, PROXY_FIELDS)
     _check_fields(path, "mirrors", mirrors, MIRROR_FIELDS)
     for key in ("git", "urls"):
         if not isinstance(mirrors.get(key) or {}, dict):
@@ -216,20 +218,37 @@ def load_site(env: Mapping[str, str] | None = None, home: Path | None = None) ->
     mirrors = {k: v if isinstance(v, dict) or v is None else str(v) for k, v in mirrors.items()}
     if mirrors.get("registry") and not str(mirrors["registry"]).endswith("/"):
         mirrors = {**mirrors, "registry": f"{mirrors['registry']}/"}  # a prefix: reg/x + /ubuntu
-    cas = []
-    if not isinstance(doc.get("ca_certs") or [], list):
+    return mirrors
+
+
+def _ca_certs(path: Path, spec) -> tuple[Path, ...]:
+    if not isinstance(spec or [], list):
         raise BurgerError(f"{path}: ca_certs must be a list of PEM file paths")
-    for i, ca in enumerate(doc.get("ca_certs") or []):
+    cas = []
+    for i, ca in enumerate(spec or []):
         ca = Path(str(ca)).expanduser()
         if not ca.is_file():
             raise BurgerError(f"{path}: ca_certs[{i}] {ca} does not exist")
         if _PEM not in ca.read_text(errors="replace"):
             raise BurgerError(f"{path}: ca_certs[{i}] {ca} holds no PEM certificate")
         cas.append(ca)
+    return tuple(cas)
+
+
+def load_site(env: Mapping[str, str] | None = None, home: Path | None = None) -> Site | None:
+    env = os.environ if env is None else env
+    if (path := _site_path(env, home)) is None:
+        return None
+    doc, unset = load_yaml(path, SITE_FIELDS, env)
+    if unset:
+        raise BurgerError(f"{path}: unset environment variables: {', '.join(sorted(set(unset)))}")
+    proxy = doc.get("proxy") or {}
+    _check_fields(path, "proxy", proxy, PROXY_FIELDS)
+    mirrors = _mirrors(path, doc)
     return Site(
         path=path,
         proxy={k: str(v) for k, v in proxy.items()},
-        ca_certs=tuple(cas),
+        ca_certs=_ca_certs(path, doc.get("ca_certs")),
         mirrors=mirrors,
         dockerfile_extra=str(doc.get("dockerfile_extra") or ""),
     )
