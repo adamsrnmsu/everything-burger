@@ -103,6 +103,15 @@ in phēnix instead, but only when `burger install` put this board's apps there
 phēnix it already runs (its models.yaml carries them, and a rejection they were
 expected to get no longer fails the board) and the app ones as `check` does. Examples: `vmstats-bad-name`, `qos-bad-rate`, `helics-no-broker`, `pipe-bad-name`.
 
+## Configs that must expand
+
+An app that creates VMs when it configures (`scale`) cannot run on a board: its VMs need an image and
+hardware the rigs lack. Give a validate-only app item (`routes: []`) `expect_nodes: {hostname: [injection dst, ...]}`
+and `burger check` / `burger verify` run the app's `configure` stage with `--dry-run` on the rendered topology
+(the same way as `expect_invalid`, same needs). It passes only if the nodes configure added to the topology
+are exactly those hostnames, each carrying at least those injection destinations. The pass proves node
+count, names and injections; it does not start anything. Only `configure` runs. Like `expect_invalid`, a `skipped` row (apps not synced, no `uv` and the board's apps not installed in phēnix) does not fail `check`. Examples: `scale-builtin-expands`, `scale-wind-expands`.
+
 ## Adding a test
 
 ```bash

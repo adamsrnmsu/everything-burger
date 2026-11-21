@@ -1,0 +1,403 @@
+{
+  "apiVersion": "phenix.sandia.gov/v2",
+  "kind": "Scenario",
+  "metadata": {
+    "annotations": {
+      "topology": "ebwes-wind"
+    },
+    "name": "ebwes-wind"
+  },
+  "spec": {
+    "apps": [
+      {
+        "assetDir": "/phenix/topologies/waterway-arm64",
+        "hosts": [
+          {
+            "hostname": "waterway-provider",
+            "metadata": {
+              "publish_endpoint": "udp://*;239.0.0.1:40000",
+              "publish_points": "/phenix/topologies/waterway-arm64/injects/publishPoints.txt",
+              "simulator": "Simulink",
+              "solver": "/phenix/topologies/waterway-arm64/injects/simulinksolver",
+              "type": "provider"
+            }
+          },
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "infrastructure": "waterway",
+              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
+              "modbus": [
+                {
+                  "name": "lowerwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "lowergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "lowervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "lowersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "waterway-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "infrastructure": "waterway",
+              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
+              "modbus": [
+                {
+                  "name": "upperwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "uppergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "uppervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "uppersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "waterway-provider",
+              "type": "fd-server"
+            }
+          }
+        ],
+        "name": "sceptre"
+      },
+      {
+        "hosts": [
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "controllers": {
+                "anemometer": "rtu-2",
+                "blades": [
+                  "opc",
+                  "historian",
+                  "hmi"
+                ],
+                "yaw": "waterway-provider"
+              },
+              "template": "default",
+              "type": "main-controller"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "template": "default",
+              "type": "anemometer"
+            }
+          },
+          {
+            "hostname": "waterway-provider",
+            "metadata": {
+              "template": "default",
+              "type": "yaw-controller"
+            }
+          }
+        ],
+        "metadata": {
+          "templates": {
+            "default": {
+              "anemometer": {
+                "weather": {
+                  "columns": [
+                    {
+                      "name": "Windspeed 58.2m",
+                      "tag": "speed.high"
+                    },
+                    {
+                      "name": "Windspeed 36.6m",
+                      "tag": "speed.med"
+                    },
+                    {
+                      "name": "Windspeed 15.0m",
+                      "tag": "speed.low"
+                    },
+                    {
+                      "name": "Wind Direction 58.2m",
+                      "tag": "dir.high"
+                    },
+                    {
+                      "name": "Wind Direction 36.6m",
+                      "tag": "dir.med"
+                    },
+                    {
+                      "name": "Wind Direction 15.0m",
+                      "tag": "dir.low"
+                    },
+                    {
+                      "name": "Temperature 58.2m",
+                      "tag": "temp.high"
+                    },
+                    {
+                      "name": "Temperature 3.0m",
+                      "tag": "temp.low"
+                    },
+                    {
+                      "name": "Barometric Pressure",
+                      "tag": "pressure"
+                    }
+                  ],
+                  "replayData": "/phenix/burger/x/assets/weather.csv"
+                }
+              },
+              "main-controller": {
+                "logic": {
+                  "directionError": 0.04,
+                  "directionTag": "dir.high",
+                  "speedTag": "speed.high"
+                },
+                "turbine": {
+                  "hubHeight": 135,
+                  "roughnessLength": 0.15,
+                  "type": "E-126/4200"
+                },
+                "weather": {
+                  "columns": [
+                    {
+                      "name": "wind_speed",
+                      "tags": [
+                        {
+                          "height": 58.2,
+                          "name": "speed.high"
+                        },
+                        {
+                          "height": 36.6,
+                          "name": "speed.med"
+                        },
+                        {
+                          "height": 15.0,
+                          "name": "speed.low"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "temperature",
+                      "tags": [
+                        {
+                          "height": 58.2,
+                          "name": "temp.high"
+                        },
+                        {
+                          "height": 3.0,
+                          "name": "temp.low"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "pressure",
+                      "tags": [
+                        {
+                          "height": 0.0,
+                          "name": "pressure"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "yaw-controller": {
+                "yaw": {
+                  "degreePerSecond": 0.1,
+                  "initialPosition": 0
+                }
+              }
+            }
+          }
+        },
+        "name": "wind-turbine"
+      },
+      {
+        "metadata": {
+          "components": [
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)(bennu-field-device|bennu-field-deviced)( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q ot-sim-wind-turbine-power-output-module /etc/ot-sim/config.xml && grep -q ot-sim-dnp3-module /etc/ot-sim/config.xml",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -A1 'modbus name=.rtu-2. mode=.client.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.1.102:502</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -A1 'modbus name=.waterway-provider. mode=.client.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>172.16.1.2:502</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -A1 'modbus name=.opc. mode=.client.' /etc/ot-sim/config.xml | grep -q '<endpoint>10.1.2.50:502</endpoint>' && grep -A1 'modbus name=.historian. mode=.client.' /etc/ot-sim/config.xml | grep -q '<endpoint>10.1.2.60:502</endpoint>' && grep -A1 'modbus name=.hmi. mode=.client.' /etc/ot-sim/config.xml | grep -q '<endpoint>10.1.2.70:502</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -A1 'dnp3 name=.dnp3-outstation. mode=.server.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.1.101:20000</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-2",
+                    "start": [
+                      {
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)(bennu-field-device|bennu-field-deviced)( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -A1 'modbus name=.modbus-outstation. mode=.server.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.1.102:502</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q '<tag>speed.high</tag>' /etc/ot-sim/config.xml && grep -q ot-sim-wind-turbine-anemometer-module /etc/ot-sim/config.xml",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "head -1 /etc/ot-sim/data/weather.csv | grep -Eq 'Windspeed 58.2m'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "waterway-provider",
+                    "start": [
+                      {
+                        "args": "pgrep -f '(^|/)(bennu-simulink-provider|bennu-simulink-provider-helics)( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)simulinksolver( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -A1 'modbus name=.modbus-outstation. mode=.server.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>172.16.1.2:502</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q '<tag>yaw.setpoint</tag>' /etc/ot-sim/config.xml && grep -q '<logic name=.yaw-controller.>' /etc/ot-sim/config.xml",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "opc",
+                    "start": [
+                      {
+                        "args": "grep -A1 'modbus name=.modbus-outstation. mode=.server.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.2.50:502</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "historian",
+                    "start": [
+                      {
+                        "args": "grep -A1 'modbus name=.modbus-outstation. mode=.server.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.2.60:502</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "hmi",
+                    "start": [
+                      {
+                        "args": "grep -A1 'modbus name=.modbus-outstation. mode=.server.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.2.70:502</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "health",
+              "type": "cc"
+            }
+          ],
+          "runs": [
+            {
+              "name": "health",
+              "start": [
+                "health"
+              ]
+            }
+          ]
+        },
+        "name": "scorch"
+      }
+    ]
+  }
+}

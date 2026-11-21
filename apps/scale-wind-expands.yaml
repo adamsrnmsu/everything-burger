@@ -1,0 +1,21 @@
+name: scale-wind-expands
+kind: app
+type: scale
+about: >
+  The scale app's wind_turbine plugin for 3 turbines at 12 containers per VM: 18 containers
+  (6 per turbine) make 2 VMs, wf-1 and wf-2, each with the startup script and the tarball of
+  the turbines' OT-sim configs (/wind-configs.tgz). A pass means configure adds exactly those
+  two nodes with those injections. Not run for the reasons in scale-builtin-expands; not
+  covered: the per-container configs inside the tarball, post-start's minimega files,
+  ground-truth labels and HELICS annotations.
+routes: []
+expect_nodes:
+  wf-1: [/etc/phenix/startup/999-scale.sh, /wind-configs.tgz]
+  wf-2: [/etc/phenix/startup/999-scale.sh, /wind-configs.tgz]
+config:
+  profiles:
+    - name: wf
+      plugin: wind_turbine
+      count: 3
+      containers_per_node: 12
+      container_template: {external_network: {name: EXT, network: 192.168.100.0/24}}

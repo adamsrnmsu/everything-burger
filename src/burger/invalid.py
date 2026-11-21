@@ -1,4 +1,4 @@
-"""Items whose config must be rejected (`expect_invalid`): the pass is the rejection.
+"""Items whose config must be rejected (`expect_invalid`) or expanded (`expect_nodes`).
 
 Some failures stop the experiment before SCORCH runs (a bad VM name, a missing
 broker), so no board can express them as a pass. Such an item is validate-only
@@ -8,6 +8,11 @@ broker), so no board can express them as a pass. Such an item is validate-only
   matching the item's regex;
 - an app item: the app's `configure` and `pre-start` stages run with `--dry-run`
   on the rendered topology; one must exit non-zero with output matching the regex.
+
+An app item with `expect_nodes` (`{hostname: [injection dst, ...]}`) must be accepted: its
+`configure` stage must add exactly those nodes to the topology, each with those injections.
+This is how an app that creates VMs at configure time (scale) is proven where no board can
+boot them.
 """
 
 import json
@@ -33,7 +38,11 @@ def _indented(lines: list[str]) -> int:
 
 
 def expected(res: Resolved, kind: str) -> list[Item]:
-    return [i for i in [*res.items, *res.validate_only] if i.expect_invalid and i.kind == kind]
+    return [
+        i
+        for i in [*res.items, *res.validate_only]
+        if (i.expect_invalid or i.expect_nodes) and i.kind == kind
+    ]
 
 
 def _records(output: str, names) -> tuple[list[str], dict]:
@@ -78,7 +87,10 @@ def judge(output: str, expect: dict[str, str]) -> tuple[list[str], list[Row]]:
 
 
 def _skip(items, why: str) -> list[Row]:
-    return [Row(i.name, "expect_invalid", "skipped", why, []) for i in items]
+    return [
+        Row(i.name, "expect_nodes" if i.expect_nodes else "expect_invalid", "skipped", why, [])
+        for i in items
+    ]
 
 
 def _src(res: Resolved, settings) -> Path | None:
@@ -132,9 +144,10 @@ def _app_experiment(res: Resolved, item: Item, topo: dict, workdir: Path) -> dic
 
 
 def _dry_run_stages(res: Resolved, settings, host, src: Path, item: Item, stdin: str):
-    """(stage, result) of the first stage that exits non-zero, else of the last stage."""
+    """(stage, result) of the first stage that exits non-zero, else of the last stage. An
+    expect_nodes item runs only configure: its verdict is configure's output."""
     entry = f"phenix-app-{item.type}"
-    for stage in ("configure", "pre-start"):
+    for stage in ("configure",) if item.expect_nodes else ("configure", "pre-start"):
         got = host.run(
             [*UV, src, entry, stage, "--dry-run"], check=False, capture=True, input=stdin
         )
@@ -147,11 +160,48 @@ def _dry_run_stages(res: Resolved, settings, host, src: Path, item: Item, stdin:
     return stage, got
 
 
-def _app_row(item: Item, stage: str, got) -> list[Row]:
+def _added(topo: dict, out: str) -> dict[str, set[str]]:
+    """{hostname: injection destinations} of the nodes in configure's output `out` that `topo`
+    lacks. Raises ValueError (or a subclass) when `out` is not an experiment."""
+    old = {n["general"]["hostname"] for n in topo["spec"]["nodes"]}
+    nodes = json.loads(out)["spec"]["topology"]["nodes"]
+    new = [n for n in nodes if n["general"]["hostname"] not in old]
+    names = [n["general"]["hostname"] for n in new]
+    if dup := sorted({h for h in names if names.count(h) > 1}):
+        raise ValueError(f"duplicate added hostnames {dup}")
+    return {n["general"]["hostname"]: {i["dst"] for i in n.get("injections") or []} for n in new}
+
+
+def _nodes_problem(want: dict, topo: dict, out: str) -> str:
+    """Why configure's output `out` is not `want` added to `topo`; "" when it is."""
+    try:
+        added = _added(topo, out)
+    except (ValueError, KeyError, TypeError) as e:
+        return f"configure output is not an experiment: {type(e).__name__}: {e}"
+    if set(added) != set(want):
+        return f"added nodes {sorted(added)}, want {sorted(want)}"
+    for host, dsts in want.items():
+        if missing := sorted(set(dsts) - added[host]):
+            return f"{host} lacks injections {missing}"
+    return ""
+
+
+def _nodes_row(item: Item, stage: str, got, topo: dict) -> Row:
+    label = f"{item.type} configure adds nodes"
+    if got.returncode:
+        tail = " ".join(f"{got.stdout}{got.stderr}".split())[-200:]
+        return Row(item.name, label, "FAIL", f"{stage} rejected the config: {tail}", [])
+    problem = _nodes_problem(item.expect_nodes, topo, got.stdout)
+    return Row(item.name, label, "FAIL" if problem else "ok", problem, [])
+
+
+def _app_row(item: Item, stage: str, got, topo: dict) -> list[Row]:
     out = f"{got.stdout}{got.stderr}"
     label = f"{item.type} {stage} rejects"
     if got.returncode == 127:
         return _skip([item], "uv not found, and this board's apps are not installed in phēnix")
+    if item.expect_nodes:
+        return [_nodes_row(item, stage, got, topo)]
     if not got.returncode:
         return [Row(item.name, label, "FAIL", "every stage accepted the config", [])]
     if re.search(item.expect_invalid, out):
@@ -161,7 +211,7 @@ def _app_row(item: Item, stage: str, got) -> list[Row]:
 
 
 def app_rows(res: Resolved, settings, host, topo: dict, workdir: Path) -> list[Row]:
-    """The app items that must be rejected: run the app's early stages on `topo`."""
+    """The app items that must be rejected or expanded: run the app's early stages on `topo`."""
     items = expected(res, "app")
     if not items:
         return []
@@ -171,5 +221,5 @@ def app_rows(res: Resolved, settings, host, topo: dict, workdir: Path) -> list[R
     rows = []
     for item in items:
         stdin = json.dumps(_app_experiment(res, item, topo, workdir))
-        rows += _app_row(item, *_dry_run_stages(res, settings, host, src, item, stdin))
+        rows += _app_row(item, *_dry_run_stages(res, settings, host, src, item, stdin), topo)
     return rows

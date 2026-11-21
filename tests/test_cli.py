@@ -51,7 +51,7 @@ def test_list_shows_branch_boards(capsys, monkeypatch):
     monkeypatch.setattr(cli, "load_switchboard", lambda n, s: b)
     assert main(["list"]) == 0
     text = " ".join(capsys.readouterr().out.split())
-    assert "integration (159, 161)" in text and "bennu main" in text
+    assert "integration (159, 161)" in text and "bennu upstream/main" in text
 
 
 def test_synthetic_manifest_names_the_branch_source():

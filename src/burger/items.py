@@ -9,7 +9,7 @@ from burger.routes import Route
 
 ITEM_FIELDS = {
     *"name kind type about routes stages holds background advisory".split(),
-    *"expect_error expect_invalid".split(),
+    *"expect_error expect_invalid expect_nodes".split(),
     *"config hosts requires assets".split(),
     *"verify waterway soap site mitm-arm64 waterway-arm64".split(),
 }
@@ -61,6 +61,7 @@ class Item:
     advisory: bool
     expect_error: str
     expect_invalid: str
+    expect_nodes: dict
     config: dict
     hosts: list
     requires: dict
@@ -135,8 +136,28 @@ def _check_expect_invalid(path: Path, doc: dict) -> None:
         raise BurgerError(f"{path}: expect_invalid is not a regex: {e}") from None
 
 
+def _check_expect_nodes(path: Path, doc: dict) -> None:
+    if "expect_nodes" not in doc:
+        return
+    want = doc["expect_nodes"]
+    if doc["kind"] != "app" or doc.get("routes") or doc.get("expect_invalid"):
+        raise BurgerError(
+            f"{path}: expect_nodes needs kind app, `routes: []` and no expect_invalid"
+        )
+    ok = (
+        isinstance(want, dict)
+        and bool(want)
+        and all(
+            isinstance(h, str) and isinstance(v, list) and all(isinstance(d, str) for d in v)
+            for h, v in want.items()
+        )
+    )
+    if not ok:
+        raise BurgerError(f"{path}: expect_nodes is {{hostname: [injection dst, ...]}}")
+
+
 _LISTS = {"routes": list, "stages": list, "hosts": list, "assets": list, "verify": list}
-_DICTS = ("config", "requires")
+_DICTS = ("config", "requires", "expect_nodes")
 
 
 def _item(path: Path, doc: dict, unset: list[str]) -> Item:
@@ -165,6 +186,7 @@ def load_item(ref: str, settings: Settings) -> Item:
     _check_header(path, doc)
     _check_fields(path, doc)
     _check_expect_invalid(path, doc)
+    _check_expect_nodes(path, doc)
     for r in _ROUTE_BLOCKS:
         if isinstance(doc.get(r), dict):
             _check_fields(path, doc[r], f"{r}.")

@@ -106,6 +106,7 @@ HEAD = "name: x\nkind: scorch\ntype: x\n"
         ("soap:\n  verify:\n    - pcap: {tcp_port: 1}\n", "soap.verify[0].pcap needs 'glob'"),
         ("expect_invalid: x\nroutes: [waterway]\n", "expect_invalid needs kind scorch or app"),
         ("expect_invalid: '('\nroutes: []\n", "expect_invalid is not a regex"),
+        ("expect_nodes: {a: []}\nroutes: []\n", "expect_nodes needs kind app"),
     ],
 )
 def test_nested_fields_validated_at_load(settings, tmp_path, body, field):
@@ -244,3 +245,41 @@ def test_override_replaces_a_dict_with_a_scalar_and_back(settings):
     route = load_route("waterway", settings)
     out = resolve_item(item, route, {"config": [1], "hosts": {"a": 1}})
     assert out.config == [1] and out.hosts == {"a": 1}
+
+
+@pytest.mark.parametrize(
+    "want, ok",
+    [
+        ("{a: [/x]}", True),
+        ("{a: []}", True),
+        ("[a]", False),
+        ("{a: x}", False),
+        ("{a: [1]}", False),
+        ("[]", False),
+        ("''", False),
+        ("null", False),
+        ("{}", False),
+        ("{1: []}", False),
+    ],
+)
+def test_expect_nodes_is_a_hostname_to_injection_list_map(settings, tmp_path, want, ok):
+    (tmp_path / "apps").mkdir()
+    (tmp_path / "apps" / "zz.yaml").write_text(
+        f"name: x\nkind: app\ntype: x\nroutes: []\nexpect_nodes: {want}\n"
+    )
+    s = dataclasses.replace(settings, root=tmp_path)
+    if ok:
+        assert load_item("apps/zz", s).expect_nodes == {"a": [] if want == "{a: []}" else ["/x"]}
+    else:
+        with pytest.raises(BurgerError, match=r"expect_nodes is \{hostname: \[injection dst"):
+            load_item("apps/zz", s)
+
+
+@pytest.mark.parametrize("extra", ["routes: [waterway]", "expect_invalid: x"])
+def test_expect_nodes_needs_a_validate_only_app_without_expect_invalid(settings, tmp_path, extra):
+    (tmp_path / "apps").mkdir()
+    (tmp_path / "apps" / "zz.yaml").write_text(
+        f"name: x\nkind: app\ntype: x\n{extra}\nexpect_nodes: {{a: []}}\n"
+    )
+    with pytest.raises(BurgerError, match="expect_nodes needs kind app"):
+        load_item("apps/zz", dataclasses.replace(settings, root=tmp_path))

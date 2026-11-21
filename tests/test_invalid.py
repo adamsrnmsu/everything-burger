@@ -1,8 +1,13 @@
+import dataclasses
+import json
 import subprocess
+from pathlib import Path
+
+import pytest
 
 from burger import invalid, verify
 from burger.cli import main
-from burger.items import all_items
+from burger.items import all_items, load_item
 from burger.vcs import board_dir
 from tests.conftest import res
 from tests.fakes import FakeHost, StrictHost
@@ -266,3 +271,113 @@ def test_app_row_names_the_stage_that_decided(settings, tmp_path):
 def test_a_warning_for_an_expected_item_is_not_a_rejection():
     _, rows = invalid.judge("warning  m.yaml: a (t): unknown key, ignored\n", {"a": "x"})
     assert rows[0].reason == "the validator did not report this component"
+
+
+def exp_out(*nodes):
+    """What `configure` prints: an experiment whose topology holds (hostname, [dst]) nodes."""
+    return json.dumps(
+        {
+            "spec": {
+                "topology": {
+                    "nodes": [
+                        {"general": {"hostname": h}, "injections": [{"dst": d} for d in dsts]}
+                        for h, dsts in nodes
+                    ]
+                }
+            }
+        }
+    )
+
+
+OLD = {"spec": {"nodes": [{"general": {"hostname": "rtu-1"}}]}}
+WANT = {"w-1": ["/a", "/b"], "w-2": []}
+GOOD = exp_out(("rtu-1", []), ("w-1", ["/a", "/b", "/c"]), ("w-2", []))
+
+
+def test_nodes_problem_passes_exactly_the_wanted_new_nodes_with_their_injections():
+    assert invalid._nodes_problem(WANT, OLD, GOOD) == ""
+
+
+@pytest.mark.parametrize(
+    ("out", "problem"),
+    [
+        (exp_out(("w-1", ["/a", "/b"])), "added nodes ['w-1'], want ['w-1', 'w-2']"),
+        (exp_out(("w-1", ["/a", "/b"]), ("w-2", []), ("w-3", [])), "added nodes ['w-1', 'w-2', "),
+        (exp_out(("w-1", ["/a"]), ("w-2", [])), "w-1 lacks injections ['/b']"),
+        ("not json", "configure output is not an experiment"),
+        ("{}", "configure output is not an experiment"),
+        ("[]", "configure output is not an experiment"),
+    ],
+)
+def test_nodes_problem_names_what_differs(out, problem):
+    assert invalid._nodes_problem(WANT, OLD, out).startswith(problem)
+
+
+def test_nodes_problem_names_the_exception_and_rejects_duplicate_hostnames():
+    got = invalid._nodes_problem(WANT, OLD, "{}")
+    assert "KeyError" in got and "'spec'" in got
+    dup = exp_out(("w-1", ["/a", "/b"]), ("w-2", []), ("w-1", []))
+    assert "duplicate added hostnames ['w-1']" in invalid._nodes_problem(WANT, OLD, dup)
+
+
+def test_nodes_problem_reads_the_real_scale_configure_output():
+    # captured from `phenix-app-scale configure --dry-run` (builtin, count 2, one old node)
+    out = (Path(__file__).parent / "fixtures" / "scale-configure.json").read_text()
+    want = {f"v2-node-{n}": ["/etc/phenix/startup/999-scale.sh"] for n in (1, 2)}
+    assert (
+        invalid._nodes_problem(want, {"spec": {"nodes": [{"general": {"hostname": "rtu-1"}}]}}, out)
+        == ""
+    )
+
+
+def test_nodes_item_with_configure_ok_and_no_pre_start_is_judged(settings, tmp_path):
+    good = exp_out(
+        ("wf-1", ["/etc/phenix/startup/999-scale.sh", "/wind-configs.tgz"]),
+        ("wf-2", ["/etc/phenix/startup/999-scale.sh", "/wind-configs.tgz"]),
+    )
+    host = StrictHost({"uv run": cp(0, good)}, settings)
+    assert nodes_rows(settings, tmp_path, host)[0].verdict == "ok"
+    assert len(host.calls) == 1  # configure only: a missing pre-start cannot discard its verdict
+
+
+def test_skipped_row_is_labelled_by_what_the_item_expects(settings, tmp_path):
+    (row,) = nodes_rows(settings, tmp_path, StrictHost({"uv run": cp(127)}, settings))
+    assert (row.verdict, row.check) == ("skipped", "expect_nodes")
+
+
+def nodes_rows(settings, tmp_path, host, name="scale-wind-expands"):
+    if not (board_dir(settings, "main") / "apps").exists():
+        synced(settings, "main")
+    item = load_item(f"apps/{name}", settings)
+    r = dataclasses.replace(res(settings, "main"), items=[], validate_only=[item])
+    return invalid.app_rows(r, settings, host, OLD, tmp_path)
+
+
+def test_app_rows_judge_what_configure_added(settings, tmp_path):
+    want = exp_out(
+        ("rtu-1", []),
+        *((f"wf-{n}", ["/etc/phenix/startup/999-scale.sh", "/wind-configs.tgz"]) for n in (1, 2)),
+    )
+    host = StrictHost({"uv run": cp(0, want)}, settings)
+    (row,) = nodes_rows(settings, tmp_path, host)
+    assert (row.check, row.verdict, row.reason) == ("scale configure adds nodes", "ok", "")
+    assert len(host.calls) == 1
+    host = StrictHost({"uv run": cp(0, exp_out(("rtu-1", [])))}, settings)
+    (row,) = nodes_rows(settings, tmp_path, host)
+    assert row.verdict == "FAIL" and row.reason == "added nodes [], want ['wf-1', 'wf-2']"
+
+
+def test_app_rows_fail_a_rejected_expansion_and_skip_without_uv(settings, tmp_path):
+    host = StrictHost({"uv run": cp(1, "", "boom " + "y" * 300)}, settings)
+    (row,) = nodes_rows(settings, tmp_path, host)
+    assert row.verdict == "FAIL" and row.reason.startswith("configure rejected the config: ")
+    assert row.reason.endswith("y" * 200) and "boom" not in row.reason
+    (row,) = nodes_rows(settings, tmp_path, StrictHost({"uv run": cp(127)}, settings))
+    assert row.verdict == "skipped"
+
+
+def test_every_expect_nodes_item_is_validate_only(settings):
+    items = [i for i in all_items(settings) if i.expect_nodes]
+    assert {i.name for i in items} >= {"scale-builtin-expands", "scale-wind-expands"}
+    for i in items:
+        assert (i.kind, i.routes, i.verify, i.expect_invalid) == ("app", [], [], ""), i.name
