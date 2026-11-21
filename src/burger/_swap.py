@@ -29,6 +29,16 @@ def _short(image: str | None) -> str:
     return image.split(":", 1)[1] if image else "stock"
 
 
+def _refuse_while_running(w: Swap, host, have: str | None, image: str | None) -> None:
+    running = update.running_experiments(host)
+    if running:
+        raise BurgerError(
+            f"experiments running: {', '.join(running)}; changing {w.name} "
+            f"({_short(have)} -> {_short(image)}) {w.effect}, "
+            "so bring them down first (burger down <board>)"
+        )
+
+
 def ensure(w: Swap, host, s: Settings, want: str | None, image: str | None) -> None:
     ctr = w.ctr(s)
     if not ctr:
@@ -44,13 +54,7 @@ def ensure(w: Swap, host, s: Settings, want: str | None, image: str | None) -> N
         if want and w.on_match:
             w.on_match(host, s)
         return
-    running = update.running_experiments(host)
-    if running:
-        raise BurgerError(
-            f"experiments running: {', '.join(running)}; changing {w.name} "
-            f"({_short(have)} -> {_short(image)}) {w.effect}, "
-            "so bring them down first (burger down <board>)"
-        )
+    _refuse_while_running(w, host, have, image)
     w.recreate(host, s, want, image)
     logger.info("{} container '{}' now runs {}", w.name, ctr, image or "stock")
 

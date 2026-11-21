@@ -364,3 +364,49 @@ def test_up_clears_the_stage_dir_before_putting_files(settings, monkeypatch, tmp
     rm = next(i for i, c in enumerate(lines) if c.endswith(f"rm -rf {stage}"))
     put = next(i for i, c in enumerate(lines) if c.endswith(f"mkdir -p {stage}"))
     assert rm < put
+
+
+def _with(r, route=None, **item):
+    """The resolved board with route fields and every item's fields replaced."""
+    items = [dataclasses.replace(i, **item) for i in r.items]
+    return dataclasses.replace(r, items=items, route=dataclasses.replace(r.route, **(route or {})))
+
+
+@pytest.mark.parametrize("arm64, name", [(False, "goart"), (True, "goart-arm64")])
+def test_goart_binary_is_staged_by_route_arch(settings, tmp_path, arm64, name):
+    root = tmp_path / "root"
+    (root / "assets" / "art").mkdir(parents=True)
+    (root / "assets" / "art" / name).write_text("bin")
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _with(res(settings), route={"image_map": {"a.qc2": "b.qc2"} if arm64 else {}})
+    experiment._stage_goart(r, dataclasses.replace(settings, root=root), out)
+    assert (out / "goart").read_text() == "bin"
+
+
+def test_goart_binary_missing_says_where_to_put_it(settings, tmp_path):
+    r = _with(res(settings), route={"image_map": {"a.qc2": "b.qc2"}})
+    with pytest.raises(BurgerError, match="assets/art/goart-arm64"):
+        experiment._stage_goart(r, dataclasses.replace(settings, root=tmp_path), tmp_path)
+
+
+def test_item_assets_are_copied_flat_into_out_assets(settings, tmp_path):
+    root = tmp_path / "root"
+    (root / "a" / "b").mkdir(parents=True)
+    (root / "a" / "b" / "gen.py").write_text("g")
+    out = tmp_path / "out"
+    out.mkdir()
+    r = _with(res(settings), assets=("a/b/gen.py",))
+    experiment._stage_assets(r, dataclasses.replace(settings, root=root), out)
+    assert (out / "assets" / "gen.py").read_text() == "g"
+
+
+def test_missing_item_asset_is_an_error(settings, tmp_path):
+    r = _with(res(settings), assets=("nope/x.bin",))
+    with pytest.raises(BurgerError, match=r"item asset not found: nope/x\.bin"):
+        experiment._stage_assets(r, dataclasses.replace(settings, root=tmp_path), tmp_path)
+
+
+def test_no_assets_makes_no_assets_dir(settings, tmp_path):
+    experiment._stage_assets(res(settings), settings, tmp_path)
+    assert not (tmp_path / "assets").exists()

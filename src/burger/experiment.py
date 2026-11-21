@@ -429,6 +429,13 @@ def _scorch_failed(res, settings, host, run: dict, i: int, since: str, judge, ti
     return [r for r in rows if r[3] == "FAIL"]
 
 
+def _log_gave_up(health: bool, i: int, attempt: int, failed: list, log) -> None:
+    if health:
+        logger.warning("run {} (health) still failing at the --settle cap: {}", i, failed[0][4])
+    # one line: the full SCORCH output is already in the attempt log
+    logger.warning("run {} attempt {} failed: {} (output: {})", i, attempt, failed[0][4], log)
+
+
 def _scorch_run(res, settings, host, runs, i, judge, settle, clock, first_cap) -> None:
     """Run i of the scorch: health retries until healthy or --settle runs out."""
     exp, run = res.board.exp, runs[i]
@@ -478,14 +485,7 @@ def _scorch_run(res, settings, host, runs, i, judge, settle, clock, first_cap) -
             now = clock.time()
             length = now - began
             if now + 60 + length > deadline:
-                if health:
-                    logger.warning(
-                        "run {} (health) still failing at the --settle cap: {}", i, failed[0][4]
-                    )
-                # one line: the full SCORCH output is already in the attempt log
-                logger.warning(
-                    "run {} attempt {} failed: {} (output: {})", i, attempt, failed[0][4], log
-                )
+                _log_gave_up(health, i, attempt, failed, log)
                 return
             left = max(0, deadline - now)
             say(
