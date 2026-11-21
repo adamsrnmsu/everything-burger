@@ -6,7 +6,7 @@ import pytest
 from burger.config import BurgerError
 from burger.probes import workflow_vars
 from tests.conftest import res as resolved
-from tests.fakes import FakeHost, enforce
+from tests.fakes import FakeHost, enforce, watch_loud
 
 FILE_VARS = {"BV_A": "from-file", "BV_B": "file-b"}
 
@@ -183,3 +183,11 @@ def test_failed_row_shows_the_output_tail(settings):
 def test_config_get_that_fails_is_a_failed_row(settings):
     rows = strict(settings, **{"config get": (1, "", "gone")})[1]
     assert rows[-1].verdict == "FAIL" and rows[-1].reason == "rc=1: gone"
+
+
+def test_cleanup_keeps_its_output_off_the_terminal(settings):
+    host = FakePhenix(settings)
+    loud = watch_loud(host)
+    run(settings, host=host)
+    assert [c for c in host.calls if "delete" in c] and [c for c in host.calls if "rm" in c]
+    assert not [c for c in loud if " config delete " in c or " rm -rf " in c]

@@ -10,7 +10,7 @@ from loguru import logger
 from burger import cli, experiment, minimega, update
 from burger.config import BurgerError
 from tests.conftest import MAN, res
-from tests.fakes import FakeHost
+from tests.fakes import FakeHost, StrictHost, watch_loud
 
 SHA = "c" * 40
 TAG = "burger/minimega:cccccccccccc"
@@ -147,8 +147,12 @@ class MmHost(FakeHost):
         return got
 
 
-def mm_host(settings, sha=None, running=(), work=None, image=None):
-    host = MmHost(
+class StrictMmHost(MmHost, StrictHost):
+    """MmHost that keeps the real Host's contract (exit codes raise, output needs capture)."""
+
+
+def mm_host(settings, sha=None, running=(), work=None, image=None, cls=MmHost):
+    host = cls(
         {INSPECT: labels(settings, sha, work, image),
          f"docker exec phenix python3 -c {minimega.PY_FILE}": cp(PY_AT + "\n")},
         settings,
@@ -402,3 +406,46 @@ def test_update_containers_dry_run_only_says_it(settings):
     assert any("minimega.py" in line for line in said)
     assert not any(c.startswith("docker cp") for c in joined(host))
     assert not (settings.work / "minimega").exists()
+
+
+def test_asking_docker_whether_a_tag_is_built_is_quiet_and_a_miss_is_not_an_error(
+    settings, tmp_path
+):
+    host = StrictHost({"docker image inspect": cp(rc=1)}, settings)
+    loud = watch_loud(host)
+    minimega.build_image(host, tmp_path / "minimega", SHA)
+    assert not [c for c in loud if "image inspect" in c]
+    assert any(c[:2] == ["docker", "build"] for c in host.calls)  # the miss built it
+
+
+def test_install_makes_the_work_directory_and_reads_phenixs_import_path_captured(
+    settings, tmp_path
+):
+    deep = dataclasses.replace(settings, work=tmp_path / "not" / "yet")
+    host = mm_host(deep, cls=StrictMmHost)
+    minimega.ensure(host, deep, SHA)
+    assert any(f"phenix:{PY_AT}" in c for c in joined(host))
+
+
+def test_phenix_without_a_minimega_py_names_where_it_imports_from(settings):
+    host = mm_host(settings)
+    host.responses[f"docker exec phenix python3 -c {minimega.PY_FILE}"] = cp("\n")
+    with pytest.raises(BurgerError, match="minimega from nowhere, not"):
+        minimega.ensure(host, settings, SHA)
+    host.responses[f"docker exec phenix python3 -c {minimega.PY_FILE}"] = cp("/x/minimega.pyc\n")
+    with pytest.raises(BurgerError, match=r"minimega from /x/minimega\.pyc, not"):
+        minimega.ensure(host, settings, SHA)
+
+
+def test_py_reason_survives_unreadable_hashes_and_names_what_each_side_has(settings):
+    sha = "docker exec minimega sha256sum"
+    theirs = "docker exec phenix python3 -c"
+    gone = StrictHost({sha: cp(rc=1), theirs: cp(rc=1)}, settings)
+    reason = minimega._py_reason(gone, settings, "b")
+    assert "container has none" in reason and "imports no minimega" in reason
+    assert "burger install b" in reason
+    differ = StrictHost({sha: cp("a" * 64 + "  f\n"), theirs: cp("b" * 64 + "\n")}, settings)
+    reason = minimega._py_reason(differ, settings, "b")
+    assert f"imports {'b' * 12}," in reason and f"container has {'a' * 12};" in reason
+    same = StrictHost({sha: cp("a" * 64 + "  f\n"), theirs: cp("a" * 64 + "\n")}, settings)
+    assert minimega._py_reason(same, settings, "b") == ""

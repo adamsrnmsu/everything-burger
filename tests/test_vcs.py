@@ -10,7 +10,7 @@ from burger.config import BurgerError
 from burger.shell import Host
 from burger.switchboard import load_switchboard, resolve
 from burger.vcs import _branch_ref, _fetch_branch, bennu_label, branch_url, fork_owner, prs, sync
-from tests.fakes import FakeHost
+from tests.fakes import FakeHost, watch_loud
 
 
 def git(repo, *a):
@@ -545,6 +545,15 @@ def test_merge_conflict_message_carries_gits_own_output(settings, apps_origin):
     assert "CONFLICT" in str(e.value) and "None" not in str(e.value)
     wt = settings.work / "baseline" / "apps"
     assert git(wt, "diff", "--name-only", "--diff-filter=U") == ""  # the merge was aborted
+
+
+def test_aborting_a_conflicted_merge_keeps_gits_output_off_the_terminal(settings, apps_origin):
+    make_origin(apps_origin, {1: "one\n", 2: "two\n"})
+    host = Host(settings)
+    loud = watch_loud(host)
+    with pytest.raises(BurgerError):
+        sync(board_with_prs(settings, [1, 2]), settings, host)
+    assert not [c for c in loud if " merge --abort" in c]
 
 
 def test_fork_owner_reads_the_login_gh_prints(monkeypatch, tmp_path, settings):

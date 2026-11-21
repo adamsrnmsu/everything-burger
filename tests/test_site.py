@@ -8,7 +8,7 @@ import pytest
 from burger import bennu
 from burger.config import BurgerError, Settings
 from burger.site import build_dockerfile, load_site, patch_dockerfile, redact, site_image
-from tests.fakes import FakeHost, StrictHost
+from tests.fakes import FakeHost, StrictHost, watch_loud
 
 PEM = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
 
@@ -567,3 +567,13 @@ def test_probe_status_boundaries(tmp_path, code, strict, answer):
         assert probe(f"http://127.0.0.1:{srv.server_port}/", site, None, strict=strict) == answer
     finally:
         srv.shutdown()
+
+
+def test_site_image_asks_docker_for_the_tag_quietly(tmp_path):
+    site = full_site(tmp_path)
+    host = _host(
+        tmp_path, site, {"docker image inspect": subprocess.CompletedProcess([], 1)}, StrictHost
+    )
+    loud = watch_loud(host)
+    site_image(host, "golang:1.24")
+    assert not [c for c in loud if "image inspect" in c]

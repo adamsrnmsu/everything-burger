@@ -12,7 +12,7 @@ from burger.config import BurgerError
 from burger.switchboard import load_switchboard, resolve
 from burger.vcs import sync
 from tests.conftest import MAN, res
-from tests.fakes import FakeHost
+from tests.fakes import FakeHost, StrictHost
 from tests.test_minimega import PY_AT, board_built
 from tests.test_minimega import labels as mm_labels
 
@@ -346,3 +346,11 @@ def test_sync_phenix_pr_fetches_only_the_pr_head(settings, monkeypatch):
     assert str(settings.work / "baseline" / "phenix") in [a for c in host.calls for a in c]
     man = sync(res(settings), settings, FakeHost(settings=settings))
     assert man["phenix"] is None
+
+
+def test_build_image_reads_the_sed_output_it_captured(settings, tmp_path):
+    wt = wt_with(tmp_path)
+    sedded = DOCKERFILE.replace("RUN a", "RUN sedded")
+    host = StrictHost({"docker image inspect": done(rc=1), "sed -f": done(sedded)}, settings)
+    phenix.build_image(host, wt, SHA, None, "/r/p.sed")
+    assert (wt / "docker" / "Dockerfile.burger").read_text() == sedded

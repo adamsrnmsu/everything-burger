@@ -50,3 +50,17 @@ class StrictHost(FakeHost):
 
     def run(self, cmd, check=True, capture=False, **kw):
         return enforce(super().run(cmd, check, capture, **kw), cmd, check, capture)
+
+
+def watch_loud(host) -> list[str]:
+    """Note, in the returned list, each command `host` runs uncaptured: its output would
+    spill onto the user's terminal."""
+    seen, inner = [], host.run
+
+    def run(cmd, check=True, capture=False, **kw):
+        if not capture:
+            seen.append(" ".join(map(str, cmd)))
+        return inner(cmd, check, capture, **kw)
+
+    host.run = run
+    return seen

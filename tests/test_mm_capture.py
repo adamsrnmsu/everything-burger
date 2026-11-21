@@ -7,7 +7,7 @@ from typing import ClassVar
 from burger import probes
 from burger.probes import mm_capture
 from tests.conftest import res as resolved
-from tests.fakes import FakeHost, enforce
+from tests.fakes import FakeHost, enforce, watch_loud
 
 DIR = "/phenix/images"
 
@@ -316,3 +316,11 @@ def test_left_mirrors_are_named(settings, monkeypatch):
         row.reason
         == "BurgerError: 1 mirrors left: {'bridge': 'mega_bridge', 'namespace': 'ebwes-main'}"
     )
+
+
+def test_cleanup_of_the_capture_files_keeps_its_output_off_the_terminal(settings, monkeypatch):
+    host = StrictMM(settings, refuse=["snaplen=70000", "vms=", "format="])
+    loud = watch_loud(host)
+    run(settings, host, monkeypatch)
+    assert any("rm -f" in c[-1] for c in host.calls)
+    assert not [c for c in loud if "rm -f" in c]
