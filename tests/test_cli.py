@@ -16,7 +16,7 @@ from burger.compose import compose
 from burger.config import BurgerError, Settings
 from burger.items import STAGES, load_item
 from burger.switchboard import load_switchboard
-from tests.fakes import FakeHost, StrictHost
+from tests.fakes import FakeHost, StrictHost, watch_loud
 
 ROOT = Path(__file__).resolve().parents[1]
 pytestmark = pytest.mark.usefixtures("vm_password")
@@ -1196,3 +1196,37 @@ def test_banner_only_on_a_terminal_without_quiet(monkeypatch, tty, quiet, shown)
     monkeypatch.setattr(cli.sys.stdout, "isatty", lambda: tty)
     assert main([*(["--quiet"] if quiet else []), "list"]) == 0
     assert bool(drawn) is shown
+
+
+def test_registry_pull_is_quiet_and_its_failure_is_a_row(monkeypatch, tmp_path):
+    from burger.site import load_site
+
+    _site_env(tmp_path, monkeypatch)
+    monkeypatch.setattr(cli, "probe", lambda *_a, **_k: None)
+    host = StrictHost({"docker pull": _cp(1)}, site=load_site())
+    loud = watch_loud(host)
+    _site_rows_of(host)
+    assert any(c[:2] == ["docker", "pull"] for c in host.calls)
+    assert not [c for c in loud if c.startswith("docker pull")]
+
+
+def test_service_rows_a_missing_phenix_cli_or_minimega_is_a_row_not_a_crash(settings):
+    host = StrictHost(
+        {"docker exec phenix phenix version": _cp(1), "docker exec phenix phenix mm": _cp(1)},
+        settings,
+    )
+    host.api_responses = {"/experiments": {}}
+    got = []
+    cli._service_rows(host, settings, lambda label, ok, hint="": got.append((label, ok)))
+    assert ("phenix CLI", False) in got and ("minimega reachable", False) in got
+
+
+def test_version_prints_the_text_as_is_not_as_rich_markup(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "__version__", "1.0[bold]x")
+    assert main(["--version"]) == 0
+    assert capsys.readouterr().out.strip() == "burger 1.0[bold]x"
+
+
+def test_no_command_prints_usage_to_stderr(capsys):
+    assert main([]) == 2
+    assert "usage: burger [--quiet] [-v] <command> ...  (burger --help)" in capsys.readouterr().err

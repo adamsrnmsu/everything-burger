@@ -5,7 +5,7 @@ import pytest
 
 from burger.config import GIT_SAFE, BurgerError, Settings
 from burger.shell import Host
-from tests.fakes import FakeHost
+from tests.fakes import FakeHost, StrictHost
 
 
 def test_settings_from_env_defaults(monkeypatch, tmp_path):
@@ -145,6 +145,51 @@ def test_mm_turns_an_error_line_into_a_failure(monkeypatch, tmp_path):
         host, "run", lambda cmd, **k: subprocess.CompletedProcess(cmd, 0, "id,path\n", "INFO ok\n")
     )
     assert host.mm("e", "capture").returncode == 0
+
+
+def test_mm_sees_an_error_line_on_either_stream(monkeypatch, tmp_path):
+    host = Host(Settings.from_env(tmp_path))
+    for out, err in (("Error (rig): bad\n", ""), ("", "Error (rig): bad\n")):
+        monkeypatch.setattr(
+            host,
+            "run",
+            lambda cmd, out=out, err=err, **k: subprocess.CompletedProcess(cmd, 0, out, err),
+        )
+        assert host.mm("e", "x").returncode == 1
+
+
+def test_run_leaves_output_alone_unless_asked_to_capture(settings):
+    host = Host(settings)
+    assert host.run(["true"]).stdout is None
+    assert host.run(["echo", "hi"], capture=True).stdout == "hi\n"
+
+
+def test_native_put_copies_a_directory_into_a_directory_that_exists_and_a_file(tmp_path):
+    host = Host(dataclasses.replace(Settings.from_env(tmp_path), ctr=""))
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.txt").write_text("a")
+    host.put(src, str(tmp_path / "dst"))  # `mkdir -p` has made dst already
+    assert (tmp_path / "dst" / "a.txt").read_text() == "a"
+    host.put(src / "a.txt", str(tmp_path / "x" / "y" / "b.txt"))
+    assert (tmp_path / "x" / "y" / "b.txt").read_text() == "a"
+
+
+def test_native_fetch_makes_the_parent_and_a_missing_source_is_false(tmp_path):
+    host = Host(dataclasses.replace(Settings.from_env(tmp_path), ctr=""))
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "a.txt").write_text("a")
+    assert host.fetch(str(src), str(tmp_path / "deep" / "er" / "dst")) is True
+    assert (tmp_path / "deep" / "er" / "dst" / "a.txt").read_text() == "a"
+    assert host.fetch(str(tmp_path / "nope"), str(tmp_path / "out")) is False
+
+
+def test_container_fetch_answers_false_when_docker_cp_fails(tmp_path):
+    host = StrictHost({"docker cp": subprocess.CompletedProcess([], 1, "", "no such")})
+    assert host.fetch("/a", str(tmp_path / "d" / "x")) is False
+    assert (tmp_path / "d").is_dir()
+    assert StrictHost().fetch("/a", str(tmp_path / "e" / "x")) is True
 
 
 class _Resp:

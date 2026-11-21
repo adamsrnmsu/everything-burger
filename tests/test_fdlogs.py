@@ -286,3 +286,10 @@ def test_error_counts_toward_a_fail_on_error_alongside_a_crash():
     one = clean()["rtu-1"] | {"crash": 1, "error": 1}
     assert fdlogs.verdict({"rtu-1": one}, "error")[0] == "FAIL"
     assert fdlogs.verdict({"rtu-1": one | {"crash": 0}}, "crash")[0] == "WARN"
+
+
+def test_answered_does_not_poll_once_the_deadline_has_passed(settings, monkeypatch):
+    monkeypatch.setattr(fdlogs.time, "time", lambda: 100.0)  # a clock that has not moved
+    host = cc_host(settings, answered="5,1")
+    assert not fdlogs._answered(host, "exp", "5", 0)
+    assert host.calls == []

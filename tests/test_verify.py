@@ -13,7 +13,7 @@ from burger.routes import load_route
 from burger.switchboard import load_switchboard, resolve
 from burger.vcs import board_dir
 from tests.conftest import MAN, make_ctx
-from tests.fakes import FakeHost, StrictHost
+from tests.fakes import FakeHost, StrictHost, watch_loud
 
 
 def setup(
@@ -459,3 +459,23 @@ def test_health_attribution_on_a_host_shared_with_other_items(settings, monkeypa
     n = [c for c in checks if c[1] == bad[1]].index(bad)
     assert n and all(r.verdict == "ok" for r in same[:n]) and same[n].verdict == "FAIL"
     assert all(r.reason == "not reached" for r in same[n + 1 :])
+
+
+def test_the_validator_probe_keeps_its_output_off_the_terminal(settings, monkeypatch):
+    res, host = strict_verify(settings, monkeypatch, name="bennu")
+    host.responses["docker exec phenix sh -c command -v"] = cp(1)
+    loud = watch_loud(host)
+    v.verify(res, settings, host)
+    assert any("command -v" in " ".join(c) for c in host.calls)
+    assert not [c for c in loud if "command -v" in c]
+
+
+def test_only_advisory_items_get_a_health_component_and_only_when_it_ran(settings, monkeypatch):
+    res, _ = setup(settings, monkeypatch, name="main")
+    res.items = [
+        dataclasses.replace(i, advisory=True) if i.name == "otsim" else i for i in res.items
+    ]
+    status = {("health-mirror", "start"): "ok", ("health-otsim", "start"): "ok"}
+    rows = v._health_rows(res, MAN, status, {})  # no ("health", "start"): that run never ran
+    assert {r.item for r in rows} == {"otsim"}
+    assert v._health_rows(res, MAN, {}, {}) == []
