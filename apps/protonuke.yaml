@@ -1,0 +1,26 @@
+name: protonuke
+kind: app
+type: protonuke
+about: >
+  The protonuke app on a server (the first RTU, `-serve -http`) and a client (the
+  second RTU, `-http` at the server's IF0). The app writes PROTONUKE_ARGS into
+  /etc/default/protonuke on each host, which the image's protonuke systemd service
+  reads, so a pass means each VM got its own args. Nothing checks that traffic flows:
+  neither bennu image ships protonuke or its service (minimega builds it, the
+  images do not carry it), and burger has no way to put the binary in a VM.
+routes: [waterway, waterway-arm64]
+hosts:
+  - hostname: "{route.rtus[0]}"
+    metadata: {args: "-serve -http"}
+  - hostname: "{route.rtus[1]}"
+    metadata: {args: "-http 10.1.1.101"}
+# Addresses are waterway's: rtu-1 10.1.1.101.
+verify:
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "cat /etc/default/protonuke"
+      expect: "PROTONUKE_ARGS = -serve -http"
+  - vm:
+      host: "{route.rtus[1]}"
+      run: "cat /etc/default/protonuke"
+      expect: "PROTONUKE_ARGS = -http 10.1.1.101"
