@@ -128,6 +128,44 @@ TRAFFIC_NODES = [
 ]
 
 
+def _ics_server(
+    hostname: str, about: str, image: str, *, memory: int, vcpus: int, host: int
+) -> dict:
+    """A VM on the ICS segment (10.1.1.<host>) with a MGMT address burger can cc into:
+    172.16.1.<host + 10>. Taken so far: monitor .200, kali .201, trafficgen .210-.212."""
+    return {
+        "general": {"hostname": hostname, "description": about},
+        "hardware": {
+            "drives": [{"image": image}],
+            "memory": memory,
+            "os_type": "linux",
+            "vcpus": vcpus,
+        },
+        "network": {
+            "interfaces": [
+                {
+                    "name": "IF0",
+                    "vlan": "ICS",
+                    "address": f"10.1.1.{host}",
+                    "gateway": "10.1.1.1",
+                    "mask": 24,
+                    "proto": "static",
+                    "type": "ethernet",
+                },
+                {
+                    "name": "mgmt",
+                    "vlan": "MGMT",
+                    "address": f"172.16.1.{host + 10}",
+                    "mask": 16,
+                    "proto": "static",
+                    "type": "ethernet",
+                },
+            ]
+        },
+        "type": "VirtualMachine",
+    }
+
+
 # A Caldera C2 server on the ICS segment, injected when an item requires it (the
 # caldera component). It sits with the RTUs so operations can reach them, keeps a
 # MGMT address so burger can cc into it, and runs the Caldera server the
@@ -135,37 +173,15 @@ TRAFFIC_NODES = [
 # Caldera installed and the adversary/fact source the board names already loaded;
 # built like KALI_NODE rather than committing a topology, so any ICS route hosts
 # it.
-CALDERA_NODE = {
-    "general": {"hostname": "caldera", "description": "burger Caldera C2 server"},
-    "hardware": {
-        "drives": [{"image": "caldera.qc2"}],
-        "memory": 4096,
-        "os_type": "linux",
-        "vcpus": 2,
-    },
-    "network": {
-        "interfaces": [
-            {
-                "name": "IF0",
-                "vlan": "ICS",
-                "address": "10.1.1.210",
-                "gateway": "10.1.1.1",
-                "mask": 24,
-                "proto": "static",
-                "type": "ethernet",
-            },
-            {
-                "name": "mgmt",
-                "vlan": "MGMT",
-                "address": "172.16.1.220",
-                "mask": 16,
-                "proto": "static",
-                "type": "ethernet",
-            },
-        ]
-    },
-    "type": "VirtualMachine",
-}
+CALDERA_NODE = _ics_server(
+    "caldera", "burger Caldera C2 server", "caldera.qc2", memory=4096, vcpus=2, host=210
+)
+# An Ignition gateway on the ICS segment, injected when an item requires it (the
+# ignition app item): waterway has no SCADA master that polls DNP3. Needs the
+# ignition.qc2 image; the app writes its files into the gateway's data tree.
+IGNITION_NODE = _ics_server(
+    "ignition", "burger Ignition gateway", "ignition.qc2", memory=4096, vcpus=2, host=211
+)
 
 
 # On the rig tested, older bennu VMs had no miniccc binary and no virtio_console
@@ -337,6 +353,7 @@ def _required_nodes(req) -> list[dict]:
         *([KALI_NODE] if req.attacker else []),
         *(TRAFFIC_NODES if req.traffic_gen else []),
         *([CALDERA_NODE] if req.caldera_server else []),
+        *([IGNITION_NODE] if req.ignition_server else []),
     ]
 
 

@@ -91,10 +91,24 @@ def test_arm64_routes_render_arm64_images_only(settings):
     assert "blue" not in {n["general"]["hostname"] for n in topo["spec"]["nodes"]}
     # every node burger injects: mapped image plus the arm64 hardware block
     topo, _ = _render(
-        settings, "ettercap", "waterway-arm64", monitor=True, traffic_gen=True, caldera_server=True
+        settings,
+        "ettercap",
+        "waterway-arm64",
+        monitor=True,
+        traffic_gen=True,
+        caldera_server=True,
+        ignition_server=True,
     )
     assert all(i.endswith("-arm64.qc2") for i in _images(topo))
-    injected = {"kali", "monitor", "traffic-server", "background-gen", "malware-gen", "caldera"}
+    injected = {
+        "kali",
+        "monitor",
+        "traffic-server",
+        "background-gen",
+        "malware-gen",
+        "caldera",
+        "ignition",
+    }
     nodes = [n for n in topo["spec"]["nodes"] if n["general"]["hostname"] in injected]
     assert len(nodes) == len(injected)
     for n in nodes:

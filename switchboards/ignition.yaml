@@ -1,0 +1,15 @@
+# The ignition app on the arm64 waterway range: an injected Ignition gateway wired to
+# rtu-2, the ot-sim fep. The otsim, fep-client and helics items are the helics board's:
+# otsim's own checks need helics' sub-broker. The ignition app reads ot-sim's point map
+# from the scenario, so apps/otsim must be on.
+about: "ignition app on upstream main: DNP3 device and ot-sim-named tags for the fep"
+route: waterway-arm64
+apps: {prs: []}
+items:
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  apps/otsim: on
+  bennu/otsim-fep-client: on
+  apps/helics: on
+  bennu/helics-otsim: on
+  apps/ignition: on

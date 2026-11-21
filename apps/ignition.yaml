@@ -1,0 +1,44 @@
+name: ignition
+kind: app
+type: ignition
+about: >
+  The ignition app on an injected Ignition gateway (requires.ignition_server adds an
+  `ignition` VM on the ICS segment, since waterway has no SCADA master that polls DNP3).
+  It connects to rtu-2, the ot-sim fep serving DNP3 on 10.1.1.102:20000 (rtu-1 serves
+  Modbus only, so it is not an Ignition device), and names every point after the
+  ot-sim device and variable behind it, read from apps/otsim: so switch both on
+  together. A pass means the gateway's data tree got the DNP3 device, a tag tree whose
+  names and DNP3 indices match what ot-sim's rtu-2 config serves, the WebDev tag API
+  and the Perspective project. The arm64 ignition image is an Ignition 8.1 tree under
+  /usr/local/bin/ignition, but the app writes the 8.3 layout under /opt/ignition/data
+  and restarts an `ignition` unit, so the gateway never loads any of it: nothing here
+  runs, only the injected files are checked (docs/limitations.md).
+routes: [waterway-arm64]
+requires:
+  ignition_server: true
+hosts:
+  - hostname: ignition
+    metadata:
+      type: gateway
+      connected_rtus: ["{route.rtus[1]}"]
+      perspective: {open_client: false}
+      api: true
+verify:
+  # the DNP3 device: ot-sim's fep endpoint
+  - vm:
+      host: ignition
+      run: "grep -q '\"hostname\": \"10.1.1.102\"' /opt/ignition/data/config/resources/core/com.inductiveautomation.opcua/device/{route.rtus[1]}/config.json && grep -q '\"port\": 20000' /opt/ignition/data/config/resources/core/com.inductiveautomation.opcua/device/{route.rtus[1]}/config.json"
+  # the tag tree names points after ot-sim's devices and variables, at its DNP3 indices
+  - vm:
+      host: ignition
+      run: "T=/opt/ignition/data/config/resources/core/ignition/tag-definition/default/tags.json; grep -A4 '\"name\": \"voltage\"' $T | grep -q 'AnalogInput0' && grep -A4 '\"name\": \"controls\"' $T | grep -q 'BinaryOutput0'"
+  # ... and rtu-2's own config serves those same tags at those indices
+  - vm:
+      host: "{route.rtus[1]}"
+      run: "grep -B1 '<tag>bus-01.voltage</tag>' /etc/ot-sim/config.xml | grep -q '<address>0</address>' && grep -B1 '<tag>brkr-01.controls</tag>' /etc/ot-sim/config.xml | grep -q '<address>0</address>'"
+  - vm:
+      host: ignition
+      run: "test -f /opt/ignition/data/projects/api/com.inductiveautomation.webdev/resources/tags/doGet.py && test -f /opt/ignition/data/projects/hmi/project.json"
+  - vm:
+      host: ignition
+      run: "grep -q 'systemctl start ignition' /etc/phenix/startup/98-ignition.sh"
