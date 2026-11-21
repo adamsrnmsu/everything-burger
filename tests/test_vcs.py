@@ -1,10 +1,11 @@
 import dataclasses
 import json
+import shutil
 import subprocess
 
 import pytest
 
-from burger import config
+from burger import config, vcs
 from burger.config import BurgerError
 from burger.shell import Host
 from burger.switchboard import load_switchboard, resolve
@@ -469,3 +470,99 @@ def test_prs_a_carried_pr_that_is_open_takes_its_title_and_flags_a_moved_head(
     (row,) = prs(settings, host, "me")
     assert row["boards"] == ["x", "y"] and row["title"] == "seven"
     assert row["stale"] == ["x"]  # y was never synced: nothing to be behind
+
+
+def test_ensure_repo_makes_missing_parents_and_clones_once_per_call(
+    settings, monkeypatch, tmp_path
+):
+    monkeypatch.delenv("BURGER_APPS_REPO", raising=False)
+    deep = dataclasses.replace(settings, work=tmp_path / "a" / "b")
+    host = FakeHost(settings=deep)
+    path = vcs._ensure_repo(host, deep, "apps")
+    assert path == deep.work / "repos" / "apps" and path.parent.is_dir()
+    vcs._ensure_repo(host, deep, "apps")  # the parent already exists: still fine
+    assert [c[:3] for c in host.calls] == [["git", "clone", "--quiet"]] * 2
+    (path / ".git").mkdir(parents=True)
+    vcs._ensure_repo(host, deep, "apps")
+    assert len(host.calls) == 2  # a clone is not repeated
+
+
+def test_ensure_repo_honours_the_env_override(settings, monkeypatch, tmp_path):
+    monkeypatch.setenv("BURGER_APPS_REPO", str(tmp_path / "mine"))
+    (tmp_path / "mine" / ".git").mkdir(parents=True)
+    host = FakeHost(settings=settings)
+    assert vcs._ensure_repo(host, settings, "apps") == tmp_path / "mine"
+    assert host.calls == []
+
+
+@pytest.mark.parametrize("remove_deletes", [True, False])
+def test_fresh_worktree_replaces_a_stale_one_whatever_git_says(tmp_path, remove_deletes):
+    """`worktree remove` may fail (not a worktree) or already delete the dir: neither stops
+    the new worktree."""
+    stale = tmp_path / "wt"
+    (stale / "sub").mkdir(parents=True)
+
+    class Host2(FakeHost):
+        def run(self, cmd, check=True, capture=False, **kw):
+            super().run(cmd)
+            if "remove" in cmd:
+                if check:
+                    raise BurgerError("remove must not be checked")
+                if remove_deletes:
+                    shutil.rmtree(stale)
+                return subprocess.CompletedProcess(cmd, 1, "", "")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    host = Host2()
+    vcs._fresh_worktree(host, tmp_path, stale, "refs/x")
+    assert not stale.exists()
+    verbs = [c[3:5] for c in host.calls]
+    assert verbs == [["worktree", "remove"], ["worktree", "prune"], ["worktree", "add"]]
+    assert host.calls[-1][-3:] == ["--detach", str(stale), "refs/x"]
+
+
+def test_fresh_worktree_without_a_stale_one_just_adds(tmp_path):
+    host = FakeHost()
+    vcs._fresh_worktree(host, tmp_path, tmp_path / "wt", "refs/x")
+    assert [c[3:5] for c in host.calls] == [["worktree", "prune"], ["worktree", "add"]]
+
+
+def test_ls_remote_reads_the_head_and_tolerates_a_failing_remote(tmp_path, settings):
+    origin = tmp_path / "o"
+    make_origin(origin, {4: "x\n"})
+    host = Host(settings)
+    assert vcs._ls_remote(host, str(origin), "refs/pull/4/head") == git(
+        origin, "rev-parse", "refs/pull/4/head"
+    )
+    assert vcs._ls_remote(host, str(origin), "refs/pull/5/head") is None
+    assert vcs._ls_remote(host, str(tmp_path / "nowhere"), "refs/heads/main") is None
+
+
+def test_merge_conflict_message_carries_gits_own_output(settings, apps_origin):
+    make_origin(apps_origin, {1: "one\n", 2: "two\n"})
+    with pytest.raises(BurgerError) as e:
+        sync(board_with_prs(settings, [1, 2]), settings, Host(settings))
+    assert "CONFLICT" in str(e.value) and "None" not in str(e.value)
+    wt = settings.work / "baseline" / "apps"
+    assert git(wt, "diff", "--name-only", "--diff-filter=U") == ""  # the merge was aborted
+
+
+def test_fork_owner_reads_the_login_gh_prints(monkeypatch, tmp_path, settings):
+    monkeypatch.delenv("BURGER_FORK_OWNER", raising=False)
+    gh = tmp_path / "bin" / "gh"
+    gh.parent.mkdir()
+    gh.write_text("#!/bin/sh\necho bob\n")
+    gh.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{gh.parent}:/usr/bin:/bin")
+    assert fork_owner(Host(settings)) == "bob"
+
+
+def test_sync_makes_the_work_dir_when_it_is_missing(
+    settings, apps_origin, topologies, monkeypatch, tmp_path
+):
+    make_origin(apps_origin, {})
+    monkeypatch.setitem(config.REPOS, "topologies", str(topologies))
+    monkeypatch.setenv("BURGER_TOPOLOGIES_REPO", str(topologies))
+    fresh = dataclasses.replace(settings, work=tmp_path / "new" / "work")
+    sync(board_with_prs(fresh, []), fresh, Host(fresh))
+    assert (fresh.work / "baseline" / "manifest.json").is_file()
