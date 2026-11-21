@@ -145,3 +145,63 @@ def test_mm_turns_an_error_line_into_a_failure(monkeypatch, tmp_path):
         host, "run", lambda cmd, **k: subprocess.CompletedProcess(cmd, 0, "id,path\n", "INFO ok\n")
     )
     assert host.mm("e", "capture").returncode == 0
+
+
+class _Resp:
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self, *a):
+        return self.body
+
+
+def _urlopen(monkeypatch, answer):
+    """Replace urlopen: record the request and timeout, then answer or raise."""
+    seen = []
+
+    def fake(req, timeout=None):
+        seen.append((req, timeout))
+        if isinstance(answer, Exception):
+            raise answer
+        return _Resp(answer)
+
+    monkeypatch.setattr("urllib.request.urlopen", fake)
+    return seen
+
+
+def test_api_gets_the_json_with_the_token_header(settings, monkeypatch):
+    seen = _urlopen(monkeypatch, b'{"a": 1}')
+    s = dataclasses.replace(settings, token="t0k")
+    assert Host(s).api("/experiments") == {"a": 1}
+    req, timeout = seen[0]
+    assert req.full_url == s.api + "/experiments"
+    assert req.get_header("X-phenix-auth-token") == "Bearer t0k"
+    assert timeout == 15
+
+
+def test_api_sends_no_token_header_without_a_token(settings, monkeypatch):
+    seen = _urlopen(monkeypatch, b"[]")
+    assert Host(dataclasses.replace(settings, token="")).api("/x") == []
+    assert seen[0][0].get_header("X-phenix-auth-token") is None
+
+
+@pytest.mark.parametrize("code", [400, 404, 500])
+def test_api_answers_none_for_a_missing_name(settings, monkeypatch, code):
+    import urllib.error
+
+    _urlopen(monkeypatch, urllib.error.HTTPError("u", code, "m", {}, None))
+    assert Host(settings).api("/x") is None
+
+
+def test_api_raises_other_http_errors(settings, monkeypatch):
+    import urllib.error
+
+    _urlopen(monkeypatch, urllib.error.HTTPError("u", 403, "m", {}, None))
+    with pytest.raises(urllib.error.HTTPError):
+        Host(settings).api("/x")

@@ -20,15 +20,19 @@ class Host:
         self.s = settings
         self.site = site  # burger.site.Site, or None without a site file
 
-    def run(self, cmd, check=True, capture=False, **kw):
-        cmd = [str(c) for c in cmd]
+    def _wrap(self, cmd, kw):
+        """The command with git's safe options and, on a site, its git args and env."""
         if cmd and cmd[0] == "git":
             cmd = ["git", *GIT_SAFE, *cmd[1:]]
         if self.site and cmd and cmd[0] in ("git", "gh"):
             bundle = self.site.bundle(self.s.work)
             if cmd[0] == "git":
                 cmd = ["git", *self.site.git_args(bundle), *cmd[1:]]
-            kw["env"] = {**os.environ, **kw.get("env", {}), **self.site.host_env(bundle)}
+            kw = {**kw, "env": {**os.environ, **kw.get("env", {}), **self.site.host_env(bundle)}}
+        return cmd, kw
+
+    def run(self, cmd, check=True, capture=False, **kw):
+        cmd, kw = self._wrap([str(c) for c in cmd], kw)
         logger.debug("+ {}", redact(shlex.join(cmd)))
         try:
             res = subprocess.run(cmd, check=False, text=True, capture_output=capture, **kw)
