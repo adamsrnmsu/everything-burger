@@ -128,17 +128,8 @@ def _merge_prs(host, wt: Path, attrs: Path, board: str, prs: list[int]) -> None:
             )
 
 
-def sync(res: Resolved, settings: Settings, host) -> dict:
-    """Fetch the PRs, merge them over main in fresh worktrees, and write the manifest."""
-    board = res.board
-    rd = board_dir(settings, board.name)
-    rd.mkdir(parents=True, exist_ok=True)
-    shutil.rmtree(rd / "out", ignore_errors=True)  # a new sync invalidates every build
-    attrs = settings.work / "union-changelog.attributes"
-    attrs.write_text("CHANGELOG.md merge=union\n")
-    now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
-    man: dict = {"switchboard": board.name, "synced": now}
-
+def _sync_apps(host, settings: Settings, rd: Path, attrs: Path, board) -> dict:
+    """Apps worktree: a branch, or main with the PRs merged over it; its manifest entry."""
     br = board.apps_branch  # a branch board holds its PRs already: nothing to merge
     prs = [] if br else [int(n) for n in board.apps_prs]
     repo = _ensure_repo(host, settings, "apps")
@@ -150,70 +141,102 @@ def sync(res: Resolved, settings: Settings, host) -> dict:
     wt = rd / "apps"
     _fresh_worktree(host, repo, wt, base)
     sha = _rev(host, repo, base)
-    man["apps"] = {**br, "sha": sha, "prs": {}} if br else {"base": sha, "prs": {}}
+    apps = {**br, "sha": sha, "prs": {}} if br else {"base": sha, "prs": {}}
     for n in prs:
-        man["apps"]["prs"][str(n)] = _rev(host, repo, f"refs/burger/pr/{n}")
+        apps["prs"][str(n)] = _rev(host, repo, f"refs/burger/pr/{n}")
     _merge_prs(host, wt, attrs, board.name, prs)
-    man["apps"]["head"] = _rev(host, wt, "HEAD")
+    apps["head"] = _rev(host, wt, "HEAD")
+    return apps
 
-    man["bennu"] = None
+
+def _bennu_source(host, repo: Path, spec: dict) -> tuple[str, dict]:
+    """The ref to check bennu out at and the manifest's record of where it came from."""
+    if "branch" in spec:
+        ref = _fetch_branch(host, repo, "bennu", spec)
+        return ref, {"branch": spec["branch"], "remote": spec["remote"]}
+    if "prs" in spec:  # several PRs merged over main, like apps.prs
+        _fetch(host, repo, REPOS["bennu"], spec["prs"])
+        prs = {str(n): _rev(host, repo, f"refs/burger/pr/{n}") for n in spec["prs"]}
+        return "refs/burger/main", {"prs": prs}
+    _fetch(host, repo, REPOS["bennu"], [spec["pr"]])
+    return f"refs/burger/pr/{spec['pr']}", {"pr": spec["pr"]}
+
+
+def _sync_bennu(host, settings: Settings, rd: Path, attrs: Path, board) -> dict | None:
     spec = board.bennu
-    if spec:
-        brepo = _ensure_repo(host, settings, "bennu")
-        if "branch" in spec:
-            ref = _fetch_branch(host, brepo, "bennu", spec)
-            src = {"branch": spec["branch"], "remote": spec["remote"]}
-        elif "prs" in spec:  # several PRs merged over main, like apps.prs
-            _fetch(host, brepo, REPOS["bennu"], spec["prs"])
-            ref = "refs/burger/main"
-            src = {"prs": {str(n): _rev(host, brepo, f"refs/burger/pr/{n}") for n in spec["prs"]}}
-        else:
-            _fetch(host, brepo, REPOS["bennu"], [spec["pr"]])
-            ref, src = f"refs/burger/pr/{spec['pr']}", {"pr": spec["pr"]}
-        _fresh_worktree(host, brepo, rd / "bennu", ref)
-        if "prs" in spec:
-            _merge_prs(host, rd / "bennu", attrs, board.name, spec["prs"])
-        man["bennu"] = {**src, "sha": _rev(host, rd / "bennu", "HEAD")}
+    if not spec:
+        return None
+    repo = _ensure_repo(host, settings, "bennu")
+    ref, src = _bennu_source(host, repo, spec)
+    _fresh_worktree(host, repo, rd / "bennu", ref)
+    if "prs" in spec:
+        _merge_prs(host, rd / "bennu", attrs, board.name, spec["prs"])
+    return {**src, "sha": _rev(host, rd / "bennu", "HEAD")}
 
-    pinned = {"minimega": board.minimega, "phenix": board.phenix}
-    for key, pspec in pinned.items():
-        man[key] = None
-        if not pspec:
-            continue
-        prepo = _ensure_repo(host, settings, key)
-        if "branch" in pspec:
-            ref = _fetch_branch(host, prepo, key, pspec)
-        else:  # not _fetch: that also wants refs/heads/main, and minimega's is master
-            ref = f"refs/burger/pr/{pspec['pr']}"
-            host.git(prepo, "fetch", "--quiet", REPOS[key], f"+refs/pull/{pspec['pr']}/head:{ref}")
-        _fresh_worktree(host, prepo, rd / key, ref)
-        man[key] = {**pspec, "sha": _rev(host, prepo, ref), "from": getattr(board, f"{key}_from")}
 
-    topo = res.route.topology_dir  # a site route brings its own topology: nothing to archive
-    man["topologies"] = None
-    if topo:
-        trepo = _ensure_repo(host, settings, "topologies")
-        _fetch(host, trepo, REPOS["topologies"], [])
-        man["topologies"] = _rev(host, trepo, "refs/burger/main")
-        shutil.rmtree(rd / topo, ignore_errors=True)
-        host.run(
-            [
-                "sh",
-                "-c",
-                f"git -C {shlex.quote(str(trepo))} archive refs/burger/main {shlex.quote(topo)} "
-                f"| tar -x -C {shlex.quote(str(rd))}",
-            ]
-        )
+def _sync_pinned(host, settings: Settings, rd: Path, key: str, board) -> dict | None:
+    """minimega or phenix at a pinned PR or branch, in its own worktree."""
+    spec = getattr(board, key)
+    if not spec:
+        return None
+    repo = _ensure_repo(host, settings, key)
+    if "branch" in spec:
+        ref = _fetch_branch(host, repo, key, spec)
+    else:  # not _fetch: that also wants refs/heads/main, and minimega's is master
+        ref = f"refs/burger/pr/{spec['pr']}"
+        host.git(repo, "fetch", "--quiet", REPOS[key], f"+refs/pull/{spec['pr']}/head:{ref}")
+    _fresh_worktree(host, repo, rd / key, ref)
+    return {**spec, "sha": _rev(host, repo, ref), "from": getattr(board, f"{key}_from")}
 
-    (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
+
+def _sync_topologies(host, settings: Settings, rd: Path, topo) -> str | None:
+    """Archive the route's topology directory into rd; the topologies commit it came from."""
+    if not topo:  # a site route brings its own topology: nothing to archive
+        return None
+    repo = _ensure_repo(host, settings, "topologies")
+    _fetch(host, repo, REPOS["topologies"], [])
+    shutil.rmtree(rd / topo, ignore_errors=True)
+    host.run(
+        [
+            "sh",
+            "-c",
+            f"git -C {shlex.quote(str(repo))} archive refs/burger/main {shlex.quote(topo)} "
+            f"| tar -x -C {shlex.quote(str(rd))}",
+        ]
+    )
+    return _rev(host, repo, "refs/burger/main")
+
+
+def _log_synced(board, man: dict) -> None:
+    br, bennu = board.apps_branch, man["bennu"]
+    pinned = [k for k in ("minimega", "phenix") if man[k]]
     logger.info(
         "switchboard '{}' synced: apps {} ({}){}{}",
         board.name,
         man["apps"]["head"][:10],
-        f"branch {br['branch']}" if br else f"main + {len(prs)} PRs",
-        f", bennu {bennu_label(man['bennu'])} {man['bennu']['sha'][:10]}" if spec else "",
-        "".join(f", {k} {pinned_label(v)} {man[k]['sha'][:10]}" for k, v in pinned.items() if v),
+        f"branch {br['branch']}" if br else f"main + {len(board.apps_prs)} PRs",
+        f", bennu {bennu_label(bennu)} {bennu['sha'][:10]}" if bennu else "",
+        "".join(f", {k} {pinned_label(man[k])} {man[k]['sha'][:10]}" for k in pinned),
     )
+
+
+def sync(res: Resolved, settings: Settings, host) -> dict:
+    """Fetch the PRs, merge them over main in fresh worktrees, and write the manifest."""
+    board = res.board
+    rd = board_dir(settings, board.name)
+    rd.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(rd / "out", ignore_errors=True)  # a new sync invalidates every build
+    attrs = settings.work / "union-changelog.attributes"
+    attrs.write_text("CHANGELOG.md merge=union\n")
+    now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    man: dict = {"switchboard": board.name, "synced": now}
+    man["apps"] = _sync_apps(host, settings, rd, attrs, board)
+    man["bennu"] = _sync_bennu(host, settings, rd, attrs, board)
+    for key in ("minimega", "phenix"):
+        man[key] = _sync_pinned(host, settings, rd, key, board)
+    man["topologies"] = _sync_topologies(host, settings, rd, res.route.topology_dir)
+    (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
+    _log_synced(board, man)
     return man
 
 
@@ -259,71 +282,80 @@ def _pr_sha(man: dict, key: str, n: int) -> str | None:
     return b["sha"] if b.get("pr") == n else None
 
 
-def prs(settings: Settings, host, author: str) -> list[dict]:
-    """Open PRs by `author` plus the PRs the switchboards carry: which boards carry
-    each, and the boards whose synced copy is behind the PR's current head."""
+def _board_prs(board) -> list[tuple[str, int]]:
+    """(repo key, PR number) for every PR the board carries; a branch carries none."""
+    b = board.bennu or {}
+    bennu = [b["pr"]] if "pr" in b else b.get("prs", [])
+    found = [("apps", int(n)) for n in board.apps_prs] + [("bennu", int(n)) for n in bennu]
+    for key in ("minimega", "phenix"):
+        if "pr" in (getattr(board, key) or {}):
+            found.append((key, getattr(board, key)["pr"]))
+    return found
+
+
+def _carried_and_synced(settings: Settings):
+    """Which boards carry each PR (per repo key), and the manifest of each synced board."""
     carried: dict[str, dict[int, list[str]]] = {k: {} for k in SLUGS}
     synced = {}
     for name in all_switchboards(settings):
-        board = load_switchboard(name, settings)
-        for n in board.apps_prs:
-            carried["apps"].setdefault(int(n), []).append(name)
-        b = board.bennu or {}  # a bennu branch carries no PR
-        for n in [b["pr"]] if "pr" in b else b.get("prs", []):
-            carried["bennu"].setdefault(int(n), []).append(name)
-        for key in ("minimega", "phenix"):
-            if "pr" in (getattr(board, key) or {}):  # a branch carries no PR
-                carried[key].setdefault(getattr(board, key)["pr"], []).append(name)
+        for key, n in _board_prs(load_switchboard(name, settings)):
+            carried[key].setdefault(n, []).append(name)
         path = board_dir(settings, name) / "manifest.json"
         if path.is_file():
             synced[name] = json.loads(path.read_text())
+    return carried, synced
 
+
+def _open_prs(host, slug: str, author: str) -> dict[int, dict]:
+    """`author`'s open PRs of slug by number; none without gh or when it fails."""
+    if not shutil.which("gh"):
+        return {}
+    res = host.run(
+        [
+            *("gh", "pr", "list", "-R", slug, "--author", author, "--state", "open"),
+            *("--json", "number,title,headRefOid,isDraft", "--limit", "100"),
+        ],
+        check=False,
+        capture=True,
+    )
+    return {p["number"]: p for p in json.loads(res.stdout)} if res.returncode == 0 else {}
+
+
+def _pr_title(pr: dict | None) -> str:
+    if not pr:
+        return "(not open)"
+    return pr["title"][:60] + (" [draft]" if pr["isDraft"] else "")
+
+
+def _stale_boards(boards: list[str], moved: set[str], synced: dict, key: str, n, head) -> list:
+    return [
+        b
+        for b in boards
+        if b in moved or (b in synced and _pr_sha(synced[b], key, n) not in (None, head))
+    ]
+
+
+def prs(settings: Settings, host, author: str) -> list[dict]:
+    """Open PRs by `author` plus the PRs the switchboards carry: which boards carry
+    each, and the boards whose synced copy is behind the PR's current head."""
+    carried, synced = _carried_and_synced(settings)
     moved = _moved_branches(host, synced)
     rows = []
     for key, slug in SLUGS.items():
-        open_prs = {}
-        if shutil.which("gh"):
-            res = host.run(
-                [
-                    "gh",
-                    "pr",
-                    "list",
-                    "-R",
-                    slug,
-                    "--author",
-                    author,
-                    "--state",
-                    "open",
-                    "--json",
-                    "number,title,headRefOid,isDraft",
-                    "--limit",
-                    "100",
-                ],
-                check=False,
-                capture=True,
-            )
-            if res.returncode == 0:
-                open_prs = {p["number"]: p for p in json.loads(res.stdout)}
+        open_prs = _open_prs(host, slug, author)
         for n in sorted(set(open_prs) | set(carried[key])):
             pr = open_prs.get(n)
             head = pr["headRefOid"] if pr else _ls_remote_pr(host, REPOS[key], n)
             boards = carried[key].get(n, [])
-            title = "(not open)"
-            if pr:
-                title = pr["title"][:60] + (" [draft]" if pr["isDraft"] else "")
+            stale = _stale_boards(boards, moved, synced, key, n, head)
             rows.append(
                 {
                     "repo": slug,
                     "number": n,
                     "head": head,
                     "boards": boards,
-                    "title": title,
-                    "stale": [
-                        b
-                        for b in boards
-                        if b in moved
-                        or (b in synced and _pr_sha(synced[b], key, n) not in (None, head))
-                    ],
+                    "title": _pr_title(pr),
+                    "stale": stale,
                 }
             )
     return rows

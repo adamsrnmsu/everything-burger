@@ -81,47 +81,79 @@ def _state_linux_only(s: Settings, name: str) -> bool:
     return bool(json.loads(path.read_text()).get("linux_only")) if path.is_file() else False
 
 
+def _sync(args, s, host, res: Resolved, name: str) -> int:
+    for key in ("minimega", "phenix"):  # the later steps read the manifest: only sync takes these
+        res.board = with_flag(res.board, key, getattr(args, key, None))
+    vcs.sync(res, s, host)
+    return 0
+
+
+def _down(args, s, host, res: Resolved, name: str) -> int:
+    experiment.down(res, host)
+    experiment.services(res, s, host, "stop")
+    minimega.restore(host, s)
+    phenix.restore(host, s)
+    return 0
+
+
+def _bennu_check(args, s, host, res: Resolved, name: str) -> int:
+    if not vcs.load_manifest(s, name)["bennu"]:
+        raise BurgerError(f"switchboard '{name}' has no bennu build")
+    bennu_check(host, vcs.board_dir(s, name) / "bennu")
+    return 0
+
+
+def _probe(args, s, host, res: Resolved, name: str) -> int:
+    rows = probes.run(host, s, res, vcs.load_manifest(s, name), args.names or None)
+    out.print(results_table(rows))
+    return int(any(r.verdict == "FAIL" for r in rows))
+
+
+def _scorch(args, s, host, res: Resolved, name: str) -> int:
+    experiment.scorch(res, s, host, args.run, args.settle, first_cap=args.first_cap)
+    return 0
+
+
+def _build(args, s, host, res: Resolved, name: str) -> int:
+    experiment.build(res, s, host)
+    return 0
+
+
+def _install(args, s, host, res: Resolved, name: str) -> int:
+    experiment.install(res, s, host)
+    return 0
+
+
+def _up(args, s, host, res: Resolved, name: str) -> int:
+    experiment.up(res, s, host, args.timeout)
+    return 0
+
+
+def _verify_step(args, s, host, res: Resolved, name: str) -> int:
+    return _verify(res, s, host)
+
+
+STEPS = {
+    "sync": _sync,
+    "build": _build,
+    "install": _install,
+    "up": _up,
+    "scorch": _scorch,
+    "verify": _verify_step,
+    "down": _down,
+    "bennu-check": _bennu_check,
+    "probe": _probe,
+}
+FROM_STATE = ("scorch", "verify", "down", "probe")  # brought up with its own --linux-only
+
+
 def _one(args, s, host, name: str) -> int:
     """One pipeline step on one switchboard; the exit code."""
-    cmd = args.cmd
-    if cmd in (
-        "scorch",
-        "verify",
-        "down",
-        "probe",
-    ):  # the experiment was brought up with its own flag
-        lo = _state_linux_only(s, name)
-    else:
-        lo = getattr(args, "linux_only", False)
+    lo = (
+        _state_linux_only(s, name) if args.cmd in FROM_STATE else getattr(args, "linux_only", False)
+    )
     res = _board(s, name, lo, route=getattr(args, "route", None))
-    if cmd == "sync":  # the later steps read the manifest, so only sync takes the flag
-        for key in ("minimega", "phenix"):
-            res.board = with_flag(res.board, key, getattr(args, key, None))
-        vcs.sync(res, s, host)
-    elif cmd == "build":
-        experiment.build(res, s, host)
-    elif cmd == "install":
-        experiment.install(res, s, host)
-    elif cmd == "up":
-        experiment.up(res, s, host, args.timeout)
-    elif cmd == "scorch":
-        experiment.scorch(res, s, host, args.run, args.settle, first_cap=args.first_cap)
-    elif cmd == "verify":
-        return _verify(res, s, host)
-    elif cmd == "down":
-        experiment.down(res, host)
-        experiment.services(res, s, host, "stop")
-        minimega.restore(host, s)
-        phenix.restore(host, s)
-    elif cmd == "bennu-check":
-        if not vcs.load_manifest(s, name)["bennu"]:
-            raise BurgerError(f"switchboard '{name}' has no bennu build")
-        bennu_check(host, vcs.board_dir(s, name) / "bennu")
-    elif cmd == "probe":
-        rows = probes.run(host, s, res, vcs.load_manifest(s, name), args.names or None)
-        out.print(results_table(rows))
-        return int(any(r.verdict == "FAIL" for r in rows))
-    return 0
+    return STEPS[args.cmd](args, s, host, res, name)
 
 
 @contextmanager
