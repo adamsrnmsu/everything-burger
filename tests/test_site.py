@@ -269,6 +269,30 @@ def test_build_bennu_arm64_builds_natively_and_relabels_only_when_needed(tmp_pat
     assert "dpkg-deb -R" not in amd.calls[1][-1] and "relabel_needed" not in man["bennu"]
 
 
+@pytest.mark.parametrize("stale", [False, True])
+def test_build_bennu_extra_wheels_start_from_an_empty_dir(tmp_path, monkeypatch, stale):
+    monkeypatch.delenv("BURGER_BENNU_REPO", raising=False)
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "pybennu-6.0.0-py3-none-any.whl").write_text("")
+    if stale:
+        (out / "wheels").mkdir()
+        (out / "wheels" / "old-1-py3-none-any.whl").write_text("")
+    host = _host(tmp_path)
+    real = host.run
+
+    def run(cmd, **kw):
+        if "pip3 wheel" in str(cmd[-1]):
+            (out / "wheels").mkdir(exist_ok=True)
+            (out / "wheels" / "loguru-0.7-py3-none-any.whl").write_text("")
+        return real(cmd, **kw)
+
+    host.run = run
+    man = {"bennu": {}}
+    bennu.build_bennu(host, tmp_path / "wt", out, man, ["pybennu"], ["loguru"])
+    assert man["bennu"]["wheels"] == ["loguru-0.7-py3-none-any.whl"]
+
+
 def test_site_image_reuse_and_rebuild(tmp_path):
     site = full_site(tmp_path)
     tag = f"burger-site/golang_1.24:{site.tag()}"

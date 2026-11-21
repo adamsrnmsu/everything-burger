@@ -167,3 +167,32 @@ def test_explicit_runs_keep_advisory_extras(settings):
     assert by_name["extras-siren"]["start"] == ["health-siren"]
     assert "health-siren" in [c["name"] for c in comps]
     assert [r["name"] for r in runs[:2]] == ["health", "provider"]
+
+
+def test_holds_items_start_last_but_other_stages_keep_order(settings):
+    r = res(settings, "main")
+    scorch = [i for i in r.items if i.kind == "scorch" and not i.advisory]
+    starts = [i for i in scorch if "start" in i.stages]
+    stops = [i for i in scorch if "stop" in i.stages]
+    first = starts[0]
+    r.items = [dataclasses.replace(i, holds=i.name in (first.name, stops[0].name)) for i in r.items]
+    _, runs = compose(r, MAN)
+    main = next(x for x in runs if x["name"] == "main")
+    assert main["start"][-1] == first.name
+    assert main["stop"][0] == stops[0].name
+
+
+def test_board_with_no_scorch_items_has_no_main_run(settings):
+    r = res(settings, "baseline")
+    assert r.board.runs is None
+    r.items = [i for i in r.items if i.kind != "scorch"]
+    _, runs = compose(r, MAN)
+    assert [x["name"] for x in runs] == ["health"]
+
+
+def test_explicit_run_placing_advisory_item_gets_no_extras_run(settings):
+    r = with_items(settings, "provider", "erspan")
+    runs = [{**r.board.runs[0], "start": [*r.board.runs[0]["start"], "erspan"]}]
+    r.board = dataclasses.replace(r.board, runs=runs)
+    _, out = compose(r, MAN)
+    assert "extras-erspan" not in [x["name"] for x in out]

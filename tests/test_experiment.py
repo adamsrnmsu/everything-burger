@@ -313,6 +313,29 @@ def test_build_iperf_builds_once_and_caches(settings):
     assert (settings.work / "cache" / "iperf3-3.22").stat().st_mode & 0o111
 
 
+@pytest.mark.parametrize("cache_dir_exists", [False, True])
+def test_build_iperf_creates_the_cache_dir_whatever_exists(settings, tmp_path, cache_dir_exists):
+    from burger.iperf import build_iperf
+
+    work = tmp_path / ("w1" if cache_dir_exists else "w2") / "work"
+    cache = work / "cache"
+    if cache_dir_exists:
+        cache.mkdir(parents=True)
+    out = tmp_path / "out"
+    out.mkdir()
+    host = FakeHost(settings=dataclasses.replace(settings, work=work))
+    real = host.run
+
+    def run(cmd, **kw):
+        if cmd[:2] == ["docker", "run"]:
+            (cache / "iperf3-3.22").write_text("ELF")
+        return real(cmd, **kw)
+
+    host.run = run
+    build_iperf(host, host.s, "3.22", out, "1:2")
+    assert (out / "iperf3-3.22").read_text() == "ELF"
+
+
 def test_build_marks_minimega_sha(settings, monkeypatch):
     rd = settings.work / "baseline"
     rd.mkdir(parents=True)
