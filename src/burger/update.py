@@ -403,33 +403,50 @@ def checkout_images(ctx: Ctx, d: str) -> None:
         )
 
 
-def build_image(ctx: Ctx, d: str, out) -> None:
-    """The `bennu` target of sceptre-phenix-images' Makefile, with the patched script and
-    one more overlay. Not `make`: its paths and `docker exec -t` are for a person at a tty."""
-    host, s = ctx.host, ctx.s
-    # burger moves its own result away, so a leftover is a failed build or somebody's file
-    for name in ("bennu.qc2", "bennu.tar"):
-        if host.ctr("test", "-e", f"{d}/{name}", check=False).returncode == 0:
-            raise BurgerError(f"{d}/{name} exists; move or remove it, burger will not delete it")
+def _stage_overlay(d: str, out) -> None:
+    """The bennu debs and wheels as an overlay, and the patched bennu.sh next to the original."""
+    shutil.rmtree(f"{d}/overlays/burger-bennu", ignore_errors=True)
+    debs = f"{d}/overlays/burger-bennu{LOCAL_DEBS}"
+    os.makedirs(debs)
+    for f in (out / "bennu.deb", *out.glob("pybennu-*.whl")):
+        shutil.copy2(f, debs)
+    with open(f"{d}/scripts/bennu.sh") as f:
+        script = patch_bennu_sh(f.read())
+    with open(f"{d}/scripts/bennu-burger.sh", "w") as f:
+        f.write(script)
+    os.chmod(f"{d}/scripts/bennu-burger.sh", 0o755)
 
-    def stage():
-        shutil.rmtree(f"{d}/overlays/burger-bennu", ignore_errors=True)
-        debs = f"{d}/overlays/burger-bennu{LOCAL_DEBS}"
-        os.makedirs(debs)
-        for f in (out / "bennu.deb", *out.glob("pybennu-*.whl")):
-            shutil.copy2(f, debs)
-        with open(f"{d}/scripts/bennu.sh") as f:
-            script = patch_bennu_sh(f.read())
-        with open(f"{d}/scripts/bennu-burger.sh", "w") as f:
-            f.write(script)
-        os.chmod(f"{d}/scripts/bennu-burger.sh", 0o755)
 
-    ctx.do(f"stage overlays/burger-bennu and scripts/bennu-burger.sh in {d}", stage)
-    # The Makefile refuses while the image config exists.
+def _drop_bennu_config(host) -> None:
+    """The Makefile refuses while the image config exists."""
     listing = host.phenix("cfg", "list", check=False, capture=True).stdout.splitlines()
     cells = (line.split() for line in listing if "Image" in line)
     if any(len(c) > 5 and c[5] == "bennu" for c in cells):
         host.phenix("image", "delete", "bennu")
+
+
+def _inject_miniccc(ctx: Ctx, d: str) -> None:
+    host, s = ctx.host, ctx.s
+    for miniccc in (f"{s.phenix_dir}/miniccc", f"{d}/miniccc"):
+        if host.ctr("test", "-f", miniccc, check=False).returncode == 0:
+            host.phenix("image", "inject-miniexe", miniccc, f"{d}/bennu.qc2")
+            return
+    ctx.say("no miniccc in the phenix directory or images checkout: not injected into bennu.qc2")
+
+
+def build_image(ctx: Ctx, d: str, out) -> None:
+    """The `bennu` target of sceptre-phenix-images' Makefile, with the patched script and
+    one more overlay. Not `make`: its paths and `docker exec -t` are for a person at a tty."""
+    host = ctx.host
+    # burger moves its own result away, so a leftover is a failed build or somebody's file
+    for name in ("bennu.qc2", "bennu.tar"):
+        if host.ctr("test", "-e", f"{d}/{name}", check=False).returncode == 0:
+            raise BurgerError(f"{d}/{name} exists; move or remove it, burger will not delete it")
+    ctx.do(
+        f"stage overlays/burger-bennu and scripts/bennu-burger.sh in {d}",
+        lambda: _stage_overlay(d, out),
+    )
+    _drop_bennu_config(host)
     mirror = ((host.site.mirrors if host.site else {}).get("apt")) or ""
     host.phenix(
         "image", "create",
@@ -439,11 +456,7 @@ def build_image(ctx: Ctx, d: str, out) -> None:
         "--compress", "bennu",
     )  # fmt: skip
     host.phenix("image", "build", "-o", d, "-c", "-x", "bennu")
-    for miniccc in (f"{s.phenix_dir}/miniccc", f"{d}/miniccc"):
-        if host.ctr("test", "-f", miniccc, check=False).returncode == 0:
-            host.phenix("image", "inject-miniexe", miniccc, f"{d}/bennu.qc2")
-            return
-    ctx.say("no miniccc in the phenix directory or images checkout: not injected into bennu.qc2")
+    _inject_miniccc(ctx, d)
 
 
 def update_bennu(ctx: Ctx) -> None:
@@ -505,6 +518,15 @@ def _build_bennu_image(ctx: Ctx, d: str, sha: str) -> tuple[str, str]:
     return name, f"built from bennu main {sha[:10]}"
 
 
+# a layer by name: (ctx, the layers after it); looked up at call time so a test can replace one
+_RUN = {
+    "burger": lambda ctx, rest: update_burger(ctx, rest),
+    "containers": lambda ctx, rest: update_containers(ctx),
+    "apps": lambda ctx, rest: update_apps(ctx),
+    "bennu": lambda ctx, rest: update_bennu(ctx),
+}
+
+
 def update(s: Settings, host, only: list[str], dry_run: bool, force: bool, say) -> list:
     """Run the chosen layers in order; the summary rows."""
     unknown = [n for n in only if n not in LAYERS]
@@ -514,12 +536,5 @@ def update(s: Settings, host, only: list[str], dry_run: bool, force: bool, say) 
     ctx = Ctx(s, dry_host(host, say) if dry_run else host, say, dry_run, force)
     for i, name in enumerate(names):
         logger.info("update layer: {}", name)
-        if name == "burger":
-            update_burger(ctx, names[i + 1 :])
-        elif name == "containers":
-            update_containers(ctx)
-        elif name == "apps":
-            update_apps(ctx)
-        elif name == "bennu":
-            update_bennu(ctx)
+        _RUN[name](ctx, names[i + 1 :])
     return ctx.rows
