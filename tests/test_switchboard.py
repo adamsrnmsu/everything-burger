@@ -325,3 +325,52 @@ def test_flag_overrides_board_with_warning(settings, tmp_path):
 def test_pinned_label():
     assert pinned_label({"pr": 1782}) == "#1782"
     assert pinned_label({"branch": "foo", "remote": "fork"}) == "fork/foo"
+
+
+@pytest.mark.parametrize(
+    "body, msg",
+    [
+        ("probes: pcap\n", "probes must be a list of probe names"),
+        ("probes: [1]\n", "probes must be a list of probe names"),
+        ("probes: [nope]\n", "unknown probe 'nope'"),
+        ("items: {pcap: yes please}\n", "items.pcap must be on or off"),
+        ("items: {pcap: 1}\n", "items.pcap must be on or off"),
+        ("fdlogs: [fail_on]\n", "fdlogs must be a mapping with keys"),
+        ("fdlogs: {nope: 1}\n", "fdlogs must be a mapping with keys"),
+        ("fdlogs: {fail_on: boom}\n", "fdlogs.fail_on must be one of crash, error, none"),
+        ("services: [a b]\n", "services: no script scripts/a b.sh"),
+        ("services: [1]\n", "services must be a list of script names"),
+    ],
+)
+def test_bad_board_fields_are_burger_errors(settings, tmp_path, body, msg):
+    with pytest.raises(BurgerError, match=msg) as e:
+        load_switchboard("t", write_board(settings, tmp_path, body))
+    assert "t.yaml" in str(e.value)
+
+
+def test_board_without_route_and_unknown_board(settings, tmp_path):
+    (tmp_path / "switchboards").mkdir()
+    (tmp_path / "switchboards" / "t.yaml").write_text("about: x\n")
+    s = dataclasses.replace(settings, root=tmp_path)
+    with pytest.raises(BurgerError, match=r"t\.yaml: missing field 'route'"):
+        load_switchboard("t", s)
+    with pytest.raises(BurgerError, match=r"no switchboard 'u' \(known: t\)"):
+        load_switchboard("u", s)
+
+
+def test_board_fields_are_loaded(settings, tmp_path):
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "svc.sh").write_text("")
+    body = "about: ' hi '\nservices: [svc]\nfdlogs: {fail_on: crash, repeat: 3}\n"
+    body += "probes: [mm-bindings]\nlinux_only: true\nruns: [{a: 1}]\nitems: {pcap: true}\n"
+    body += "overrides: {pcap: {about: z}}\n"
+    b = load_switchboard("t", write_board(settings, tmp_path, body))
+    assert (b.about, b.services, b.probes, b.linux_only) == ("hi", ["svc"], ["mm-bindings"], True)
+    assert b.fdlogs == {"fail_on": "crash", "repeat": 3}
+    assert (b.exp, b.runs, b.items, b.overrides) == (
+        "ebwes-t",
+        [{"a": 1}],
+        {"pcap": True},
+        {"pcap": {"about": "z"}},
+    )
+    assert load_switchboard("t", write_board(settings, tmp_path, "")).fdlogs is None

@@ -511,3 +511,20 @@ def test_probe_strict_fails_404(tmp_path):
         assert probe(f"http://127.0.0.1:{srv.server_port}/x", site, None, strict=True) == "HTTP 404"
     finally:
         srv.shutdown()
+
+
+@pytest.mark.parametrize(
+    "body, msg",
+    [
+        ("proxy: [x]\n", "proxy must be a mapping"),
+        ("mirrors: [x]\n", "mirrors must be a mapping"),
+        ("mirrors: {git: [x]}\n", "mirrors.git must map origin URLs"),
+        ("mirrors: {urls: x}\n", "mirrors.urls must map origin URLs"),
+        ("proxy: {http: '${NOPE_SITE_VAR}'}\n", "unset environment variables: NOPE_SITE_VAR"),
+    ],
+)
+def test_bad_site_fields_are_burger_errors(tmp_path, monkeypatch, body, msg):
+    monkeypatch.delenv("NOPE_SITE_VAR", raising=False)
+    with pytest.raises(BurgerError, match=msg) as e:
+        load_site(env=write_site(tmp_path, body), home=tmp_path)
+    assert "site.yaml" in str(e.value)

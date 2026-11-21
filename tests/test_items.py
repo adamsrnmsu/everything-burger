@@ -197,3 +197,43 @@ def test_fifo_sends_the_tunable_tag_count(settings, monkeypatch):
     assert "N=1000\n" in load_item("fifo", settings).config["vms"][0]["start"][0]["args"]
     monkeypatch.setenv("BURGER_FIFO_TAGS", "300")
     assert "N=300\n" in load_item("fifo", settings).config["vms"][0]["start"][0]["args"]
+
+
+def _item_settings(settings, tmp_path, text, where="components"):
+    (tmp_path / where).mkdir(exist_ok=True)
+    (tmp_path / where / "zz.yaml").write_text(text)
+    return dataclasses.replace(settings, root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "text, msg",
+    [
+        ("kind: scorch\ntype: x\n", "missing field 'name'"),
+        ("name: x\ntype: x\n", "missing field 'kind'"),
+        ("name: x\nkind: scorch\n", "missing field 'type'"),
+        (HEAD.replace("scorch", "thing"), "kind 'thing' must be one of scorch, app, bennu"),
+        (HEAD + "stages: [start, boom]\n", "unknown stage 'boom'"),
+    ],
+)
+def test_bad_item_header_is_a_burger_error(settings, tmp_path, text, msg):
+    with pytest.raises(BurgerError, match=msg) as e:
+        load_item("zz", _item_settings(settings, tmp_path, text))
+    assert "zz.yaml" in str(e.value)
+
+
+def test_unknown_item_names_where_it_looked(settings, tmp_path):
+    with pytest.raises(BurgerError, match=r"no item 'nope' \(looked for .*components/nope\.yaml"):
+        load_item("nope", dataclasses.replace(settings, root=tmp_path))
+
+
+def test_item_fields_are_loaded(settings, tmp_path):
+    text = HEAD + "about: ' hi '\nroutes: [soap]\nstages: [start, stop]\nholds: 1\n"
+    text += "background: 1\nadvisory: 1\nexpect_error: e\nconfig: {a: 1}\nhosts: [h]\n"
+    text += "requires: {monitor: true}\nassets: [f]\nsoap: {config: {a: 2}}\n"
+    s = _item_settings(settings, tmp_path, text, "apps")
+    i = load_item("apps/zz", s)
+    assert (i.name, i.kind, i.type, i.about, i.routes) == ("x", "scorch", "x", "hi", ["soap"])
+    assert (i.stages, i.holds, i.background, i.advisory) == (["start", "stop"], True, True, True)
+    assert (i.expect_error, i.expect_invalid, i.config, i.hosts) == ("e", "", {"a": 1}, ["h"])
+    assert (i.requires, i.assets, i.path) == ({"monitor": True}, ["f"], tmp_path / "apps/zz.yaml")
+    assert i.overrides == {"soap": {"config": {"a": 2}}}
