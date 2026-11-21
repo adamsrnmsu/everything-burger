@@ -167,10 +167,12 @@ def install(res: Resolved, settings: Settings, host) -> None:
 
 
 def services(res: Resolved, settings: Settings, host, action: str) -> None:
-    """Run scripts/<name>.sh start|stop for each of the board's host services."""
+    """Run scripts/<name>.sh start|stop for each of the board's host services,
+    with the board's experiment name in EXP."""
     for name in res.board.services:
         logger.info("service {}: {}", name, action)
-        host.run(["sh", settings.root / "scripts" / f"{name}.sh", action])
+        script = settings.root / "scripts" / f"{name}.sh"
+        host.run(["env", f"EXP={res.board.exp}", "sh", script, action])
 
 
 def _stage_startup(res: Resolved, settings: Settings, host, man: dict, out: Path) -> None:

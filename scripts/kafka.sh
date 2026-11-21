@@ -10,7 +10,7 @@
 set -eu
 NAME=ebwes-kafka-broker
 IMAGE=${KAFKA_IMAGE:-apache/kafka:3.9.1}
-EXP=${EXP:-ebwes-kafka}
+EXP=${EXP:-ebwes-kafka}  # burger sets it to the board's experiment
 BS=127.0.0.1:19092
 K=/opt/kafka/bin
 case "${1:-}" in

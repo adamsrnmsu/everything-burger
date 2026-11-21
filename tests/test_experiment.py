@@ -141,7 +141,19 @@ def test_down_leaves_services_to_the_down_command(settings):
     down(r, host)
     assert not any("groundtruth-es.sh" in " ".join(c) for c in host.calls)
     services(r, settings, host, "stop")
-    assert ["sh", str(settings.root / "scripts" / "groundtruth-es.sh"), "stop"] in host.calls
+    script = str(settings.root / "scripts" / "groundtruth-es.sh")
+    assert ["env", f"EXP={r.board.exp}", "sh", script, "stop"] in host.calls
+
+
+def test_a_service_is_told_the_experiment_it_serves(settings):
+    # kafka.sh names a topic after the experiment (the component's default
+    # subscription is <exp>.*), so a board other than `kafka` needs its own name
+    r = res(settings)
+    r.board.services = ["kafka"]
+    host = FakeHost(settings=settings)
+    services(r, settings, host, "start")
+    ((env, exp, *_),) = [c for c in host.calls if c[-1] == "start"]
+    assert (env, exp) == ("env", f"EXP={r.board.exp}")
 
 
 class FakeClock:

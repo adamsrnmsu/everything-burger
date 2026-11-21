@@ -13,4 +13,4 @@ config:
   wait_duration_seconds: 60
 verify:
   - csv: {glob: "kafka-csv_output.csv", columns: [topic, x], min_rows: 3}
-  - log: {glob: "kafka-csv_output.csv", contains: "^ebwes-kafka\\.default,"}
+  - log: {glob: "kafka-csv_output.csv", contains: "^ebwes-[\\w-]+\\.default,"}
