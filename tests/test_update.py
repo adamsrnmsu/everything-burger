@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 import subprocess
 
 import pytest
@@ -6,7 +7,7 @@ import pytest
 from burger import update
 from burger.cli import main
 from burger.config import BurgerError
-from tests.fakes import FakeHost
+from tests.fakes import FakeHost, StrictHost
 
 
 def cp(out="", rc=0):
@@ -46,10 +47,10 @@ def test_burger_refuses_other_branch(settings, lines):
         run_update(settings, h, lines, ["burger"])
 
 
-def heads(settings, before, after):
+def heads(settings, before, after, base=FakeHost):
     """Responses where HEAD is `before` until the pull, `after` from then on."""
 
-    class Moving(FakeHost):
+    class Moving(base):
         def run(self, cmd, check=True, capture=False, **kw):
             res = super().run(cmd, check, capture, **kw)
             if "pull" in cmd:
@@ -332,8 +333,8 @@ def test_patch_bennu_sh_refuses_a_script_it_does_not_know():
         update.patch_bennu_sh("echo nothing to patch\n")
 
 
-def point(settings, responses):
-    h = host_for(settings, responses)
+def point(settings, responses, cls=FakeHost):
+    h = cls(responses, settings)
     ctx = update.Ctx(settings, h, [].append)
     return h, update.point_link(ctx, "bennu-main-1234567.qc2")
 
@@ -493,3 +494,403 @@ def test_compose_labels_drop_burgers_override(settings):
     labels = LABELS.replace("/srv/phenix/b.yml", str(update.burger_override(settings)))
     c = update.compose_labels(compose_host(settings, labels), "phenix")
     assert c["files"] == ["/srv/phenix/a.yml"]
+
+
+# --- pins: behaviour the real Host contract (StrictHost) makes visible ---
+
+
+def strict_for(settings, responses=None, **kw):
+    return StrictHost(responses or {}, settings, **kw)
+
+
+def test_dry_host_follows_the_host_contract_for_probes():
+    h = StrictHost({"test -e x": cp(rc=1)})
+    dry = update.dry_host(h, [].append)
+    with pytest.raises(BurgerError):  # check defaults to True, as on the real host
+        dry.run(["test", "-e", "x"])
+    assert dry.run(["test", "-e", "x"], check=False).returncode == 1
+    assert dry.run(["test", "-e", "y"]).stdout is None  # capture defaults to False
+
+
+def test_dry_host_prints_what_it_skips_and_reports_success():
+    said = []
+    h = StrictHost({})
+    res = update.dry_host(h, said.append).run(["rm", "-f", "x"])
+    assert res.returncode == 0
+    assert said == ["+ rm -f x"]
+    assert h.calls == []
+
+
+@pytest.mark.parametrize(
+    ("cmd", "probe"),
+    [
+        (["phenix", "version"], True),
+        (["docker", "exec", "c", "phenix", "version"], True),
+        (["docker", "exec", "c", "phenix", "mm", "version"], True),
+        (["docker", "exec", "c", "phenix", "cfg", "list"], True),
+        (["docker", "exec", "c", "phenix", "experiment", "list"], True),
+        (["docker", "exec", "c", "phenix", "image", "delete", "bennu"], False),
+        (["docker", "exec", "c", "phenix", "cfg", "delete", "x"], False),
+        (["docker", "exec", "c", "phenix", "experiment", "stop", "x"], False),
+        (["docker", "exec", "c", "phenix", "mm", "kill"], False),
+        (["docker", "exec", "c", "version"], False),
+        (["docker", "exec", "c", "cat", "/x"], True),
+        (["docker", "exec", "c", "rm", "/x"], False),
+        (["docker", "inspect", "c"], True),
+        (["docker", "compose", "config"], True),
+        (["docker", "compose", "up"], False),
+        (["git", "-C", "/r", "status"], True),
+        (["git", "-C", "/r", "pull"], False),
+    ],
+)
+def test_dry_host_runs_only_probes(cmd, probe):
+    h = StrictHost({})
+    update.dry_host(h, [].append).run(cmd)
+    assert (h.calls == [cmd]) is probe
+
+
+def test_burger_layer_under_the_host_contract(settings, lines, monkeypatch):
+    execs = []
+
+    def execv(path, argv):
+        execs.append(argv)
+        raise SystemExit
+
+    monkeypatch.setattr(update.os, "execv", execv)
+    h = heads(settings, "a" * 40, "b" * 40, StrictHost)
+    with pytest.raises(SystemExit):
+        run_update(settings, h, lines, ["burger", "containers", "bennu"], force=True)
+    assert "burger moved: continuing with the new code: update --only containers,bennu --force" in (
+        lines
+    )
+    assert execs == [["burger", "update", "--only", "containers,bennu", "--force"]]
+
+
+def test_burger_dry_run_continues_with_dry_run_flag(settings, lines, monkeypatch):
+    h = heads(settings, "a" * 40, "a" * 40, StrictHost)
+    rows = run_update(settings, h, lines, ["burger"], dry=True)
+    assert rows[0][1:] == ("a" * 10, "a" * 10, "dry-run: not pulled")
+
+
+def test_wait_phenix_keeps_polling_until_the_deadline():
+    class Clock:
+        now = 0
+
+        def time(self):
+            return self.now
+
+        def sleep(self, s):
+            self.now += s
+
+    class Slow(StrictHost):
+        def run(self, cmd, check=True, capture=False, **kw):
+            res = cp(rc=1 if len(self.calls) < 6 else 0)
+            self.calls.append(cmd)
+            return enforce_(res, cmd, check, capture)
+
+    h = Slow()
+    update.wait_phenix(h, 100, Clock())  # fails three polls, then answers
+    assert len(h.calls) == 8
+    with pytest.raises(BurgerError, match="not answering 20s"):
+        update.wait_phenix(StrictHost({"docker exec phenix phenix": cp(rc=1)}), 20, Clock())
+
+
+def enforce_(res, cmd, check, capture):
+    from tests.fakes import enforce
+
+    return enforce(res, cmd, check, capture)
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        '"com.docker.compose.project.working_dir"',
+        '"com.docker.compose.project.config_files"',
+        '"com.docker.compose.service"',
+    ],
+)
+def test_compose_labels_need_all_three_facts(settings, missing):
+    labels = json.loads(LABELS)
+    del labels[missing.strip('"')]
+    assert update.compose_labels(compose_host(settings, json.dumps(labels)), "phenix") is None
+
+
+@pytest.mark.parametrize("parent", ["fresh/nested", "."])
+def test_recreate_writes_the_override_even_when_its_directory_exists(settings, tmp_path, parent):
+    h = compose_host(settings)
+    override = tmp_path / parent / "compose.override.yml"
+    (tmp_path / parent).mkdir(parents=True, exist_ok=True)
+    update.recreate(h, "phenix", override, {"image": "x"})
+    assert "image: x" in override.read_text()
+    up = next(c for c in h.calls if "up" in c)
+    assert up[up.index(str(override)) - 1] == "-f"
+
+
+def test_recreate_makes_the_missing_override_directory(settings, tmp_path):
+    override = tmp_path / "a" / "b" / "compose.override.yml"
+    update.recreate(compose_host(settings), "phenix", override, {"image": "x"})
+    assert override.is_file()
+
+
+def test_unmanaged_container_names_its_image_and_is_not_touched(settings, lines):
+    ctx = update.Ctx(
+        settings,
+        strict_for(
+            settings,
+            {
+                INSPECT: cp(rc=1),
+                "docker inspect -f {{.Config.Image}} web": cp("nginx:1\n"),
+                "docker inspect -f {{.Image}} web": cp("sha256:abcdefabcdefabcdef\n"),
+            },
+        ),
+        lines.append,
+    )
+    assert update.update_container(ctx, "web") is False
+    assert ctx.rows == [
+        (
+            "web",
+            "abcdefabcdef",
+            "-",
+            "not managed by compose: run `docker pull nginx:1` and "
+            "recreate 'web' with its original flags",
+        )
+    ]
+
+
+def test_unmanaged_container_without_an_image_says_placeholder(settings, lines):
+    ctx = update.Ctx(settings, strict_for(settings, {INSPECT: cp(rc=1)}), lines.append)
+    assert update.update_container(ctx, "web") is False
+    assert "docker pull <image>" in ctx.rows[0][3]
+    assert ctx.rows[0][1] == "?"
+
+
+CFG_KEY = "docker compose -p stack --project-directory /srv/phenix"
+
+
+@pytest.mark.parametrize(
+    ("cfg", "local"),
+    [
+        ('{"services":{"phenix":{"build":{"context":"."}}}}', True),
+        ('{"services":{"phenix":{"build":{"context":"."},"image":"x"}}}', False),
+        ('{"services":{"phenix":{"image":"x"}}}', False),
+        ('{"services":{"phenix":{}}}', False),
+    ],
+)
+def test_only_a_service_without_an_image_name_is_built_locally(settings, lines, cfg, local):
+    h = strict_for(settings, {INSPECT + "phenix": cp(LABELS), CFG_KEY: cp(cfg)})
+    h.responses[CFG_KEY + " -f /srv/phenix/a.yml -f /srv/phenix/b.yml pull"] = cp()
+    ctx = update.Ctx(settings, h, lines.append)
+    assert update.update_container(ctx, "phenix") is not local
+    assert any("pull" in c for c in h.calls) is not local
+
+
+def test_unreadable_compose_config_is_not_a_local_build(settings, lines):
+    h = strict_for(settings, {INSPECT + "phenix": cp(LABELS)})
+    h.responses[CFG_KEY + " -f /srv/phenix/a.yml -f /srv/phenix/b.yml config"] = cp(rc=1)
+    ctx = update.Ctx(settings, h, lines.append)
+    assert update.update_container(ctx, "phenix") is True
+
+
+def local_build_containers(settings):
+    cfg = cp('{"services":{"phenix":{"build":{"context":"."}}}}')
+    return strict_for(
+        settings,
+        {INSPECT + settings.ctr: cp(LABELS), INSPECT + settings.mm_ctr: cp(LABELS), CFG_KEY: cfg},
+    )
+
+
+def test_containers_skip_the_wait_when_nothing_was_touched(settings, lines):
+    h = local_build_containers(settings)
+    run_update(settings, h, lines, ["containers"])
+    assert not any("version" in c for c in h.calls)
+
+
+def test_dry_containers_do_not_wait_for_phenix(settings, lines):
+    h = compose_host(settings)
+    h.responses[INSPECT + settings.mm_ctr] = cp("null")
+    run_update(settings, h, lines, ["containers"], dry=True)
+    assert not any("version" in c for c in h.calls)
+
+
+def test_containers_report_the_first_line_of_the_phenix_version(settings, lines):
+    h = strict_for(
+        settings,
+        {
+            INSPECT + settings.ctr: cp(LABELS),
+            INSPECT + settings.mm_ctr: cp("null"),
+            f"{CTR}phenix version": cp("v1.2\nbuilt x\n"),
+        },
+    )
+    run_update(settings, h, lines, ["containers"])
+    assert "phenix version: v1.2" in lines
+
+
+def test_containers_say_unknown_when_the_version_cannot_be_read(settings, lines):
+    class Flaky(StrictHost):
+        def run(self, cmd, check=True, capture=False, **kw):
+            seen = sum(c[-2:] == ["phenix", "version"] for c in self.calls)
+            res = super().run(cmd, check, capture, **kw)
+            if cmd[-2:] == ["phenix", "version"] and seen >= 1:
+                return enforce_(cp(rc=1), cmd, check, capture)
+            return res
+
+    h = Flaky({INSPECT + settings.ctr: cp(LABELS), INSPECT + settings.mm_ctr: cp("null")}, settings)
+    run_update(settings, h, lines, ["containers"])
+    assert "phenix version: ?" in lines
+
+
+@pytest.mark.parametrize("drop", ["bennu\\.deb", r"pybennu-\S+\.whl"])
+def test_patch_bennu_sh_needs_both_blocks(drop):
+    kept = "".join(ln for ln in BENNU_SH.splitlines(True) if not __import__("re").search(drop, ln))
+    with pytest.raises(BurgerError, match="no longer downloads"):
+        update.patch_bennu_sh(kept)
+
+
+def test_point_link_under_the_host_contract(settings, monkeypatch):
+    monkeypatch.setattr(update, "_now", lambda: dt.datetime(2026, 10, 22, 9, 8, 7))
+    h, rollback = point(
+        settings,
+        {f"{CTR}test -L ": cp(rc=1), f"{CTR}test -e {IMGS}/bennu-20261022.qc2": cp(rc=1)},
+        StrictHost,
+    )
+    assert rollback == f"{CTR}ln -sfn {IMGS}/bennu-20261022.qc2 {IMGS}/bennu.qc2"
+    h, rollback = point(
+        settings,
+        {f"{CTR}test -L {IMGS}/bennu.qc2": cp(), f"{CTR}readlink": cp("old.qc2\n")},
+        StrictHost,
+    )
+    assert rollback == f"{CTR}ln -sfn old.qc2 {IMGS}/bennu.qc2"
+    h, rollback = point(
+        settings,
+        {f"{CTR}test -L ": cp(rc=1), f"{CTR}test -e {IMGS}/bennu.qc2": cp(rc=1)},
+        StrictHost,
+    )
+    assert rollback == f"{CTR}rm {IMGS}/bennu.qc2"
+    assert not any("mv" in c for c in h.calls)
+
+
+def test_bennu_current_names_the_link_target_a_file_or_none(settings):
+    link = f"{IMGS}/bennu.qc2"
+    t = strict_for(settings, {f"{CTR}test -L {link}": cp(), f"{CTR}readlink": cp("/x/old.qc2\n")})
+    assert update.bennu_current(t, settings) == "old.qc2"
+    f = strict_for(settings, {f"{CTR}test -L {link}": cp(rc=1)})
+    assert update.bennu_current(f, settings) == "regular file"
+    n = strict_for(settings, {f"{CTR}test -L ": cp(rc=1), f"{CTR}test -e ": cp(rc=1)})
+    assert update.bennu_current(n, settings) == "none"
+
+
+def test_installed_apps_reads_the_marker_or_says_unknown(settings):
+    ok = strict_for(settings, {f"{CTR}cat": cp('{"apps": "' + "a" * 40 + '"}')})
+    assert update.installed_apps(ok) == "a" * 10
+    gone = strict_for(settings, {f"{CTR}cat": cp(rc=1)})
+    assert update.installed_apps(gone) == "unknown"
+
+
+def test_checkout_images_clones_or_fetches(settings, lines):
+    d = "/imgs"
+    fresh = strict_for(settings, {"test -d /imgs/.git": cp(rc=1)})
+    update.checkout_images(update.Ctx(settings, fresh, lines.append, dry=True), d)
+    assert ["git", "clone", "--quiet", update.IMAGES_REPO, d] in fresh.calls
+    there = strict_for(settings)
+    update.checkout_images(update.Ctx(settings, there, lines.append, dry=True), d)
+    assert ["git", "-C", d, "fetch", "--quiet", "origin", "main"] in there.calls
+    assert not any("clone" in c for c in there.calls)
+
+
+def test_checkout_images_checks_the_container_sees_the_script_unless_dry(settings, lines):
+    h = strict_for(settings, {f"{CTR}test -f /imgs/scripts/bennu.sh": cp(rc=1)})
+    with pytest.raises(BurgerError, match=r"cannot see /imgs/scripts/bennu\.sh"):
+        update.checkout_images(update.Ctx(settings, h, lines.append), "/imgs")
+    update.checkout_images(update.Ctx(settings, h, lines.append, dry=True), "/imgs")
+    seen = strict_for(settings)
+    update.checkout_images(update.Ctx(settings, seen, lines.append), "/imgs")
+
+
+def run_bennu(settings, lines, images, monkeypatch, dry=False, site=None, **extra):
+    fake_build(monkeypatch, settings)
+    h = StrictHost(bennu_responses(images, **extra), settings, site)
+    return h, run_update(settings, h, lines, ["bennu"], dry=dry)
+
+
+def test_bennu_build_under_the_host_contract(settings, lines, images, monkeypatch):
+    h, rows = run_bennu(settings, lines, images, monkeypatch)
+    assert rows == [
+        ("bennu", "none", "bennu-main-1234567.qc2", f"built from bennu main {SHA[:10]}")
+    ]
+    assert f"{CTR}ln -sfn bennu-main-1234567.qc2 {IMGS}/bennu.qc2" in [" ".join(c) for c in h.calls]
+
+
+def test_bennu_dry_run_under_the_host_contract(settings, lines, images, monkeypatch):
+    run_bennu(settings, lines, images, monkeypatch, dry=True)
+    assert any("phenix image create" in line for line in lines)
+
+
+def test_bennu_missing_images_dir_under_the_host_contract(settings, lines, images, monkeypatch):
+    with pytest.raises(BurgerError, match="not a directory in the phēnix container"):
+        run_bennu(settings, lines, images, monkeypatch, **{f"{CTR}test -d {images}": cp(rc=1)})
+    run_bennu(
+        settings, lines, images, monkeypatch, dry=True, **{f"{CTR}test -d {images}": cp(rc=1)}
+    )
+    assert any(line.startswith("! a real run") for line in lines)
+
+
+def test_bennu_existing_image_is_pointed_to_not_rebuilt(settings, lines, images, monkeypatch):
+    monkeypatch.setattr(update.vcs, "sync", lambda *a: pytest.fail("sync"))
+    h = StrictHost(bennu_responses(images, **{f"{CTR}test -e {IMGS}/bennu-main-": cp()}), settings)
+    rows = run_update(settings, h, lines, ["bennu"])
+    assert rows[0][3] == "image already built"
+
+
+def test_bennu_refuses_to_rebuild_over_a_target_that_appeared_during_the_build(
+    settings, lines, images, monkeypatch
+):
+    fake_build(monkeypatch, settings)
+    probe = f"{CTR}test -e {IMGS}/bennu-main-1234567.qc2"
+
+    class Appears(StrictHost):
+        def run(self, cmd, check=True, capture=False, **kw):
+            if " ".join(cmd) == probe and self.calls.count(cmd):
+                return enforce_(cp(), cmd, check, capture)
+            return super().run(cmd, check, capture, **kw)
+
+    h = Appears(bennu_responses(images), settings)
+    with pytest.raises(BurgerError, match="exists; remove it to rebuild"):
+        run_update(settings, h, lines, ["bennu"])
+
+
+def test_bennu_drop_config_only_for_an_image_named_bennu(settings, lines, images, monkeypatch):
+    short = "Image a b c d\nImage a b c d other\nImage a b c d bennu\n"
+    h, _ = run_bennu(settings, lines, images, monkeypatch, **{f"{CTR}phenix cfg list": cp(short)})
+    assert sum(c[-3:] == ["image", "delete", "bennu"] for c in h.calls) == 1
+    short = "Image a b c d\nImage a b c d other\nTopology x\n"
+    h, _ = run_bennu(settings, lines, images, monkeypatch, **{f"{CTR}phenix cfg list": cp(short)})
+    assert not any("delete" in c for c in h.calls)
+    h, _ = run_bennu(settings, lines, images, monkeypatch, **{f"{CTR}phenix cfg list": cp(rc=1)})
+    assert not any("delete" in c for c in h.calls)
+
+
+def test_bennu_injects_miniccc_from_the_checkout_or_says_it_is_missing(
+    settings, lines, images, monkeypatch
+):
+    d = str(images)
+    h, _ = run_bennu(
+        settings, lines, images, monkeypatch, **{f"{CTR}test -f /phenix/miniccc": cp(rc=1)}
+    )
+    assert f"{CTR}phenix image inject-miniexe {d}/miniccc {d}/bennu.qc2" in [
+        " ".join(c) for c in h.calls
+    ]
+    gone = {f"{CTR}test -f /phenix/miniccc": cp(rc=1), f"{CTR}test -f {d}/miniccc": cp(rc=1)}
+    h, _ = run_bennu(settings, lines, images, monkeypatch, **gone)
+    assert not any("inject-miniexe" in c for c in h.calls)
+    assert any(line.startswith("no miniccc in the phenix directory") for line in lines)
+
+
+def test_bennu_passes_the_apt_mirror_to_image_create(settings, lines, images, monkeypatch):
+    from types import SimpleNamespace
+
+    site = SimpleNamespace(mirrors={"apt": "http://mirror/apt"})
+    h, _ = run_bennu(settings, lines, images, monkeypatch, site=site)
+    assert any("--mirror=http://mirror/apt" in c for c in h.calls[0:] for c in c)
+    site = SimpleNamespace(mirrors={})
+    h, _ = run_bennu(settings, lines, images, monkeypatch, site=site)
+    assert not any(a.startswith("--mirror") for c in h.calls for a in c)
