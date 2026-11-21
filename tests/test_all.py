@@ -136,7 +136,7 @@ def test_every_vm_process_and_port_host_is_in_the_topology(settings, topologies)
         if not Path(topo).is_file():
             return None  # topology not in BURGER_TOPOLOGIES (e.g. an unmerged upstream PR)
         doc = yaml.safe_load(open(topo))
-        return {n["general"]["hostname"] for n in doc["spec"]["nodes"]} | {"monitor"}
+        return {n["general"]["hostname"] for n in doc["spec"]["nodes"]} | {"monitor", "caldera"}
 
     problems = []
     for item in ITEMS.values():
