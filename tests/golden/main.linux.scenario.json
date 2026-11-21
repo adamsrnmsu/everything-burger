@@ -229,6 +229,23 @@
         "name": "wireguard"
       },
       {
+        "hosts": [
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "args": "-serve -http"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "args": "-http 10.1.1.101"
+            }
+          }
+        ],
+        "name": "protonuke"
+      },
+      {
         "metadata": {
           "components": [
             {
@@ -289,6 +306,11 @@
                         "wait": true
                       },
                       {
+                        "args": "cat /etc/default/protonuke | grep -Eq 'PROTONUKE_ARGS = -serve -http'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
                         "type": "exec",
                         "wait": true
@@ -341,6 +363,11 @@
                       },
                       {
                         "args": "grep -q 'enable --now wg-quick@wg0' /etc/phenix/startup/wireguard-enable.sh",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "cat /etc/default/protonuke | grep -Eq 'PROTONUKE_ARGS = -http 10.1.1.101'",
                         "type": "exec",
                         "wait": true
                       },

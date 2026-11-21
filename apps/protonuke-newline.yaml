@@ -1,0 +1,13 @@
+name: protonuke-newline
+kind: app
+type: protonuke
+about: >
+  The protonuke app with a newline in a host's args, which the app refuses in
+  pre-start (it would write a second line into /etc/default/protonuke). Validate-only
+  like helics-no-broker: `burger check` and `burger verify` pass when pre-start fails
+  with that message.
+routes: []
+expect_invalid: "protonuke args for host 'rtu-1' must not contain newlines"
+hosts:
+  - hostname: rtu-1
+    metadata: {args: "-serve\n-http"}
