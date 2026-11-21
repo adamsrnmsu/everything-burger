@@ -218,9 +218,31 @@ def _run_locked(args, s, host) -> int:
         return _run_steps(args, s, host, view)
 
 
-def _run_steps(args, s, host, view) -> int:
+def _render_offline(args, s, name: str) -> None:
+    """Render and compose right after sync: hostname/run errors surface before docker."""
+    res, rd = _board(s, name, args.linux_only, route=args.route), vcs.board_dir(s, name)
+    topo = res.route.topology_dir
+    render(
+        res,
+        vcs.load_manifest(s, name),
+        rd / topo if topo else None,
+        f"{s.phenix_dir}/burger/{name}",
+        s,
+    )
+
+
+def _step_failed(args, s, host, name: str, cmd: str, mark) -> None:
+    if cmd:
+        mark.finish(cmd, False)
+    if cmd in ("up", "scorch"):  # the experiment exists: keep the evidence before teardown
+        _salvage_fdlogs(args, s, host, name)
+    if cmd in ("install", "up", "scorch"):
+        _warn_swapped(s, host, name)
+
+
+def _run_pipeline(args, s, host, view, mark) -> dict[str, float]:
+    """sync .. scorch, each marked and timed; a failure is cleaned up after, then re-raised."""
     name = args.board
-    mark = view or argparse.Namespace(start=lambda n: None, finish=lambda n, ok=True: None)
     timings: dict[str, float] = {}
     cmd = ""
     try:
@@ -233,19 +255,18 @@ def _run_steps(args, s, host, view) -> int:
             _one(step, s, host, name)
             timings[cmd] = time.monotonic() - began
             mark.finish(cmd)
-            if cmd == "sync":  # render and compose offline first: hostname/run errors before docker
-                res, rd = _board(s, name, args.linux_only, route=args.route), vcs.board_dir(s, name)
-                topo = res.route.topology_dir
-                stage = f"{s.phenix_dir}/burger/{name}"
-                render(res, vcs.load_manifest(s, name), rd / topo if topo else None, stage, s)
+            if cmd == "sync":
+                _render_offline(args, s, name)
     except BaseException:
-        if cmd:
-            mark.finish(cmd, False)
-        if cmd in ("up", "scorch"):  # the experiment exists: keep the evidence before teardown
-            _salvage_fdlogs(args, s, host, name)
-        if cmd in ("install", "up", "scorch"):
-            _warn_swapped(s, host, name)
+        _step_failed(args, s, host, name, cmd, mark)
         raise
+    return timings
+
+
+def _run_steps(args, s, host, view) -> int:
+    name = args.board
+    mark = view or argparse.Namespace(start=lambda n: None, finish=lambda n, ok=True: None)
+    timings = _run_pipeline(args, s, host, view, mark)
     if not view:
         out.rule(f"verify {name}", style="dim")
     mark.start("verify")
@@ -284,12 +305,8 @@ def _salvage_fdlogs(args, s, host, name: str) -> None:
         logger.warning("could not save field-device logs: {}", e)
 
 
-def _preflight(args, s, host) -> int:
-    rows = []
-
-    def chk(label, ok, hint=""):
-        rows.append(Row("-", label, "ok" if ok else "FAIL", "" if ok else hint, []))
-
+def _service_rows(host, s, chk) -> None:
+    """Tools on PATH, the phēnix container and CLI, minimega and the REST API."""
     for tool in ("git", "docker"):
         chk(f"{tool} on PATH", bool(shutil.which(tool)))
     if s.ctr:
@@ -309,6 +326,9 @@ def _preflight(args, s, host) -> int:
         chk(f"REST API {s.api}", True)
     except (OSError, urllib.error.URLError) as e:
         chk(f"REST API {s.api}", False, f"{e}; set BURGER_API / BURGER_TOKEN")
+
+
+def _image_rows(host, s, args, chk) -> None:
     route = load_route(args.route, s)
     windows = route.windows_images
     stock = route.images or ["bennu.qc2", "minirouter.qc2"]
@@ -323,6 +343,10 @@ def _preflight(args, s, host) -> int:
         elif img in windows:
             hint = "build it or use --linux-only"
         chk(f"image {img}", rc == 0, hint)
+
+
+def _guest_rows(host, s, chk) -> None:
+    """miniccc in minimega's container, pip and free disk in phēnix's."""
     if s.mm_ctr:
         chk(
             f"miniccc in container '{s.mm_ctr}'",
@@ -343,6 +367,17 @@ def _preflight(args, s, host) -> int:
         free_gb >= 20,
         "switchboards need ~20 GiB of snapshots",
     )
+
+
+def _preflight(args, s, host) -> int:
+    rows = []
+
+    def chk(label, ok, hint=""):
+        rows.append(Row("-", label, "ok" if ok else "FAIL", "" if ok else hint, []))
+
+    _service_rows(host, s, chk)
+    _image_rows(host, s, args, chk)
+    _guest_rows(host, s, chk)
     _leftover_rows(host, rows)
     if host.site:
         _site_rows(host, rows, chk)
@@ -369,38 +404,40 @@ def _leftover_rows(host, rows) -> None:
         rows.append(Row("-", "leftover host state", "WARN", msg, []))
 
 
-def _site_rows(host, rows, chk) -> None:
-    """Preflight for the site file: CA bundle, and each mirror as burger will use it."""
-    site = host.site
-    chk(f"site file {site.path}", True)
-    bundle = site.bundle(host.s.work)
-    if bundle:
-        chk(f"CA bundle ({bundle.read_text().count('BEGIN CERTIFICATE')} certs)", True)
-    m = site.mirrors
-    if m.get("registry"):
-        image = site.image_name("ubuntu:22.04")
-        res = host.run(["docker", "pull", image], check=False, capture=True)
-        registry_host = m["registry"].split("/", 1)[0]
+def _registry_row(host, site, chk) -> None:
+    registry = site.mirrors.get("registry")
+    if not registry:
+        return
+    image = site.image_name("ubuntu:22.04")
+    res = host.run(["docker", "pull", image], check=False, capture=True)
+    registry_host = registry.split("/", 1)[0]
+    chk(
+        f"registry mirror: docker pull {image}",
+        res.returncode == 0,
+        f"the docker daemon pulls images: give it the CA in /etc/docker/certs.d/"
+        f"{registry_host}/ca.crt and the proxy in its systemd http-proxy.conf drop-in",
+    )
+
+
+def _bundle_rows(site, bundle, rows, chk) -> None:
+    """A public host the proxy does not re-sign must still verify with this bundle."""
+    err = probe(PUBLIC_PROBE, site, bundle)
+    if err is None:
+        chk(f"CA bundle verifies {PUBLIC_PROBE}", True)
+    elif "certificate" in err.lower():
         chk(
-            f"registry mirror: docker pull {image}",
-            res.returncode == 0,
-            f"the docker daemon pulls images: give it the CA in /etc/docker/certs.d/"
-            f"{registry_host}/ca.crt and the proxy in its systemd http-proxy.conf drop-in",
+            f"CA bundle verifies {PUBLIC_PROBE}",
+            False,
+            f"{err}. ca_certs is the whole trust store: if the proxy passes some TLS "
+            "through un-resigned, list the system bundle too "
+            "(/etc/ssl/certs/ca-certificates.crt); see docs/proxy.md",
         )
-    if bundle:  # a public host the proxy does not re-sign must still verify with this bundle
-        err = probe(PUBLIC_PROBE, site, bundle)
-        if err is None:
-            chk(f"CA bundle verifies {PUBLIC_PROBE}", True)
-        elif "certificate" in err.lower():
-            chk(
-                f"CA bundle verifies {PUBLIC_PROBE}",
-                False,
-                f"{err}. ca_certs is the whole trust store: if the proxy passes some TLS "
-                "through un-resigned, list the system bundle too "
-                "(/etc/ssl/certs/ca-certificates.crt); see docs/proxy.md",
-            )
-        else:  # air-gapped sites reach no public host; that is not a CA problem
-            rows.append(Row("-", f"CA bundle vs {PUBLIC_PROBE}", "WARN", f"not reached: {err}", []))
+    else:  # air-gapped sites reach no public host; that is not a CA problem
+        rows.append(Row("-", f"CA bundle vs {PUBLIC_PROBE}", "WARN", f"not reached: {err}", []))
+
+
+def _mirror_rows(host, site, bundle, rows, chk) -> None:
+    m = site.mirrors
     for key, url in (
         ("pypi", m.get("pypi")),
         ("apt", m.get("apt") and m["apt"].rstrip("/") + "/dists/jammy/Release"),
@@ -418,6 +455,19 @@ def _site_rows(host, rows, chk) -> None:
         )
     if str(m.get("gosumdb", "")).lower() == "off":
         rows.append(Row("-", "GOSUMDB=off", "WARN", "Go checksum verification is off", []))
+
+
+def _site_rows(host, rows, chk) -> None:
+    """Preflight for the site file: CA bundle, and each mirror as burger will use it."""
+    site = host.site
+    chk(f"site file {site.path}", True)
+    bundle = site.bundle(host.s.work)
+    if bundle:
+        chk(f"CA bundle ({bundle.read_text().count('BEGIN CERTIFICATE')} certs)", True)
+    _registry_row(host, site, chk)
+    if bundle:
+        _bundle_rows(site, bundle, rows, chk)
+    _mirror_rows(host, site, bundle, rows, chk)
 
 
 def _prs(args, s, host) -> int:
@@ -500,27 +550,20 @@ def _synthetic_manifest(board) -> dict:
     return man
 
 
-def _check(args, s, host) -> int:
-    res = _board(s, args.board, args.linux_only, log=False, route=args.route)
-    rd = vcs.board_dir(s, args.board)
-    man = vcs.load_manifest(s, args.board) if (rd / "manifest.json").is_file() else None
-    man = man or _synthetic_manifest(res.board)
-    topo_dir = None
-    if not res.route.base:
-        env = os.environ.get("BURGER_TOPOLOGIES")
-        topo_dir = (Path(env) if env else rd) / res.route.topology_dir
-        if not topo_dir.is_dir():
-            raise BurgerError(
-                f"no topologies at {topo_dir}: set BURGER_TOPOLOGIES "
-                f"or run burger sync {args.board}"
-            )
-    stage = f"{s.phenix_dir}/burger/{args.board}"
-    topo, scen = render(res, man, topo_dir, stage, s)
-    dest = rd / "check"
-    dest.mkdir(parents=True, exist_ok=True)
-    (dest / "topology.json").write_text(json.dumps(topo, indent=2))
-    (dest / "scenario.json").write_text(json.dumps(scen, indent=2))
-    _, runs = compose(res, man)
+def _check_topologies(res: Resolved, rd: Path, name: str) -> Path | None:
+    """Where the route's topology lives: BURGER_TOPOLOGIES, else the synced tree."""
+    if res.route.base:
+        return None
+    env = os.environ.get("BURGER_TOPOLOGIES")
+    topo_dir = (Path(env) if env else rd) / res.route.topology_dir
+    if not topo_dir.is_dir():
+        raise BurgerError(
+            f"no topologies at {topo_dir}: set BURGER_TOPOLOGIES or run burger sync {name}"
+        )
+    return topo_dir
+
+
+def _print_items(res: Resolved, runs: list) -> None:
     table = Table("item", "kind", "advisory", "about")
     for i in res.items:
         table.add_row(i.name, i.kind, "yes" if i.advisory else "", Text(i.about))
@@ -534,8 +577,24 @@ def _check(args, s, host) -> int:
             if run.get(k)
         )
         out.print(f"run {n} {run.get('name')}: {stages}", markup=False, highlight=False)
+
+
+def _check(args, s, host) -> int:
+    res = _board(s, args.board, args.linux_only, log=False, route=args.route)
+    rd = vcs.board_dir(s, args.board)
+    man = vcs.load_manifest(s, args.board) if (rd / "manifest.json").is_file() else None
+    man = man or _synthetic_manifest(res.board)
+    topo_dir = _check_topologies(res, rd, args.board)
+    stage = f"{s.phenix_dir}/burger/{args.board}"
+    topo, scen = render(res, man, topo_dir, stage, s)
+    dest = rd / "check"
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "topology.json").write_text(json.dumps(topo, indent=2))
+    (dest / "scenario.json").write_text(json.dumps(scen, indent=2))
+    _, runs = compose(res, man)
+    _print_items(res, runs)
     out.print(f"ok: {args.board} renders; wrote {dest}/topology.json and scenario.json")
-    models_yaml(res, dest / "models.yaml", f"{s.phenix_dir}/burger/{args.board}")
+    models_yaml(res, dest / "models.yaml", stage)
     rows = [
         *invalid.scorch_rows(res, s, host, dest / "models.yaml"),
         *invalid.app_rows(res, s, host, topo, dest / "apps"),
