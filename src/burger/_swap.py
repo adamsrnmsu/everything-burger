@@ -74,17 +74,3 @@ def restore(w: Swap, host, s: Settings) -> None:
         return
     w.recreate(host, s, None, None)
     logger.info("{} container '{}' is back on stock", w.name, w.ctr(s))
-
-
-def entrypoints(spec: Callable[[], Swap], ensure_doc: str, restore_doc: str):
-    """The public (ensure, restore) pair of one module, over its late-bound Swap."""
-
-    def ensure_(host, s: Settings, want: str | None, image: str | None = None) -> None:
-        ensure(spec(), host, s, want, image)
-
-    def restore_(host, s: Settings) -> None:
-        restore(spec(), host, s)
-
-    ensure_.__name__, ensure_.__doc__ = "ensure", ensure_doc
-    restore_.__name__, restore_.__doc__ = "restore", restore_doc
-    return ensure_, restore_

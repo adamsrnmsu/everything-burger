@@ -153,14 +153,17 @@ def _swap() -> _swap_mod.Swap:
     )
 
 
-ensure, restore = _swap_mod.entrypoints(
-    _swap,
-    """Make the running minimega the one the board wants: burger's build `image` of commit
-    `want` (default its plain build), or stock for None (which also undoes a swap a killed run
-    left behind). The image, not only the commit, must match: a plain and a layered build of
-    one commit are different minimegas (burger-fr8).""",
-    """Put stock minimega back after a board that swapped it, unless VMs still need it.""",
-)
+# Make the running minimega the one the board wants: burger's build `image` of commit
+# `want` (default its plain build), or stock for None (which also undoes a swap a killed run
+# left behind). The image, not only the commit, must match: a plain and a layered build of
+# one commit are different minimegas (burger-fr8).
+def ensure(host, s: Settings, want: str | None, image: str | None = None) -> None:
+    _swap_mod.ensure(_swap(), host, s, want, image)
+
+
+# Put stock minimega back after a board that swapped it, unless VMs still need it.
+def restore(host, s: Settings) -> None:
+    _swap_mod.restore(_swap(), host, s)
 
 
 def _container_reason(host, s: Settings, mm: dict, board: str) -> str:
