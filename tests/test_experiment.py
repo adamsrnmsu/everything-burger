@@ -663,7 +663,11 @@ def test_scorch_retries_when_another_attempt_just_fits(settings, monkeypatch, me
     # deadline = 100 + 160; at 100 an attempt (60 + 100) ends exactly on it: it still runs
     scorch(res(settings), settings, Slow(settings=settings), None, 160, clock=clock)
     assert starts == [0, 160]
-    assert any("attempt 1: running SCORCH" in m for _, m in messages)
+    running = [m for _, m in messages if "running SCORCH" in m]
+    assert running == [
+        "run 0 (health) attempt 1: running SCORCH",
+        "run 0 (health) attempt 2: running SCORCH",
+    ]
     assert any("settle 160 s left, ~1 more" in m for _, m in messages)
 
 
@@ -680,3 +684,10 @@ def test_non_health_run_gets_one_shot(settings, monkeypatch):
 
     scorch(res(settings), settings, H(settings=settings), None, 1000, clock=clock)
     assert len(n) == 1
+
+
+def test_wait_running_deadline_is_inclusive(settings, clock, monkeypatch):
+    bad = iter(["no VMs listed", ""])
+    monkeypatch.setattr(experiment, "not_running", lambda h, e: next(bad))
+    experiment.wait_running(FakeHost(settings=settings), "e", 0)  # still not past the deadline
+    assert clock.now == 10
