@@ -8,7 +8,7 @@ from burger import experiment
 from burger.config import BurgerError
 from burger.experiment import down, fix_routers, install, scorch, services, vm_uuids
 from tests.conftest import MAN, res
-from tests.fakes import FakeHost
+from tests.fakes import FakeHost, StrictHost
 
 NOT_FOUND = subprocess.CompletedProcess([], 1, "", "")
 
@@ -433,3 +433,250 @@ def test_missing_item_asset_is_an_error(settings, tmp_path):
 def test_no_assets_makes_no_assets_dir(settings, tmp_path):
     experiment._stage_assets(res(settings), settings, tmp_path)
     assert not (tmp_path / "assets").exists()
+
+
+def _cp(rc=0, out="", err=""):
+    return subprocess.CompletedProcess([], rc, out, err)
+
+
+def _pre(settings, key):
+    return f"docker exec {settings.ctr} phenix {key}"
+
+
+def test_kill_scorch_tolerates_nothing_to_kill(settings):
+    host = StrictHost({"docker exec": _cp(1)}, settings)  # pkill exits 1 when nothing matched
+    experiment._kill_scorch(host)
+    assert len([c for c in host.calls if "pkill" in c]) == 2
+
+
+def test_scorch_attempt_keeps_output_of_a_failed_run(settings):
+    host = StrictHost({_pre(settings, "experiment scorch"): _cp(1, "so\n", "se\n")}, settings)
+    assert experiment._scorch_attempt(host, "e", 0, 600, False) == ("so\nse\n", "se\n", False)
+
+
+def test_down_config_delete_is_quiet_and_may_fail(settings):
+    seen = []
+
+    class H(FakeHost):
+        def run(self, cmd, check=True, capture=False, **kw):
+            seen.append((cmd[-4:], check, capture))
+            return super().run(cmd, check, capture, **kw)
+
+    down(res(settings), H(settings=settings))
+    assert seen[-1] == (
+        ["config", "delete", "scenario/ebwes-baseline", "topology/ebwes-baseline"][-4:],
+        False,
+        True,
+    )
+
+
+def test_download_debs_skips_without_packages(settings, tmp_path):
+    host = FakeHost(settings=settings)
+    experiment._download_debs(host, tmp_path, "1:2", [])
+    assert host.calls == [] and not (tmp_path / "debs").exists()
+
+
+def test_download_debs_runs_apt_in_the_image(settings, tmp_path):
+    host = FakeHost(settings=settings)
+    experiment._download_debs(host, tmp_path, "1:2", ["curl", "jq"])
+    (call,) = [c for c in host.calls if c[:2] == ["docker", "run"]]
+    assert "apt-get download -q curl jq" in call[-1] and "chown 1:2" in call[-1]
+    assert (tmp_path / "debs").is_dir()
+
+
+def test_stage_startup_writes_the_debs_script(settings, tmp_path):
+    r = _with(res(settings))
+    r = dataclasses.replace(r, requires=dataclasses.replace(r.requires, debs_packages=["jq"]))
+    experiment._stage_startup(r, dataclasses.replace(settings, mm_ctr=""), FakeHost(), {}, tmp_path)
+    assert (tmp_path / "02-burger-debs.sh").read_text() == experiment.DEBS_STARTUP
+
+
+def test_stage_startup_copies_miniccc_or_says_why_not(settings, tmp_path):
+    r = res(settings)
+    experiment._stage_startup(r, settings, FakeHost(settings=settings), {}, tmp_path)
+    assert (tmp_path / "01-burger-miniccc.sh").read_text() == experiment.MINICCC_STARTUP
+    host = StrictHost({"docker cp": _cp(1)}, settings)
+    with pytest.raises(BurgerError, match="cannot copy miniccc"):
+        experiment._stage_startup(r, settings, host, {}, tmp_path)
+
+
+def test_stage_assets_into_an_existing_assets_dir(settings, tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "g.py").write_text("g")
+    out = tmp_path / "out"
+    (out / "assets").mkdir(parents=True)
+    experiment._stage_assets(
+        _with(res(settings), assets=("g.py",)), dataclasses.replace(settings, root=root), out
+    )
+    assert (out / "assets" / "g.py").read_text() == "g"
+
+
+def test_attempt_log_creates_missing_dirs_and_reuses_them(settings):
+    r = res(settings)
+    log = experiment._write_attempt_log(r, settings, 0, 1, "one")
+    experiment._write_attempt_log(r, settings, 0, 2, "two")  # results/ already exists
+    assert log == settings.work / "baseline" / "results" / "run-0-attempt-1.log"
+    assert log.read_text() == "one"
+
+
+def test_build_twice_and_passes_the_bennu_spec(settings, monkeypatch):
+    rd = settings.work / "baseline"
+    rd.mkdir(parents=True)
+    (rd / "manifest.json").write_text(json.dumps(MAN))
+    got = []
+    monkeypatch.setattr(experiment, "build_iperf", lambda *a: None)
+    monkeypatch.setattr(experiment, "build_bennu", lambda *a: got.append(a))
+    r = res(settings)
+    spec = {"pr": 58, "install": ["pip"], "pip": ["x"], "pip_env": {"A": "1"}}
+    r = dataclasses.replace(r, board=dataclasses.replace(r.board, bennu=spec))
+    experiment.build(r, settings, FakeHost(settings=settings))
+    experiment.build(r, settings, FakeHost(settings=settings))  # out/ exists now
+    assert got[0][2] == rd / "out" and got[0][4:6] == (["pip"], ["x"]) and got[0][7] == {"A": "1"}
+    r = dataclasses.replace(r, board=dataclasses.replace(r.board, bennu=None))
+    experiment.build(r, settings, FakeHost(settings=settings))  # no spec: defaults
+    assert got[-1][4:6] == (["deb"], []) and got[-1][7] == {}
+
+
+def test_collect_returns_status_only_when_fetched(settings, monkeypatch):
+    monkeypatch.setattr(experiment, "collect_status", lambda dst, since: {"k": since})
+    ok = FakeHost(settings=settings)
+    assert experiment.collect(res(settings), settings, ok, 0, "t") == {"k": "t"}
+    bad = FakeHost({"docker cp": _cp(1)}, settings)
+    assert experiment.collect(res(settings), settings, bad, 0, "t") == {}
+
+
+@pytest.mark.parametrize(
+    "node, expect",
+    [
+        ({"type": "Router"}, True),
+        ({"hardware": {"os_type": "minirouter"}}, True),
+        ({"hardware": {"drives": [{"image": "minirouter.qc2"}]}}, True),
+        ({"type": "VM", "hardware": {"os_type": "linux", "drives": [{"image": "a.qc2"}]}}, False),
+        ({}, False),
+    ],
+)
+def test_is_router_any_one_marker_is_enough(node, expect):
+    assert experiment.is_router(node) is expect
+
+
+class ListingHost(FakeHost):
+    """minimega's `vm info` answers the next listing in turn (the last one repeats)."""
+
+    def __init__(self, settings, listings):
+        super().__init__(settings=settings)
+        self.listings, self.looks = listings, 0
+
+    def run(self, cmd, **kw):
+        if "columns name,uuid" in " ".join(map(str, cmd)):
+            out = self.listings[min(self.looks, len(self.listings) - 1)]
+            self.looks += 1
+            return subprocess.CompletedProcess(cmd, 0, out, "")
+        return super().run(cmd, **kw)
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    c = FakeClock()
+    monkeypatch.setattr(experiment, "time", c)
+    return c
+
+
+def test_vm_uuids_retries_until_listed(settings, clock):
+    host = ListingHost(settings, ["", "a,u1\n"])
+    assert vm_uuids(host, "e", {"a"}) == {"a": "u1"}
+    assert (host.looks, clock.now) == (2, 5)
+
+
+def test_vm_uuids_returns_at_once_when_all_listed(settings, clock):
+    host = ListingHost(settings, ["a,u1\nb,u2\n"])
+    assert vm_uuids(host, "e", {"a"}, timeout=0) == {"a": "u1", "b": "u2"}
+    assert (host.looks, clock.now) == (1, 0)
+
+
+def test_vm_uuids_gives_up_only_after_the_timeout(settings, clock):
+    host = ListingHost(settings, [""])
+    assert vm_uuids(host, "e", {"a"}, timeout=0) == {}
+    assert (host.looks, clock.now) == (2, 5)  # at the deadline exactly: one more look
+
+
+def test_wait_for_cc_looks_once_per_pass_and_counts(settings, clock, messages):
+    host = ListingHost(settings, ["a,u1\n"])
+    host.api_responses["/experiments/e/vms"] = {"vms": [{"name": "a"}, {"name": "b"}]}
+    experiment.wait_for_cc(host, settings, "e", timeout=0, clock=clock)
+    assert host.looks == 2  # vm_uuids does not retry inside a pass
+    assert any("(0 of 2): a, b" in m for _, m in messages)
+
+
+def test_wait_running_waits_then_passes(settings, clock, monkeypatch):
+    bad = iter(["no VMs listed", ""])
+    monkeypatch.setattr(experiment, "not_running", lambda h, e: next(bad))
+    experiment.wait_running(FakeHost(settings=settings), "e", 60)
+    assert clock.now == 10
+
+
+def test_wait_running_times_out(settings, clock, monkeypatch):
+    monkeypatch.setattr(experiment, "not_running", lambda h, e: "no VMs listed")
+    with pytest.raises(BurgerError, match="e not running after 25s: no VMs listed"):
+        experiment.wait_running(FakeHost(settings=settings), "e", 25)
+    assert clock.now == 30
+
+
+def test_scorch_refuses_a_run_out_of_range(settings, monkeypatch):
+    _up(settings, monkeypatch, [False, False])
+    host = FakeHost(settings=settings)
+    for bad in (-1, 1):
+        with pytest.raises(BurgerError, match="runs 0-0"):
+            scorch(res(settings), settings, host, bad, 0, clock=FakeClock())
+    scorch(res(settings), settings, host, 0, 0, clock=FakeClock())  # the only run
+
+
+def test_scorch_gives_up_on_a_run_that_stays_busy(settings, monkeypatch):
+    _up(settings, monkeypatch, [False])
+    clock = FakeClock()
+    tries = []
+
+    class Busy(FakeHost):
+        def run(self, cmd, **kw):
+            if "scorch" in cmd and "experiment" in cmd:
+                tries.append(1)
+                return _cp(1, "", "already running")
+            return super().run(cmd, **kw)
+
+    with pytest.raises(BurgerError, match="still busy after 10 min"):
+        scorch(res(settings), settings, Busy(settings=settings), None, 0, clock=clock)
+    assert len(tries) == 21 and clock.now == 20 * 30
+
+
+def test_scorch_retries_when_another_attempt_just_fits(settings, monkeypatch, messages):
+    _up(settings, monkeypatch, [True, True, True])
+    clock = FakeClock()
+    starts = []
+
+    class Slow(FakeHost):
+        def run(self, cmd, **kw):
+            if "scorch" in cmd and "experiment" in cmd:
+                starts.append(clock.now)
+                clock.now += 100
+            return super().run(cmd, **kw)
+
+    # deadline = 100 + 160; at 100 an attempt (60 + 100) ends exactly on it: it still runs
+    scorch(res(settings), settings, Slow(settings=settings), None, 160, clock=clock)
+    assert starts == [0, 160]
+    assert any("attempt 1: running SCORCH" in m for _, m in messages)
+    assert any("settle 160 s left, ~1 more" in m for _, m in messages)
+
+
+def test_non_health_run_gets_one_shot(settings, monkeypatch):
+    _up(settings, monkeypatch, [True, True])
+    monkeypatch.setattr(experiment, "compose", lambda r, m: ([], [{"name": "other"}]))
+    clock, n = FakeClock(), []
+
+    class H(FakeHost):
+        def run(self, cmd, **kw):
+            if "scorch" in cmd and "experiment" in cmd:
+                n.append(1)
+            return super().run(cmd, **kw)
+
+    scorch(res(settings), settings, H(settings=settings), None, 1000, clock=clock)
+    assert len(n) == 1

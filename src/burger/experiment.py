@@ -500,7 +500,7 @@ def _scorch_run(res, settings, host, runs, i, judge, settle, clock, first_cap) -
             if now + 60 + length > deadline:
                 _log_gave_up(health, i, attempt, failed, log)
                 return
-            left = max(0, deadline - now)
+            left = deadline - now  # >= 60 here: the cap check above returned otherwise
             say(
                 "run {} ({}) attempt {} not healthy yet: {}; settle {} s left, ~{} more "
                 "attempt(s) fit; retrying in 60 s (output: {})",
