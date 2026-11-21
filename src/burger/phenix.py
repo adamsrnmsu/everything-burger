@@ -6,10 +6,12 @@ from pathlib import Path
 
 from loguru import logger
 
+from burger import _swap as _swap_mod
 from burger import update  # update imports experiment, which imports this: use it at call time
+from burger._swap import _short
 from burger.checks import Row
 from burger.config import BurgerError, Settings
-from burger.minimega import _built, _short
+from burger.minimega import _built
 from burger.site import build_dockerfile, retarget_first_from
 
 LABEL = "burger.phenix"  # on the phēnix container burger swapped in: the commit it runs
@@ -72,47 +74,30 @@ def _recreate(host, s: Settings, sha: str | None, image: str | None, timeout: in
         )
 
 
+def _swap() -> _swap_mod.Swap:
+    return _swap_mod.Swap(
+        "phenix",
+        "phēnix",
+        "BURGER_PHENIX_CONTAINER",
+        "would restart it under them",
+        lambda s: s.ctr,
+        lambda sha: image_tag(sha, None),
+        running_sha,
+        running_image,
+        _recreate,
+    )
+
+
 def ensure(host, s: Settings, want: str | None, image: str | None = None) -> None:
     """Make the running phēnix the one the board wants: burger's build `image` of commit
     `want`, or stock for None (which also undoes a swap a killed run left behind). A recreated
     phēnix has neither burger's apps nor its minimega.py: install swaps it first."""
-    if not s.ctr:
-        if want:
-            raise BurgerError(
-                "this switchboard runs on its own phēnix, which burger swaps into the "
-                "phēnix container: set BURGER_PHENIX_CONTAINER to its name"
-            )
-        return
-    image = (image or image_tag(want, None)) if want else None
-    have = running_image(host, s)
-    if have == image:
-        return
-    running = update.running_experiments(host)
-    if running:
-        raise BurgerError(
-            f"experiments running: {', '.join(running)}; changing phenix "
-            f"({_short(have)} -> {_short(image)}) would restart it under them, "
-            "so bring them down first (burger down <board>)"
-        )
-    _recreate(host, s, want, image)
-    logger.info("phenix container '{}' now runs {}", s.ctr, image or "stock")
+    _swap_mod.ensure(_swap(), host, s, want, image)
 
 
 def restore(host, s: Settings) -> None:
     """Put stock phēnix back after a board that swapped it, unless VMs still need it."""
-    if running_sha(host, s) is None:
-        return
-    running = update.running_experiments(host)
-    if running:
-        logger.warning(
-            "phenix stays on {} while experiments run ({}); burger down the last of them "
-            "restores stock",
-            running_image(host, s),
-            ", ".join(running),
-        )
-        return
-    _recreate(host, s, None, None)
-    logger.info("phenix container '{}' is back on stock", s.ctr)
+    _swap_mod.restore(_swap(), host, s)
 
 
 def rows(host, s: Settings, man: dict, board: str) -> list[Row]:

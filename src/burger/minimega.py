@@ -6,7 +6,9 @@ from pathlib import Path
 
 from loguru import logger
 
+from burger import _swap as _swap_mod
 from burger import update  # update imports experiment, which imports this: use it at call time
+from burger._swap import _short
 from burger.checks import Row
 from burger.config import BurgerError, Settings
 from burger.site import build_dockerfile, retarget_first_from
@@ -126,55 +128,32 @@ def _recreate(
     _install_py(host, s)
 
 
+def _swap() -> _swap_mod.Swap:
+    return _swap_mod.Swap(
+        "minimega",
+        "minimega",
+        "BURGER_MINIMEGA_CONTAINER",
+        "would kill their VMs",
+        lambda s: s.mm_ctr,
+        image_tag,
+        running_sha,
+        running_image,
+        _recreate,
+        _install_py,  # a recreated phēnix container has the stock minimega.py
+    )
+
+
 def ensure(host, s: Settings, want: str | None, image: str | None = None) -> None:
     """Make the running minimega the one the board wants: burger's build `image` of commit
     `want` (default its plain build), or stock for None (which also undoes a swap a killed run
     left behind). The image, not only the commit, must match: a plain and a layered build of
     one commit are different minimegas (burger-fr8)."""
-    if not s.mm_ctr:
-        if want:
-            raise BurgerError(
-                "this switchboard runs on its own minimega, which burger swaps into the "
-                "minimega container: set BURGER_MINIMEGA_CONTAINER to its name"
-            )
-        return
-    image = (image or image_tag(want)) if want else None
-    have = running_image(host, s)
-    if have == image:
-        if want:  # no recreate; but a recreated phēnix container has the stock minimega.py
-            _install_py(host, s)
-        return
-    running = update.running_experiments(host)
-    if running:
-        raise BurgerError(
-            f"experiments running: {', '.join(running)}; changing minimega "
-            f"({_short(have)} -> {_short(image)}) would kill their VMs, "
-            "so bring them down first (burger down <board>)"
-        )
-    _recreate(host, s, want, image)
-    logger.info("minimega container '{}' now runs {}", s.mm_ctr, image or "stock")
-
-
-def _short(image: str | None) -> str:
-    return image.split(":", 1)[1] if image else "stock"
+    _swap_mod.ensure(_swap(), host, s, want, image)
 
 
 def restore(host, s: Settings) -> None:
     """Put stock minimega back after a board that swapped it, unless VMs still need it."""
-    have = running_sha(host, s)
-    if have is None:
-        return
-    running = update.running_experiments(host)
-    if running:
-        logger.warning(
-            "minimega stays on {} while experiments run ({}); burger down the last of them "
-            "restores stock",
-            running_image(host, s),
-            ", ".join(running),
-        )
-        return
-    _recreate(host, s, None)
-    logger.info("minimega container '{}' is back on stock", s.mm_ctr)
+    _swap_mod.restore(_swap(), host, s)
 
 
 def rows(host, s: Settings, man: dict, board: str) -> list[Row]:
