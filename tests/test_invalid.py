@@ -6,7 +6,7 @@ from burger.items import all_items
 from burger.vcs import board_dir
 from tests.conftest import res
 from tests.fakes import FakeHost
-from tests.test_verify import setup
+from tests.test_verify import StrictHost, setup
 
 # What phenix-scorch-validate prints: one record per component, pydantic's message
 # spans indented lines, and loguru writes to the same stream.
@@ -174,3 +174,69 @@ def test_check_fails_when_an_item_is_not_rejected(
     monkeypatch.setenv("BURGER_WORK", str(settings.work))
     assert main(["check", "integrate"]) == 1
     assert "FAIL" in capsys.readouterr().out
+
+
+def cp(code=0, out="", err=""):
+    return subprocess.CompletedProcess([], code, out, err)
+
+
+def test_judge_ignores_unindented_noise_after_a_record():
+    out = "invalid  m.yaml: a (t): bad thing\nnoise that says wanted\n"
+    _, rows = invalid.judge(out, {"a": "wanted"})
+    assert rows[0].verdict == "FAIL" and "not matching /wanted/" in rows[0].reason
+    out = "invalid  m.yaml: a (t): bad thing\n  indented wanted\nnoise\n"
+    assert invalid.judge(out, {"a": "wanted"})[1][0].verdict == "ok"
+
+
+def test_scorch_rows_run_the_validator_like_the_real_host(settings, tmp_path):
+    synced(settings, "integrate")
+    host = StrictHost(run(OUT), settings)  # exit 1 must not raise; output must be captured
+    rows = invalid.scorch_rows(res(settings, "integrate"), settings, host, tmp_path / "m.yaml")
+    assert verdicts(rows)["qos-bad-rate"] == "ok"
+    host = StrictHost(run(OUT + "invalid  m.yaml: odd (t): " + "x" * 300 + "\n"), settings)
+    rows = invalid.scorch_rows(res(settings, "integrate"), settings, host, tmp_path / "m.yaml")
+    extra = rows[-1]
+    assert (extra.item, extra.check, extra.verdict) == (
+        "-",
+        "phenix-scorch-validate (offline)",
+        "FAIL",
+    )
+    assert extra.reason.endswith("x" * 200) and len(extra.reason) == 200
+
+
+def test_installed_apps_are_read_like_the_real_host(settings):
+    import json
+
+    synced(settings, "base")
+    board_dir(settings, "base").joinpath("manifest.json").write_text(
+        json.dumps({"apps": {"head": "abc"}})
+    )
+    r = res(settings, "base")
+    cat = "docker exec phenix cat /tmp/burger/installed.json"
+    assert invalid._installed(r, settings, StrictHost({cat: cp(0, '{"apps": "abc"}')}, settings))
+    assert not invalid._installed(r, settings, StrictHost({cat: cp(0, '{"apps": "x"}')}, settings))
+    assert not invalid._installed(
+        r, settings, StrictHost({cat: cp(1, '{"apps": "abc"}')}, settings)
+    )
+    assert not invalid._installed(r, settings, StrictHost({cat: cp(0, "not json")}, settings))
+
+
+def test_app_stage_in_phenix_runs_like_the_real_host(settings):
+    host = StrictHost({"docker exec -i phenix e s --dry-run": cp(3, "out", "err")}, settings)
+    got = invalid._stage(host, "e", "s", "stdin")
+    assert (got.returncode, got.stdout, got.stderr) == (3, "out", "err")
+
+
+def test_app_rows_read_the_rejection_like_the_real_host(settings, tmp_path):
+    synced(settings, "base")
+    r = res(settings, "base")
+    err = "root broker not found in topology: node missinghost does not exist"
+    host = StrictHost({"uv run": cp(1, "", err)}, settings)
+    assert [x.verdict for x in invalid.app_rows(r, settings, host, {"spec": {}}, tmp_path)] == [
+        "ok"
+    ]
+    host = StrictHost({"uv run": cp(1, "", "some other " + "y" * 300)}, settings)
+    (row,) = invalid.app_rows(r, settings, host, {"spec": {}}, tmp_path)
+    assert row.verdict == "FAIL" and row.reason.endswith("y" * 200)
+    assert row.reason.startswith("not matching /") and ": " + "y" * 200 in row.reason
+    assert len(row.reason.rsplit(": ", 1)[1]) == 200
