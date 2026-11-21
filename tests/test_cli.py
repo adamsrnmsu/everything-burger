@@ -725,8 +725,21 @@ def test_step_exit_code_is_the_worst_board(settings, monkeypatch):
     assert _step_main(monkeypatch, settings, "sync", "baseline", "main") == 1
 
 
-def _cp(rc=0, out=""):
-    return subprocess.CompletedProcess([], rc, out, "")
+def _cp(rc=0, out="", err=""):
+    return subprocess.CompletedProcess([], rc, out, err)
+
+
+class StrictHost(FakeHost):
+    """FakeHost that behaves like the real Host: no stdout without capture, and a nonzero
+    exit raises unless the caller passed check=False."""
+
+    def run(self, cmd, check=True, capture=False, **kw):
+        res = super().run(cmd, check, capture, **kw)
+        if not capture:
+            res = subprocess.CompletedProcess(res.args, res.returncode, None, None)
+        if check and res.returncode:
+            raise BurgerError(f"{cmd[0]} failed")
+        return res
 
 
 def _preflight_rows(monkeypatch, responses, linux_only=True, api=None):
@@ -734,7 +747,7 @@ def _preflight_rows(monkeypatch, responses, linux_only=True, api=None):
     seen = []
     monkeypatch.setattr(cli, "results_table", lambda rows: seen.extend(rows) or "")
     monkeypatch.setattr(cli.shutil, "which", lambda t: f"/bin/{t}")
-    host = FakeHost(responses)
+    host = StrictHost(responses)
     host.api = api or (lambda _p: {})
     code = cli._preflight(SimpleNamespace(route="waterway", linux_only=linux_only), host.s, host)
     return code, {r.check: (r.verdict, r.reason) for r in seen}, host
@@ -793,7 +806,7 @@ def test_preflight_tools_missing_from_path_fail(monkeypatch):
     seen = []
     monkeypatch.setattr(cli, "results_table", lambda rows: seen.extend(rows) or "")
     monkeypatch.setattr(cli.shutil, "which", lambda t: None if t == "docker" else "/bin/git")
-    host = FakeHost(HEALTHY)
+    host = StrictHost(HEALTHY)
     host.api = lambda _p: {}
     assert cli._preflight(SimpleNamespace(route="waterway", linux_only=True), host.s, host) == 1
     got = {r.check: r.verdict for r in seen}
@@ -848,3 +861,339 @@ def test_preflight_missing_stock_image_has_no_hint(monkeypatch):
     key = f"docker exec phenix timeout 60 bash -c {cli.READ_PROBE} probe /phenix/images/{stock}"
     _, rows, _ = _preflight_rows(monkeypatch, {**HEALTHY, key: _cp(2)})
     assert rows[f"image {stock}"] == ("FAIL", "")
+
+
+def test_preflight_a_stopped_container_fails_its_row_without_raising(monkeypatch):
+    stopped = {"docker inspect -f {{.State.Running}} phenix": _cp(1, "")}
+    _, rows, _ = _preflight_rows(monkeypatch, {**HEALTHY, **stopped})
+    assert rows["container 'phenix' running"][0] == "FAIL"
+
+
+def test_preflight_a_failing_df_counts_as_zero_free(monkeypatch):
+    _, rows, _ = _preflight_rows(monkeypatch, {**HEALTHY, "docker exec phenix df": _cp(1, "")})
+    assert rows["0 GiB free on /phenix"][0] == "FAIL"
+
+
+def test_preflight_an_unreadable_image_says_so(monkeypatch):
+    stock = (cli.load_route("waterway", Settings.from_env()).images or ["bennu.qc2"])[0]
+    key = f"docker exec phenix timeout 60 bash -c {cli.READ_PROBE} probe /phenix/images/{stock}"
+    _, rows, _ = _preflight_rows(monkeypatch, {**HEALTHY, key: _cp(1)})
+    assert "unreadable" in rows[f"image {stock}"][1]
+
+
+def test_leftover_rows_on_a_real_hosts_semantics(monkeypatch):
+    host = StrictHost(
+        {
+            "docker exec minimega ip -o link": _cp(0, "7: ebwes-a-0: <X>\n"),
+            "docker exec minimega ovs-vsctl": _cp(0, "vx0\n"),
+        }
+    )
+    rows = []
+    cli._leftover_rows(host, rows)
+    (row,) = rows
+    assert "leftover ebwes-a-0, vx0" in row.reason
+    for failing in ({"ip -o link": _cp(1)}, {"docker exec minimega ovs-vsctl": _cp(1)}):
+        cli._leftover_rows(StrictHost(failing), [])  # check=False: no raise
+
+
+def _strict_site_rows(monkeypatch, tmp_path, responses=None, extra=""):
+    from burger.site import load_site
+
+    _site_env(tmp_path, monkeypatch, extra)
+    monkeypatch.setattr(cli, "probe", lambda *_a, **_k: None)
+    host = StrictHost(responses, site=load_site())
+    return {r.check: (r.verdict, r.reason) for r in _site_rows_of(host)}, host
+
+
+def test_site_rows_all_pass_on_a_healthy_site(monkeypatch, tmp_path):
+    rows, _ = _strict_site_rows(monkeypatch, tmp_path)
+    assert {v for v, _ in rows.values()} == {"ok"}
+    assert any(k.startswith("site file ") for k in rows)
+    assert "CA bundle (1 certs)" in rows
+    assert "CA bundle verifies https://pypi.org/simple/" in rows
+    assert "git mirror (ls-remote sceptre-phenix-apps)" in rows
+
+
+def test_site_rows_registry_and_git_failures_say_why(monkeypatch, tmp_path):
+    responses = {
+        "docker pull": _cp(1),
+        "git -c": _cp(128, "", "fatal: nope\n"),
+        "git ls-remote": _cp(128, "", "fatal: nope\n"),
+    }
+    rows, _ = _strict_site_rows(monkeypatch, tmp_path, responses)
+    verdict, reason = rows["registry mirror: docker pull reg.site/ubuntu:22.04"]
+    assert verdict == "FAIL" and "/etc/docker/certs.d/reg.site/ca.crt" in reason
+    assert rows["git mirror (ls-remote sceptre-phenix-apps)"] == ("FAIL", "fatal: nope")
+
+
+def test_site_rows_registry_host_is_the_part_before_the_path(monkeypatch, tmp_path):
+    from burger.site import load_site
+
+    cert = tmp_path / "ca.pem"
+    cert.write_text("-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n")
+    cfg = tmp_path / "s.yaml"
+    cfg.write_text(f"ca_certs: [{cert}]\nmirrors:\n  registry: reg.site/proj/sub\n")
+    monkeypatch.setenv("BURGER_SITE_CONFIG", str(cfg))
+    monkeypatch.setattr(cli, "probe", lambda *_a, **_k: None)
+    rows = {
+        r.check: r for r in _site_rows_of(StrictHost({"docker pull": _cp(1)}, site=load_site()))
+    }
+    (row,) = [r for k, r in rows.items() if k.startswith("registry mirror")]
+    assert "certs.d/reg.site/ca.crt" in row.reason
+
+
+def _tty_out(monkeypatch, width=100):
+    """cli.out as a colour terminal writing to a string, so stray styling shows as escapes."""
+    import io
+
+    from rich.console import Console
+
+    buf = io.StringIO()
+    monkeypatch.setattr(
+        cli, "out", Console(file=buf, force_terminal=True, color_system="standard", width=width)
+    )
+    return buf
+
+
+def test_say_prints_its_line_verbatim(monkeypatch):
+    buf = _tty_out(monkeypatch)
+    cli._say("[red]x[/red] 12 https://a.b")
+    assert buf.getvalue() == "[red]x[/red] 12 https://a.b\n"  # no markup, no highlight escapes
+
+
+def test_check_run_lines_are_printed_verbatim(monkeypatch):
+    buf = _tty_out(monkeypatch)
+    res = SimpleNamespace(items=[], validate_only=[])
+    cli._print_items(res, [{"name": "[red]r[/red] 12", "configure": ["a"], "start": []}])
+    text = buf.getvalue()
+    assert "run 0 [red]r[/red] 12: configure: a\n" in text
+
+
+def test_list_rows_are_contiguous_and_show_routes_and_validate_only(monkeypatch):
+    buf = _tty_out(monkeypatch, width=120)
+    items = [
+        SimpleNamespace(
+            path=Path("components/a.yaml"), kind="scorch", routes=["r1", "r2"], about="A"
+        ),
+        SimpleNamespace(path=Path("components/b.yaml"), kind="scorch", routes=[], about="B"),
+    ]
+    monkeypatch.setattr(cli, "all_items", lambda s: items)
+    assert cli._list(None, Settings.from_env(), None) == 0
+    lines = [ln for ln in buf.getvalue().splitlines() if "scorch" in ln]
+    assert "r1, r2" in lines[0] and "validate-only" not in lines[0]
+    assert "validate-only" in lines[1]
+    text = buf.getvalue()
+    assert text.count("\u251c") == 0 and text.count("\u2523") == 0  # no rule between the rows
+
+
+def test_list_keeps_the_first_column_on_one_line(monkeypatch):
+    import io
+
+    from rich.console import Console
+
+    buf = io.StringIO()
+    monkeypatch.setattr(cli, "out", Console(file=buf, width=40))
+    long = "x" * 30
+    items = [
+        SimpleNamespace(
+            path=Path(f"components/{long}.yaml"), kind="scorch", routes=[], about="about " * 5
+        )
+    ]
+    monkeypatch.setattr(cli, "all_items", lambda s: items)
+    monkeypatch.setattr(cli, "all_switchboards", lambda s: [])
+    cli._list(None, Settings.from_env(), None)
+    assert (
+        sum(ln.count("x") for ln in buf.getvalue().splitlines()) == 30 or "\u2026" in buf.getvalue()
+    )
+    assert [ln for ln in buf.getvalue().splitlines() if "x" in ln][1:] == []  # one line only
+
+
+def test_new_twice_in_one_kind_reuses_the_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "_checkout", lambda: tmp_path)
+    assert main(["new", "scorch", "one"]) == 0
+    assert main(["new", "scorch", "two"]) == 0
+
+
+def test_prs_shows_a_question_mark_for_an_unknown_head(monkeypatch, capsys):
+    rows = [
+        {"repo": "r", "number": 3, "head": None, "title": "t", "boards": ["b"], "stale": []},
+        {
+            "repo": "r",
+            "number": 4,
+            "head": "0123456789abcdef",
+            "title": "u",
+            "boards": [],
+            "stale": ["b"],
+        },
+    ]
+    monkeypatch.setattr(cli.vcs, "prs", lambda *_a: rows)
+    monkeypatch.setattr(cli, "Host", lambda *_a: FakeHost())
+    assert main(["--quiet", "prs"]) == 0
+    text = capsys.readouterr().out
+    assert " ? " in text and "0123456789 " in text and "0123456789a" not in text
+
+
+def test_check_twice_reuses_its_output_dir_and_writes_no_log(tmp_path, topologies, monkeypatch):
+    monkeypatch.setenv("BURGER_TOPOLOGIES", str(topologies))
+    assert main(["--quiet", "check", "pybennu"]) == 0
+    assert main(["--quiet", "check", "pybennu"]) == 0
+    assert not (tmp_path / "pybennu" / "burger.log").exists()  # check is offline: no board log
+
+
+def test_state_linux_only_is_false_without_a_state_file(settings):
+    assert cli._state_linux_only(settings, "baseline") is False
+    (settings.work / "baseline").mkdir()
+    (settings.work / "baseline" / "state.json").write_text("{}")
+    assert cli._state_linux_only(settings, "baseline") is False
+
+
+def test_synthetic_manifest_lists_each_bennu_pr():
+    b = dataclasses.replace(
+        load_switchboard("baseline", Settings.from_env()), bennu={"prs": [84, 85]}
+    )
+    man = cli._synthetic_manifest(b)
+    assert man["bennu"]["prs"] == {"84": "c" * 40, "85": "c" * 40}
+
+
+def _verify_with(monkeypatch, settings, verdicts, keep, clock=None):
+    from burger.checks import Row
+
+    panel = []
+    monkeypatch.setattr(
+        cli.verify, "verify", lambda *_a: [Row("-", "c", v, "", []) for v in verdicts]
+    )
+    monkeypatch.setattr(cli.vcs, "load_manifest", lambda *_a: {"minimega": {"sha": "x"}})
+    monkeypatch.setattr(cli, "summary_panel", lambda *a: panel.append(a) or "")
+    if clock:
+        monkeypatch.setattr(cli.time, "monotonic", clock)
+    res = SimpleNamespace(board=SimpleNamespace(name="baseline"))
+    code = cli._verify(res, settings, None, {"up": 1.0}, keep)
+    return code, panel[0]
+
+
+@pytest.mark.parametrize(
+    "verdicts,keep,code,left_up",
+    [
+        (["ok"], False, 0, False),
+        (["ok"], True, 0, True),
+        (["ok"], None, 0, None),
+        (["FAIL"], False, 1, True),
+        (["FAIL"], None, 1, None),
+    ],
+)
+def test_verify_code_and_left_up(monkeypatch, settings, verdicts, keep, code, left_up):
+    got, panel = _verify_with(monkeypatch, settings, verdicts, keep)
+    assert got == code
+    assert panel[4] == left_up and panel[5] == "minimega"
+
+
+def test_verify_adds_its_own_duration_to_the_timings(monkeypatch, settings):
+    ticks = iter([10.0, 14.0])
+    _, panel = _verify_with(monkeypatch, settings, ["ok"], False, clock=lambda: next(ticks))
+    assert panel[3] == {"up": 1.0, "verify": 4.0}
+
+
+def test_run_pipeline_times_each_step_and_prints_rules_without_a_view(monkeypatch):
+    ticks = iter(range(0, 100, 3))
+    monkeypatch.setattr(cli.time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(cli, "_one", lambda *a: 0)
+    monkeypatch.setattr(cli, "_render_offline", lambda *a: None)
+    buf = _tty_out(monkeypatch)
+    args = SimpleNamespace(board="b", linux_only=False, route=None)
+    timings = cli._run_pipeline(
+        args, None, None, None, SimpleNamespace(start=lambda n: 0, finish=lambda *a, **k: 0)
+    )
+    assert timings == dict.fromkeys(("sync", "build", "install", "up", "scorch"), 3)
+    assert all(f"{c} b" in buf.getvalue() for c in timings)
+    buf2 = _tty_out(monkeypatch)
+    cli._run_pipeline(
+        args, None, None, object(), SimpleNamespace(start=lambda n: 0, finish=lambda *a, **k: 0)
+    )
+    assert buf2.getvalue() == ""  # a view draws its own steps
+
+
+def test_run_pipeline_marks_the_failed_step(monkeypatch):
+    marks = []
+
+    def one(args, s, host, name):
+        if args.cmd == "build":
+            raise BurgerError("x")
+
+    monkeypatch.setattr(cli, "_one", one)
+    monkeypatch.setattr(cli, "_render_offline", lambda *a: None)
+    monkeypatch.setattr(cli, "_warn_swapped", lambda *a: None)
+    mark = SimpleNamespace(start=lambda n: 0, finish=lambda n, ok=True: marks.append((n, ok)))
+    with pytest.raises(BurgerError):
+        cli._run_pipeline(SimpleNamespace(board="b"), None, None, object(), mark)
+    assert marks == [("sync", True), ("build", False)]
+
+
+@pytest.mark.parametrize(
+    "code,keep,down", [(0, False, True), (0, True, False), (1, False, False), (1, True, False)]
+)
+def test_run_steps_downs_only_a_passing_unkept_board(monkeypatch, code, keep, down):
+    calls = []
+    monkeypatch.setattr(cli, "_run_pipeline", lambda *a: {})
+    monkeypatch.setattr(cli, "_board", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_verify", lambda *a: code)
+    monkeypatch.setattr(cli, "_one", lambda args, s, h, n: calls.append(args.cmd))
+    buf = _tty_out(monkeypatch)
+    args = SimpleNamespace(board="b", linux_only=False, route=None, keep=keep)
+    assert cli._run_steps(args, None, None, None) == code
+    assert calls == (["down"] if down else [])
+    assert "verify b" in buf.getvalue()
+
+
+def test_the_lock_file_names_the_holder(settings, monkeypatch):
+    import hashlib
+    import tempfile
+
+    monkeypatch.setattr(cli.sys, "argv", ["burger", "down", "baseline"])
+    tag = hashlib.sha1(str(settings.work).encode()).hexdigest()[:8]
+    path = Path(tempfile.gettempdir()) / f"burger-{tag}-baseline.lock"
+    with cli.board_lock(settings, "baseline"):
+        assert path.read_text() == f"pid {os.getpid()}: burger down baseline"
+
+
+def test_main_reads_sys_argv_when_given_none(monkeypatch, capsys):
+    monkeypatch.setattr(cli.sys, "argv", ["burger", "--version"])
+    assert main() == 0
+    assert capsys.readouterr().out.startswith("burger ")
+
+
+def _raises(exc):
+    def boom(*_a):
+        raise exc
+
+    return boom
+
+
+def test_main_error_line_is_literal_and_unwrapped(monkeypatch, capsys):
+    msg = "bad [/x] " + "word " * 40
+    monkeypatch.setattr(cli.vcs, "prs", _raises(BurgerError(msg)))
+    monkeypatch.setattr(cli, "Host", lambda *_a: FakeHost())
+    assert main(["--quiet", "prs"]) == 1
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "bad [/x] " in err  # one line, no markup parsing
+
+
+def test_main_error_line_is_not_highlighted(monkeypatch):
+    import io
+
+    from rich.console import Console
+
+    buf = io.StringIO()
+    monkeypatch.setattr(
+        cli, "Console", lambda **kw: Console(file=buf, force_terminal=True, color_system="standard")
+    )
+    monkeypatch.setattr(
+        cli.vcs, "prs", lambda *_a: (_ for _ in ()).throw(BurgerError("code 12 here"))
+    )
+    monkeypatch.setattr(cli, "Host", lambda *_a: FakeHost())
+    assert main(["--quiet", "prs"]) == 1
+    assert "\x1b[1;36m12" not in buf.getvalue()  # rich's number highlight
+
+
+def test_main_without_a_command_prints_usage_and_exits_2(capsys):
+    assert main([]) == 2
+    assert capsys.readouterr().err.startswith("usage: burger")
