@@ -7,11 +7,12 @@ from pathlib import Path
 from loguru import logger
 
 from burger import _swap as _swap_mod
-from burger import update  # update imports experiment, which imports this: use it at call time
-from burger._swap import _short
+from burger import (
+    minimega,  # imports update -> experiment -> this: use it at call time
+    update,  # update imports experiment, which imports this: use it at call time
+)
 from burger.checks import Row
 from burger.config import BurgerError, Settings
-from burger.minimega import _built
 from burger.site import build_dockerfile, retarget_first_from
 
 LABEL = "burger.phenix"  # on the phēnix container burger swapped in: the commit it runs
@@ -32,7 +33,7 @@ def build_image(host, wt: Path, sha: str, mm_image: str | None, sed: str | None)
     (arm64: x86 downloads and checksums) is applied first, then the first FROM, the minimega
     stage, is pointed at the board's minimega so the image installs that minimega's bindings."""
     tag = image_tag(sha, mm_image)
-    if _built(host, tag):
+    if minimega._built(host, tag):
         logger.info("phenix image {} already built", tag)
         return tag
     src = wt / "docker" / "Dockerfile"
@@ -110,7 +111,7 @@ def rows(host, s: Settings, man: dict, board: str) -> list[Row]:
     reason = ""
     if have != want or (px.get("image") and running_image(host, s) != px["image"]):
         reason = (
-            f"the container runs {_short(running_image(host, s))}, want "
-            f"{_short(px.get('image') or want)}; burger install {board}"
+            f"the container runs {_swap_mod._short(running_image(host, s))}, want "
+            f"{_swap_mod._short(px.get('image') or want)}; burger install {board}"
         )
     return [Row("-", check, "FAIL" if reason else "ok", reason, [])]

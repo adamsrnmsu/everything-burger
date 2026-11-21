@@ -8,7 +8,6 @@ from loguru import logger
 
 from burger import _swap as _swap_mod
 from burger import update  # update imports experiment, which imports this: use it at call time
-from burger._swap import _short
 from burger.checks import Row
 from burger.config import BurgerError, Settings
 from burger.site import build_dockerfile, retarget_first_from
@@ -176,8 +175,8 @@ def _container_reason(host, s: Settings, mm: dict, board: str) -> str:
         )
     if mm.get("image") and running_image(host, s) != mm["image"]:  # layered or not
         return (
-            f"the container runs {_short(running_image(host, s))}, want {_short(mm['image'])}; "
-            f"burger install {board}"
+            f"the container runs {_swap_mod._short(running_image(host, s))}, "
+            f"want {_swap_mod._short(mm['image'])}; burger install {board}"
         )
     return ""
 
