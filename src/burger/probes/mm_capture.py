@@ -20,36 +20,43 @@ CLASSIC = {b"\xa1\xb2\xc3\xd4", b"\xd4\xc3\xb2\xa1", b"\xa1\xb2\x3c\x4d", b"\x4d
 PCAPNG = b"\x0a\x0d\x0d\x0a"
 
 
+def _classic_frames(data: bytes, magic: bytes) -> list[bytes]:
+    e = "<" if magic in (b"\xd4\xc3\xb2\xa1", b"\x4d\x3c\xb2\xa1") else ">"
+    frames, pos = [], 24
+    while pos + 16 <= len(data):
+        n = struct.unpack_from(e + "I", data, pos + 8)[0]
+        if pos + 16 + n > len(data):  # a cut-off last record
+            break
+        frames.append(data[pos + 16 : pos + 16 + n])
+        pos += 16 + n
+    return frames
+
+
+def _pcapng_frames(data: bytes) -> list[bytes]:
+    e = "<" if data[8:12] == b"\x4d\x3c\x2b\x1a" else ">"
+    frames, pos = [], 0
+    while pos + 12 <= len(data):
+        kind, size = struct.unpack_from(e + "II", data, pos)
+        if size < 12 or pos + size > len(data):
+            break
+        if kind == 6:  # enhanced packet: iface, ts hi, ts lo, caplen, origlen, data
+            n = struct.unpack_from(e + "I", data, pos + 20)[0]
+            frames.append(data[pos + 28 : pos + 28 + n])
+        elif kind == 3:  # simple packet: origlen, data
+            n = min(struct.unpack_from(e + "I", data, pos + 8)[0], size - 16)
+            frames.append(data[pos + 12 : pos + 12 + n])
+        pos += size
+    return frames
+
+
 def pcap_frames(data: bytes) -> list[bytes]:
     """The frames of a classic pcap or a pcapng file (EPB and SPB blocks)."""
     magic = data[:4]
-    frames = []
     if magic in CLASSIC:
-        e = "<" if magic in (b"\xd4\xc3\xb2\xa1", b"\x4d\x3c\xb2\xa1") else ">"
-        pos = 24
-        while pos + 16 <= len(data):
-            n = struct.unpack_from(e + "I", data, pos + 8)[0]
-            if pos + 16 + n > len(data):  # a cut-off last record
-                break
-            frames.append(data[pos + 16 : pos + 16 + n])
-            pos += 16 + n
-    elif magic == PCAPNG:
-        e = "<" if data[8:12] == b"\x4d\x3c\x2b\x1a" else ">"
-        pos = 0
-        while pos + 12 <= len(data):
-            kind, size = struct.unpack_from(e + "II", data, pos)
-            if size < 12 or pos + size > len(data):
-                break
-            if kind == 6:  # enhanced packet: iface, ts hi, ts lo, caplen, origlen, data
-                n = struct.unpack_from(e + "I", data, pos + 20)[0]
-                frames.append(data[pos + 28 : pos + 28 + n])
-            elif kind == 3:  # simple packet: origlen, data
-                n = min(struct.unpack_from(e + "I", data, pos + 8)[0], size - 16)
-                frames.append(data[pos + 12 : pos + 12 + n])
-            pos += size
-    else:
-        raise ValueError(f"not a pcap or pcapng file (starts {magic.hex() or 'empty'})")
-    return frames
+        return _classic_frames(data, magic)
+    if magic == PCAPNG:
+        return _pcapng_frames(data)
+    raise ValueError(f"not a pcap or pcapng file (starts {magic.hex() or 'empty'})")
 
 
 def vlan_of(frame: bytes) -> int | None:

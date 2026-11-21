@@ -35,71 +35,64 @@ printf "${H}metadata:\n  name: $2\nspec:\n  cfg: \${BV_CFG}\n" > "$1/cfg.yml"
 """
 
 
+# check, expected line, directory, `phenix workflow render` args ({env} = the env file), shell env
+_RENDERS = [
+    ("-e substitutes", "a: from-e", "plain", ["-e", "BV_A=from-e"], []),
+    ("env file read", "a: from-file", "plain", ["--env-file", "{env}"], []),
+    ("-e beats env file", "b: cli", "plain", ["--env-file", "{env}", "-e", "BV_B=cli"], []),
+    ("env file beats shell", "a: from-file", "plain", ["--env-file", "{env}"], ["BV_A=shell"]),
+    ("dir .env read", "b: dotenv", "dotenv", [], []),
+    ("${NAME:default} gives the default", "dflt: fallback", "plain", [], []),
+    ("$${NAME} stays literal", "esc: ${BV_ESC}", "plain", [], []),
+]
+
+
+def _render(host, tmp: str, d: str, *args, shell=()):
+    env = ["env", *shell] if shell else []
+    return host.ctr(
+        *env, "phenix", "workflow", "render", f"{tmp}/{d}", *args, check=False, capture=True
+    )
+
+
+def _row(check: str, ok: bool, got) -> Row:
+    why = f"rc={got.returncode}: {(got.stdout or got.stderr).strip()[-200:]}"
+    return Row(ITEM, check, "ok" if ok else "FAIL", "" if ok else why, [])
+
+
+def _render_rows(host, tmp: str) -> list[Row]:
+    rows = []
+    for check, line, d, args, shell in _RENDERS:
+        got = _render(host, tmp, d, *(a.format(env=f"{tmp}/x.env") for a in args), shell=shell)
+        # render prints each file as written, so the value sits on an indented line
+        lines = [x.strip() for x in got.stdout.splitlines()]
+        rows.append(_row(check, got.returncode == 0 and line in lines, got))
+    got = _render(host, tmp, "needs")
+    failed = got.returncode != 0 and "BV_NEED" in got.stdout + got.stderr
+    return [*rows, _row("missing variable fails", failed, got)]
+
+
+def _config_row(host, tmp: str, name: str) -> Row:
+    made = host.phenix(
+        "config", "create", f"{tmp}/cfg.yml", "-e", "BV_CFG=stored", "--skip-validation",
+        check=False, capture=True,
+    )  # fmt: skip
+    got = host.phenix("config", "get", f"topology/{name}", "-o", "yaml", check=False, capture=True)
+    ok = made.returncode == 0 and "cfg: stored" in got.stdout
+    return _row("config create -e stores the value", ok, made if made.returncode else got)
+
+
 def run(host, s, res, man) -> list[Row]:
     if not man.get("phenix"):
         return [Row(ITEM, "probe", "skipped", "needs a phēnix with PR 576", [])]
     name = f"burger-wfvars-{os.getpid()}-{int(time.time())}"
     tmp = f"/tmp/{name}"
-    rows: list[Row] = []
-
-    def render(d, *args, shell=()):
-        env = ["env", *shell] if shell else []
-        return host.ctr(
-            *env, "phenix", "workflow", "render", f"{tmp}/{d}", *args, check=False, capture=True
-        )
-
-    def row(check, ok, got):
-        why = f"rc={got.returncode}: {(got.stdout or got.stderr).strip()[-200:]}"
-        rows.append(Row(ITEM, check, "ok" if ok else "FAIL", "" if ok else why, []))
-
-    def has(check, line, got):
-        # render prints each file as written, so the value sits on an indented line
-        lines = [x.strip() for x in got.stdout.splitlines()]
-        row(check, got.returncode == 0 and line in lines, got)
-
-    env = f"{tmp}/x.env"
     try:
         setup = host.ctr("sh", "-c", SETUP, "sh", tmp, name, check=False, capture=True)
         if setup.returncode:
             raise BurgerError(
                 f"cannot write the test files: {(setup.stderr or setup.stdout).strip()}"
             )
-        has("-e substitutes", "a: from-e", render("plain", "-e", "BV_A=from-e"))
-        has("env file read", "a: from-file", render("plain", "--env-file", env))
-        has("-e beats env file", "b: cli", render("plain", "--env-file", env, "-e", "BV_B=cli"))
-        has(
-            "env file beats shell",
-            "a: from-file",
-            render("plain", "--env-file", env, shell=["BV_A=shell"]),
-        )
-        has("dir .env read", "b: dotenv", render("dotenv"))
-        has("${NAME:default} gives the default", "dflt: fallback", render("plain"))
-        has("$${NAME} stays literal", "esc: ${BV_ESC}", render("plain"))
-        got = render("needs")
-        row(
-            "missing variable fails",
-            got.returncode != 0 and "BV_NEED" in got.stdout + got.stderr,
-            got,
-        )
-        made = host.phenix(
-            "config",
-            "create",
-            f"{tmp}/cfg.yml",
-            "-e",
-            "BV_CFG=stored",
-            "--skip-validation",
-            check=False,
-            capture=True,
-        )
-        got = host.phenix(
-            "config", "get", f"topology/{name}", "-o", "yaml", check=False, capture=True
-        )
-        row(
-            "config create -e stores the value",
-            made.returncode == 0 and "cfg: stored" in got.stdout,
-            made if made.returncode else got,
-        )
+        return [*_render_rows(host, tmp), _config_row(host, tmp, name)]
     finally:
         host.phenix("config", "delete", f"topology/{name}", check=False, capture=True)
         host.ctr("rm", "-rf", tmp, check=False, capture=True)
-    return rows
