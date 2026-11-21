@@ -222,10 +222,8 @@ def test_steps_pick_the_first_and_last_rtu_and_their_bridge(settings, monkeypatc
             c.startswith("capture pcap vm rtu-1 0 burger-mmcap-bad") and c.endswith(opt)
             for c in cmds
         )
-    assert rows[-1].reason == "none left" and rows[3].reason.startswith("id ")
-    assert (
-        "still listed" in rows[3].reason and rows[3].reason.split()[1] != rows[3].reason.split()[5]
-    )
+    assert rows[-1].reason == "none left"
+    assert rows[3].reason == "id 1 gone, id 2 still listed"
 
 
 def test_the_probe_runs_where_minimega_answers_even_with_no_file_path(settings, monkeypatch):
