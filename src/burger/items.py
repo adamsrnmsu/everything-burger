@@ -71,33 +71,38 @@ class Item:
     overrides: dict = field(default_factory=dict)  # per-route blocks: waterway, soap, site
 
 
+def _check_verify_entry(path: Path, field: str, entry) -> None:
+    if not isinstance(entry, dict) or len(entry) != 1:
+        raise BurgerError(f"{path}: {field} must be one check, like `- files: {{glob: ...}}`")
+    ((name, spec),) = entry.items()
+    if name == "status":
+        raise BurgerError(f"{path}: {field}: 'status' is checked for every component; delete it")
+    if name not in CHECK_KEYS:
+        raise BurgerError(
+            f"{path}: {field}: unknown check '{name}' (known: {', '.join(CHECK_KEYS)})"
+        )
+    _check_spec_keys(path, field, name, spec)
+
+
+def _check_spec_keys(path: Path, field: str, name: str, spec) -> None:
+    need = CHECK_KEYS[name]
+    if not need or (name == "python" and isinstance(spec, str)):
+        return
+    lacking = [k for k in need if not isinstance(spec, dict) or k not in spec]
+    if lacking:
+        raise BurgerError(f"{path}: {field}.{name} needs '{lacking[0]}'")
+    known = {*need, *OPTIONAL_KEYS.get(name, ()), "windows"}
+    if unknown := sorted(set(spec) - known):
+        raise BurgerError(
+            f"{path}: {field}.{name}: unknown key '{unknown[0]}' "
+            f"(known: {', '.join(sorted(known))})"
+        )
+
+
 def _check_fields(path: Path, doc: dict, where: str = "") -> None:
     """Raise on a verify entry or requires key no code would read."""
     for n, entry in enumerate(doc.get("verify") or []):
-        field = f"{where}verify[{n}]"
-        if not isinstance(entry, dict) or len(entry) != 1:
-            raise BurgerError(f"{path}: {field} must be one check, like `- files: {{glob: ...}}`")
-        ((name, spec),) = entry.items()
-        if name == "status":
-            raise BurgerError(
-                f"{path}: {field}: 'status' is checked for every component; delete it"
-            )
-        if name not in CHECK_KEYS:
-            raise BurgerError(
-                f"{path}: {field}: unknown check '{name}' (known: {', '.join(CHECK_KEYS)})"
-            )
-        need = CHECK_KEYS[name]
-        if not need or (name == "python" and isinstance(spec, str)):
-            continue
-        lacking = [k for k in need if not isinstance(spec, dict) or k not in spec]
-        if lacking:
-            raise BurgerError(f"{path}: {field}.{name} needs '{lacking[0]}'")
-        known = {*need, *OPTIONAL_KEYS.get(name, ()), "windows"}
-        if unknown := sorted(set(spec) - known):
-            raise BurgerError(
-                f"{path}: {field}.{name}: unknown key '{unknown[0]}' "
-                f"(known: {', '.join(sorted(known))})"
-            )
+        _check_verify_entry(path, f"{where}verify[{n}]", entry)
     requires = doc.get("requires") or {}
     bad = sorted(requires if not isinstance(requires, dict) else set(requires) - REQUIRES)
     if bad:
@@ -107,54 +112,63 @@ def _check_fields(path: Path, doc: dict, where: str = "") -> None:
         )
 
 
-def load_item(ref: str, settings: Settings) -> Item:
-    path = settings.root / (ref if "/" in ref else f"components/{ref}")
-    path = path.with_suffix(".yaml")
-    if not path.is_file():
-        raise BurgerError(f"no item '{ref}' (looked for {path})")
-    doc, unset = load_yaml(path, ITEM_FIELDS)
+def _check_header(path: Path, doc: dict) -> None:
     for key in ("name", "kind", "type"):
         if key not in doc:
             raise BurgerError(f"{path}: missing field '{key}'")
     if doc["kind"] not in KINDS:
         raise BurgerError(f"{path}: kind '{doc['kind']}' must be one of {', '.join(KINDS)}")
     stages = doc.get("stages") or []
-    bad = [s for s in stages if s not in STAGES]
-    if bad:
+    if bad := [s for s in stages if s not in STAGES]:
         raise BurgerError(f"{path}: unknown stage '{bad[0]}' (allowed: {', '.join(STAGES)})")
-    _check_fields(path, doc)
-    if bad := str(doc.get("expect_invalid") or ""):
-        # a config that must be rejected can never run, so it is judged offline
-        if doc["kind"] == "bennu" or doc.get("routes"):
-            raise BurgerError(f"{path}: expect_invalid needs kind scorch or app and `routes: []`")
-        try:
-            re.compile(bad)
-        except re.error as e:
-            raise BurgerError(f"{path}: expect_invalid is not a regex: {e}") from None
-    for r in _ROUTE_BLOCKS:
-        if isinstance(doc.get(r), dict):
-            _check_fields(path, doc[r], f"{r}.")
+
+
+def _check_expect_invalid(path: Path, doc: dict) -> None:
+    if not (pattern := str(doc.get("expect_invalid") or "")):
+        return
+    # a config that must be rejected can never run, so it is judged offline
+    if doc["kind"] == "bennu" or doc.get("routes"):
+        raise BurgerError(f"{path}: expect_invalid needs kind scorch or app and `routes: []`")
+    try:
+        re.compile(pattern)
+    except re.error as e:
+        raise BurgerError(f"{path}: expect_invalid is not a regex: {e}") from None
+
+
+_LISTS = {"routes": list, "stages": list, "hosts": list, "assets": list, "verify": list}
+_DICTS = ("config", "requires")
+
+
+def _item(path: Path, doc: dict, unset: list[str]) -> Item:
+    """The Item a checked document describes; absent or empty fields take their defaults."""
     return Item(
         name=doc["name"],
         kind=doc["kind"],
         type=doc["type"],
         about=(doc.get("about") or "").strip(),
-        routes=doc.get("routes") or [],
-        stages=stages,
-        holds=bool(doc.get("holds")),
-        background=bool(doc.get("background")),
-        advisory=bool(doc.get("advisory")),
-        expect_error=str(doc.get("expect_error") or ""),
-        expect_invalid=str(doc.get("expect_invalid") or ""),
-        config=doc.get("config") or {},
-        hosts=doc.get("hosts") or [],
-        requires=doc.get("requires") or {},
-        verify=doc.get("verify") or [],
+        **{k: doc.get(k) or make() for k, make in _LISTS.items()},
+        **{k: doc.get(k) or {} for k in _DICTS},
+        **{k: bool(doc.get(k)) for k in ("holds", "background", "advisory")},
+        **{k: str(doc.get(k) or "") for k in ("expect_error", "expect_invalid")},
         path=path,
-        assets=doc.get("assets") or [],
         unset=unset,
         overrides={r: doc[r] for r in _ROUTE_BLOCKS if doc.get(r)},
     )
+
+
+def load_item(ref: str, settings: Settings) -> Item:
+    path = settings.root / (ref if "/" in ref else f"components/{ref}")
+    path = path.with_suffix(".yaml")
+    if not path.is_file():
+        raise BurgerError(f"no item '{ref}' (looked for {path})")
+    doc, unset = load_yaml(path, ITEM_FIELDS)
+    _check_header(path, doc)
+    _check_fields(path, doc)
+    _check_expect_invalid(path, doc)
+    for r in _ROUTE_BLOCKS:
+        if isinstance(doc.get(r), dict):
+            _check_fields(path, doc[r], f"{r}.")
+    return _item(path, doc, unset)
 
 
 def all_items(settings: Settings) -> list[Item]:
@@ -205,27 +219,32 @@ def _vm_runs(item: Item):
             yield str(check["vm"].get("run", ""))
 
 
+def _process_run(path: Path, spec: dict) -> str:
+    names = spec["name"] if isinstance(spec["name"], list) else [spec["name"]]
+    if not names:
+        raise BurgerError(f"{path}: process name list is empty")
+    for n in names:
+        if not _NAME.fullmatch(str(n)):
+            raise BurgerError(f"{path}: process name {n!r} must match [A-Za-z0-9._-]+")
+    pattern = str(names[0]) if len(names) == 1 else f"({'|'.join(map(str, names))})"
+    return f"pgrep -f '(^|/){pattern}( |$)'"
+
+
+def _port_run(path: Path, spec: dict) -> str:
+    state = spec.get("state", "listening")
+    if state not in _SS:
+        raise BurgerError(f"{path}: port state {state!r} must be {' or '.join(_SS)}")
+    if not re.fullmatch(r"\d+", str(spec["port"])):
+        raise BurgerError(f"{path}: port {spec['port']!r} must be an integer")
+    return f"ss {_SS[state]} '( sport = :{spec['port']} )' | grep -q ."
+
+
 def _expand(entry: dict, path: Path) -> dict:
     """process and port become the vm check they stand for; other checks pass through."""
     ((name, spec),) = entry.items()
     if name not in ("process", "port"):
         return entry
-    if name == "process":
-        names = spec["name"] if isinstance(spec["name"], list) else [spec["name"]]
-        if not names:
-            raise BurgerError(f"{path}: process name list is empty")
-        for n in names:
-            if not _NAME.fullmatch(str(n)):
-                raise BurgerError(f"{path}: process name {n!r} must match [A-Za-z0-9._-]+")
-        pattern = str(names[0]) if len(names) == 1 else f"({'|'.join(map(str, names))})"
-        run = f"pgrep -f '(^|/){pattern}( |$)'"
-    else:
-        state = spec.get("state", "listening")
-        if state not in _SS:
-            raise BurgerError(f"{path}: port state {state!r} must be {' or '.join(_SS)}")
-        if not re.fullmatch(r"\d+", str(spec["port"])):
-            raise BurgerError(f"{path}: port {spec['port']!r} must be an integer")
-        run = f"ss {_SS[state]} '( sport = :{spec['port']} )' | grep -q ."
+    run = (_process_run if name == "process" else _port_run)(path, spec)
     rest = {k: v for k, v in spec.items() if k not in ("host", "name", "port", "state")}
     return {"vm": {"host": spec["host"], "run": run, **rest}}
 
