@@ -8,7 +8,7 @@ import pytest
 from burger import bennu
 from burger.config import BurgerError, Settings
 from burger.site import build_dockerfile, load_site, patch_dockerfile, redact, site_image
-from tests.fakes import FakeHost
+from tests.fakes import FakeHost, StrictHost
 
 PEM = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
 
@@ -179,10 +179,10 @@ def test_image_name(tmp_path):
 # ---------------------------------------------------------------- docker steps (Task 3)
 
 
-def _host(tmp_path, site=None, responses=None):
+def _host(tmp_path, site=None, responses=None, cls=FakeHost):
     settings = Settings.from_env(tmp_path)
     settings = dataclasses.replace(settings, work=tmp_path / "work")
-    return FakeHost(responses or {}, settings, site=site)
+    return cls(responses or {}, settings, site=site)
 
 
 def test_no_site_commands_unchanged(tmp_path, monkeypatch):
@@ -301,7 +301,10 @@ def test_site_image_reuse_and_rebuild(tmp_path):
     )
     assert site_image(present, "golang:1.24") == tag
     assert not [c for c in present.calls if c[:2] == ["docker", "build"]]
-    missing = _host(tmp_path, site, {"docker image inspect": subprocess.CompletedProcess([], 1)})
+    # StrictHost: a missing image is inspect's exit 1, which must not raise
+    missing = _host(
+        tmp_path, site, {"docker image inspect": subprocess.CompletedProcess([], 1)}, StrictHost
+    )
     assert site_image(missing, "golang:1.24") == tag
     builds = [c for c in missing.calls if c[:2] == ["docker", "build"]]
     assert len(builds) == 1 and builds[0][builds[0].index("-t") + 1] == tag
