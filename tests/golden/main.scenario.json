@@ -223,6 +223,45 @@
         "name": "helics"
       },
       {
+        "hosts": [
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "interface": {
+                "address": "10.99.0.1/24",
+                "listen_port": 51820,
+                "private_key": "zZVpd2aj6AmPkbuFZox0I0KJo/L9h45QThH1bVF4WTE="
+              },
+              "peers": [
+                {
+                  "allowed_ips": "10.99.0.2/32",
+                  "public_key": "/Lq/kIGFSwx/OqJ20m04hpsLUsfejSlJEgM8C/pmSl4="
+                }
+              ]
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "boot": true,
+              "interface": {
+                "address": "10.99.0.2/24",
+                "private_key": "pVNuiBZYypoOLri53Z4bB2jPlICxODvPOgqeRxRJiIs="
+              },
+              "peers": [
+                {
+                  "allowed_ips": "10.99.0.1/32",
+                  "keepalive": 25,
+                  "public_key": "6lIuPX8aUsTU4E2hMVP1wP5zqdzZk3sw3kmh4NkuXUk=",
+                  "server_endpoint": "10.1.1.101:51820"
+                }
+              ]
+            }
+          }
+        ],
+        "name": "wireguard"
+      },
+      {
         "metadata": {
           "components": [
             {
@@ -264,6 +303,21 @@
                       },
                       {
                         "args": "grep -q 'ping .* 10.1.1.101 ' /etc/phenix/startup/5-wait-broker.sh",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'PrivateKey = zZVpd2aj6AmPkbuFZox0I0KJo/L9h45QThH1bVF4WTE=' /etc/wireguard/wg0.conf && grep -q 'Address = 10.99.0.1/24' /etc/wireguard/wg0.conf && grep -q 'ListenPort = 51820' /etc/wireguard/wg0.conf",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'PublicKey = /Lq/kIGFSwx/OqJ20m04hpsLUsfejSlJEgM8C/pmSl4=' /etc/wireguard/wg0.conf && grep -q 'AllowedIPs = 10.99.0.2/32' /etc/wireguard/wg0.conf && ! grep -q Endpoint /etc/wireguard/wg0.conf",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "test ! -e /etc/phenix/startup/wireguard-enable.sh",
                         "type": "exec",
                         "wait": true
                       },
@@ -310,6 +364,21 @@
                       },
                       {
                         "args": "grep -q 'helics_broker .*--name rtu-2 .*--broker 10.1.1.101 --local_interface 10.1.1.102:24000 .* -f1 ' /etc/phenix/startup/90-helics-broker.sh",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'PrivateKey = pVNuiBZYypoOLri53Z4bB2jPlICxODvPOgqeRxRJiIs=' /etc/wireguard/wg0.conf && grep -q 'Address = 10.99.0.2/24' /etc/wireguard/wg0.conf && ! grep -q ListenPort /etc/wireguard/wg0.conf",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'PublicKey = 6lIuPX8aUsTU4E2hMVP1wP5zqdzZk3sw3kmh4NkuXUk=' /etc/wireguard/wg0.conf && grep -q 'AllowedIPs = 10.99.0.1/32' /etc/wireguard/wg0.conf && grep -q 'Endpoint = 10.1.1.101:51820' /etc/wireguard/wg0.conf && grep -q 'PersistentKeepalive = 25' /etc/wireguard/wg0.conf",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'enable --now wg-quick@wg0' /etc/phenix/startup/wireguard-enable.sh",
                         "type": "exec",
                         "wait": true
                       },

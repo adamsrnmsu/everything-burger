@@ -1,0 +1,58 @@
+name: wireguard
+kind: app
+type: wireguard
+about: >
+  The wireguard app writing a two-peer tunnel between the first two RTUs: rtu-1
+  (10.99.0.1, listening on 51820, no endpoint) and rtu-2 (10.99.0.2, endpoint
+  rtu-1's IF0 10.1.1.101:51820, keepalive 25, boot). Each VM gets /etc/wireguard/wg0.conf
+  holding its own private key and the other's public key; rtu-2 also gets the
+  wireguard-enable.sh startup script. The keys are a throwaway pair made for this item,
+  so each side's PublicKey must equal the other's keypair half. wireguard-tools is not in
+  the arm64 rig images (no wg, no wg-quick in the recipes), so no tunnel is brought up
+  and no ping crosses it; only the injected files are checked.
+routes: [waterway, waterway-arm64]
+hosts:
+  - hostname: "{route.rtus[0]}"
+    metadata:
+      interface:
+        private_key: "zZVpd2aj6AmPkbuFZox0I0KJo/L9h45QThH1bVF4WTE="
+        address: 10.99.0.1/24
+        listen_port: 51820
+      peers:
+        - {public_key: "/Lq/kIGFSwx/OqJ20m04hpsLUsfejSlJEgM8C/pmSl4=", allowed_ips: 10.99.0.2/32}
+  - hostname: "{route.rtus[1]}"
+    metadata:
+      boot: true
+      interface:
+        private_key: "pVNuiBZYypoOLri53Z4bB2jPlICxODvPOgqeRxRJiIs="
+        address: 10.99.0.2/24
+      peers:
+        - public_key: "6lIuPX8aUsTU4E2hMVP1wP5zqdzZk3sw3kmh4NkuXUk="
+          allowed_ips: 10.99.0.1/32
+          server_endpoint: 10.1.1.101:51820
+          keepalive: 25
+# Addresses are waterway's: rtu-1 10.1.1.101, rtu-2 10.1.1.102 (IF0).
+verify:
+  # rtu-1's own key and address, listening
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "grep -q 'PrivateKey = zZVpd2aj6AmPkbuFZox0I0KJo/L9h45QThH1bVF4WTE=' /etc/wireguard/wg0.conf && grep -q 'Address = 10.99.0.1/24' /etc/wireguard/wg0.conf && grep -q 'ListenPort = 51820' /etc/wireguard/wg0.conf"
+  # rtu-1's peer is rtu-2's public key, only its tunnel address, and no Endpoint (rtu-2 dials in)
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "grep -q 'PublicKey = /Lq/kIGFSwx/OqJ20m04hpsLUsfejSlJEgM8C/pmSl4=' /etc/wireguard/wg0.conf && grep -q 'AllowedIPs = 10.99.0.2/32' /etc/wireguard/wg0.conf && ! grep -q Endpoint /etc/wireguard/wg0.conf"
+  # rtu-2's own key, address, no ListenPort
+  - vm:
+      host: "{route.rtus[1]}"
+      run: "grep -q 'PrivateKey = pVNuiBZYypoOLri53Z4bB2jPlICxODvPOgqeRxRJiIs=' /etc/wireguard/wg0.conf && grep -q 'Address = 10.99.0.2/24' /etc/wireguard/wg0.conf && ! grep -q ListenPort /etc/wireguard/wg0.conf"
+  # rtu-2's peer is rtu-1's public key, rtu-1's IF0 as endpoint, keepalive
+  - vm:
+      host: "{route.rtus[1]}"
+      run: "grep -q 'PublicKey = 6lIuPX8aUsTU4E2hMVP1wP5zqdzZk3sw3kmh4NkuXUk=' /etc/wireguard/wg0.conf && grep -q 'AllowedIPs = 10.99.0.1/32' /etc/wireguard/wg0.conf && grep -q 'Endpoint = 10.1.1.101:51820' /etc/wireguard/wg0.conf && grep -q 'PersistentKeepalive = 25' /etc/wireguard/wg0.conf"
+  # boot: true on rtu-2 only
+  - vm:
+      host: "{route.rtus[1]}"
+      run: "grep -q 'enable --now wg-quick@wg0' /etc/phenix/startup/wireguard-enable.sh"
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "test ! -e /etc/phenix/startup/wireguard-enable.sh"

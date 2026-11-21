@@ -1,0 +1,247 @@
+{
+  "apiVersion": "phenix.sandia.gov/v2",
+  "kind": "Scenario",
+  "metadata": {
+    "annotations": {
+      "topology": "ebwes-wireguard"
+    },
+    "name": "ebwes-wireguard"
+  },
+  "spec": {
+    "apps": [
+      {
+        "assetDir": "/phenix/topologies/waterway-arm64",
+        "hosts": [
+          {
+            "hostname": "waterway-provider",
+            "metadata": {
+              "publish_endpoint": "udp://*;239.0.0.1:40000",
+              "publish_points": "/phenix/topologies/waterway-arm64/injects/publishPoints.txt",
+              "simulator": "Simulink",
+              "solver": "/phenix/topologies/waterway-arm64/injects/simulinksolver",
+              "type": "provider"
+            }
+          },
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "infrastructure": "waterway",
+              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
+              "modbus": [
+                {
+                  "name": "lowerwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "lowergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "lowervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "lowersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "waterway-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "infrastructure": "waterway",
+              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
+              "modbus": [
+                {
+                  "name": "upperwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "uppergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "uppervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "uppersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "waterway-provider",
+              "type": "fd-server"
+            }
+          }
+        ],
+        "name": "sceptre"
+      },
+      {
+        "hosts": [
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "interface": {
+                "address": "10.99.0.1/24",
+                "listen_port": 51820,
+                "private_key": "zZVpd2aj6AmPkbuFZox0I0KJo/L9h45QThH1bVF4WTE="
+              },
+              "peers": [
+                {
+                  "allowed_ips": "10.99.0.2/32",
+                  "public_key": "/Lq/kIGFSwx/OqJ20m04hpsLUsfejSlJEgM8C/pmSl4="
+                }
+              ]
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "boot": true,
+              "interface": {
+                "address": "10.99.0.2/24",
+                "private_key": "pVNuiBZYypoOLri53Z4bB2jPlICxODvPOgqeRxRJiIs="
+              },
+              "peers": [
+                {
+                  "allowed_ips": "10.99.0.1/32",
+                  "keepalive": 25,
+                  "public_key": "6lIuPX8aUsTU4E2hMVP1wP5zqdzZk3sw3kmh4NkuXUk=",
+                  "server_endpoint": "10.1.1.101:51820"
+                }
+              ]
+            }
+          }
+        ],
+        "name": "wireguard"
+      },
+      {
+        "metadata": {
+          "components": [
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)(bennu-field-device|bennu-field-deviced)( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'PrivateKey = zZVpd2aj6AmPkbuFZox0I0KJo/L9h45QThH1bVF4WTE=' /etc/wireguard/wg0.conf && grep -q 'Address = 10.99.0.1/24' /etc/wireguard/wg0.conf && grep -q 'ListenPort = 51820' /etc/wireguard/wg0.conf",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'PublicKey = /Lq/kIGFSwx/OqJ20m04hpsLUsfejSlJEgM8C/pmSl4=' /etc/wireguard/wg0.conf && grep -q 'AllowedIPs = 10.99.0.2/32' /etc/wireguard/wg0.conf && ! grep -q Endpoint /etc/wireguard/wg0.conf",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "test ! -e /etc/phenix/startup/wireguard-enable.sh",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-2",
+                    "start": [
+                      {
+                        "args": "ss -Hltn '( sport = :502 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)(bennu-field-device|bennu-field-deviced)( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ep=$(sed -n 's#.*<endpoint>\\(tcp://[^<]*\\)</endpoint>.*#\\1#p' /etc/sceptre/config.xml | tail -1); echo \"# provider endpoint: $ep\"; [ -n \"$ep\" ] || { echo 'no provider endpoint in /etc/sceptre/config.xml' >&2; exit 1; }; timeout 30 bennu-probe --endpoint \"$ep\" --command query | grep -Eq lock",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'PrivateKey = pVNuiBZYypoOLri53Z4bB2jPlICxODvPOgqeRxRJiIs=' /etc/wireguard/wg0.conf && grep -q 'Address = 10.99.0.2/24' /etc/wireguard/wg0.conf && ! grep -q ListenPort /etc/wireguard/wg0.conf",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'PublicKey = 6lIuPX8aUsTU4E2hMVP1wP5zqdzZk3sw3kmh4NkuXUk=' /etc/wireguard/wg0.conf && grep -q 'AllowedIPs = 10.99.0.1/32' /etc/wireguard/wg0.conf && grep -q 'Endpoint = 10.1.1.101:51820' /etc/wireguard/wg0.conf && grep -q 'PersistentKeepalive = 25' /etc/wireguard/wg0.conf",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'enable --now wg-quick@wg0' /etc/phenix/startup/wireguard-enable.sh",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "waterway-provider",
+                    "start": [
+                      {
+                        "args": "pgrep -f '(^|/)(bennu-simulink-provider|bennu-simulink-provider-helics)( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "pgrep -f '(^|/)simulinksolver( |$)'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "health",
+              "type": "cc"
+            }
+          ],
+          "runs": [
+            {
+              "name": "health",
+              "start": [
+                "health"
+              ]
+            }
+          ]
+        },
+        "name": "scorch"
+      }
+    ]
+  }
+}
