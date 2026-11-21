@@ -43,6 +43,50 @@ def _require_built(res: Resolved, settings: Settings, man: dict) -> Path:
     return out
 
 
+def _download_debs(host, out: Path, uid: str, packages) -> None:
+    """The extra deb packages, downloaded into out/debs (jammy: phēnix's default image
+    release, which bennu.qc2 is built on)."""
+    if not packages:
+        return
+    shutil.rmtree(out / "debs", ignore_errors=True)
+    (out / "debs").mkdir()
+    apt_image = site_image(host, "ubuntu:22.04")
+    host.run(
+        [
+            "docker", "run", "--rm", "-v", f"{out / 'debs'}:/out", "-w", "/out", apt_image,
+            "bash", "-ec",
+            f"apt-get update -qq && apt-get download -q {shlex.join(packages)} && "
+            f"chown {uid} /out/*.deb",
+        ]
+    )  # fmt: skip
+
+
+def _stage_goart(res: Resolved, settings: Settings, out: Path) -> None:
+    """goart is a prebuilt Atomic Red Team runner, not built here; drop the binary at
+    assets/art/goart and burger stages it for the injection."""
+    name = "goart-arm64" if res.route.arm64 else "goart"
+    src = settings.root / "assets" / "art" / name
+    if not src.is_file():
+        raise BurgerError(
+            f"requires.goart needs the goart binary at assets/art/{name} (not committed; "
+            "scripts/build-goart.sh builds it, or add your Atomic Red Team goart there)"
+        )
+    shutil.copy2(src, out / "goart")
+
+
+def _build_swaps(res: Resolved, host, rd: Path, man: dict) -> None:
+    """The minimega and phēnix images of a board that runs its own, tags into the manifest."""
+    if mm := man.get("minimega"):
+        mm["image"] = minimega.build_image(
+            host, rd / "minimega", mm["sha"], res.route.minimega_layer
+        )
+    if px := man.get("phenix"):
+        px["image"] = phenix.build_image(
+            host, rd / "phenix", px["sha"], (man.get("minimega") or {}).get("image"),
+            res.route.phenix_sed,
+        )  # fmt: skip
+
+
 def build(res: Resolved, settings: Settings, host) -> None:
     name = res.board.name
     rd, man = board_dir(settings, name), load_manifest(settings, name)
@@ -66,35 +110,13 @@ def build(res: Resolved, settings: Settings, host) -> None:
         ]
     )  # fmt: skip
 
-    packages = res.requires.debs_packages
-    if packages:
-        # jammy: phēnix's default image release, which bennu.qc2 is built on.
-        shutil.rmtree(out / "debs", ignore_errors=True)
-        (out / "debs").mkdir()
-        apt_image = site_image(host, "ubuntu:22.04")
-        host.run(
-            [
-                "docker", "run", "--rm", "-v", f"{out / 'debs'}:/out", "-w", "/out", apt_image,
-                "bash", "-ec",
-                f"apt-get update -qq && apt-get download -q {shlex.join(packages)} && "
-                f"chown {uid} /out/*.deb",
-            ]
-        )  # fmt: skip
+    _download_debs(host, out, uid, res.requires.debs_packages)
 
     if res.requires.iperf_static:
         build_iperf(host, settings, res.requires.iperf_static, out, uid)
 
     if res.requires.goart_nodes:
-        # goart is a prebuilt Atomic Red Team runner, not built here; drop the
-        # binary at assets/art/goart and burger stages it for the injection.
-        name = "goart-arm64" if res.route.arm64 else "goart"
-        src = settings.root / "assets" / "art" / name
-        if not src.is_file():
-            raise BurgerError(
-                f"requires.goart needs the goart binary at assets/art/{name} (not committed; "
-                "scripts/build-goart.sh builds it, or add your Atomic Red Team goart there)"
-            )
-        shutil.copy2(src, out / "goart")
+        _stage_goart(res, settings, out)
 
     if man["bennu"]:
         spec = res.board.bennu or {}
@@ -103,15 +125,7 @@ def build(res: Resolved, settings: Settings, host) -> None:
             host, rd / "bennu", out, man, install, spec.get("pip", []), res.route.arm64,
             spec.get("pip_env", {}),
         )  # fmt: skip
-    if mm := man.get("minimega"):
-        mm["image"] = minimega.build_image(
-            host, rd / "minimega", mm["sha"], res.route.minimega_layer
-        )
-    if px := man.get("phenix"):
-        px["image"] = phenix.build_image(
-            host, rd / "phenix", px["sha"], (man.get("minimega") or {}).get("image"),
-            res.route.phenix_sed,
-        )  # fmt: skip
+    _build_swaps(res, host, rd, man)
     (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
     (out / "built.json").write_text(json.dumps(_built_key(man)))
     logger.info("switchboard '{}' built into {}", name, out)
