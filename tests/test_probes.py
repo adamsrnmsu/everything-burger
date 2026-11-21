@@ -4,6 +4,7 @@ import subprocess
 import sys
 
 import pytest
+from loguru import logger
 
 from burger import probes
 from burger.config import BurgerError
@@ -42,6 +43,26 @@ def test_a_raising_probe_is_a_fail_row(settings, monkeypatch):
     rows = probes.run(host_for(settings, True), settings, res, {}, ["mm-bindings"])
     assert [(r.item, r.verdict) for r in rows] == [("mm-bindings", "FAIL")]
     assert "KeyError" in rows[0].reason
+
+
+def test_a_raising_probe_logs_its_traceback_at_debug(settings, monkeypatch):
+    """The FAIL row keeps the console short; -v (debug) must still show where it broke."""
+
+    def boom(*a):
+        raise KeyError("nope")
+
+    monkeypatch.setitem(probes.PROBES, "mm-bindings", boom)
+    got = []
+    hid = logger.add(lambda m: got.append(m.record), level="DEBUG")
+    try:
+        probes.run(
+            host_for(settings, True), settings, resolved(settings, "main"), {}, ["mm-bindings"]
+        )
+    finally:
+        logger.remove(hid)
+    raised = [r for r in got if r["message"] == "probe mm-bindings raised"]
+    assert raised and raised[0]["level"].name == "DEBUG"
+    assert raised[0]["exception"] and raised[0]["exception"].type is KeyError
 
 
 def test_unknown_probe_name(settings):

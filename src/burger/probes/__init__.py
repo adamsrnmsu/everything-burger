@@ -31,6 +31,6 @@ def run(host, s, res, man, names: list[str] | None = None) -> list[Row]:
         try:
             rows += PROBES[n](host, s, res, man)
         except Exception as e:  # a broken probe is a FAIL row, not a traceback
-            logger.debug("probe {} raised", n, exc_info=True)
+            logger.opt(exception=True).debug("probe {} raised", n)
             rows.append(Row(n, "probe", "FAIL", f"{type(e).__name__}: {e}", []))
     return rows
