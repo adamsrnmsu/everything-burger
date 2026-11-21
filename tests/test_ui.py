@@ -150,3 +150,36 @@ def test_spinner_in_each_display(monkeypatch):
     with ui.spinner() as say:  # a terminal: one live status line
         say("pass {}", 2)
     assert seen[-2:] == [("console", True), ("status", "pass 2")]
+
+
+def lines_of(renderable, width=60, height=24):
+    con = Console(width=width, height=height, record=True)
+    con.print(renderable)
+    return con.export_text().splitlines()
+
+
+def test_step_rows_are_adjacent_and_show_their_time():
+    now = [0.0]
+    v = ui.RunView(STEPS, clock=lambda: now[0])
+    v.start("sync")
+    now[0] = 65
+    v.finish("sync")
+    now[0] = 70
+    v.start("build")
+    now[0] = 100
+    shown = [(i, x.strip("│ ").split()) for i, x in enumerate(lines_of(v))]
+    steps = [(i, w) for i, w in shown if w[:1] in (["✓"], ["▶"], ["·"])]
+    assert [w for _, w in steps] == [["✓", "sync", "1:05"], ["▶", "build", "0:30"], ["·", "up"]]
+    assert [i for i, _ in steps] == [steps[0][0] + k for k in range(3)]  # no blank padding rows
+
+
+def test_log_pane_room_is_never_less_than_one_line():
+    v = ui.RunView(STEPS, tail=50)
+    v.log("\n".join(f"line{i}" for i in range(20)))
+    text = "\n".join(lines_of(v, width=40, height=8))
+    assert "line19" in text and "line0\n" not in text and "line18" not in text
+
+
+def test_summary_panel_does_not_stretch_to_the_terminal():
+    p = ui.summary_panel("main", rows("ok"), "r.md")
+    assert max(len(x) for x in lines_of(p, width=80)) < 80

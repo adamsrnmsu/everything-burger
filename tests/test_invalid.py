@@ -261,3 +261,8 @@ def test_app_row_names_the_stage_that_decided(settings, tmp_path):
     assert (
         invalid.app_rows(r, settings, host, topo, tmp_path)[0].check == "helics pre-start rejects"
     )
+
+
+def test_a_warning_for_an_expected_item_is_not_a_rejection():
+    _, rows = invalid.judge("warning  m.yaml: a (t): unknown key, ignored\n", {"a": "x"})
+    assert rows[0].reason == "the validator did not report this component"

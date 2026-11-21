@@ -164,3 +164,33 @@ def test_bindings_skips_a_route_without_rtus(settings):
     res.route.values["rtus"] = []
     (row,) = mm_bindings.run(host_for(settings, True), settings, res, {})
     assert (row.verdict, row.reason) == ("skipped", "the route has no RTUs")
+
+
+def bindings(settings, out="", err="", code=0):
+    from burger.probes import mm_bindings
+    from tests.test_verify import StrictHost
+
+    host = StrictHost({CTR: subprocess.CompletedProcess([], code, out, err)}, settings)
+    return mm_bindings.run(host, settings, resolved(settings, "main"), {})
+
+
+def test_bindings_read_the_last_line_of_the_probe_output(settings):
+    rows = bindings(settings, 'noise line\n[["a", ""], ["b", "boom"]]\n')
+    assert [(r.check, r.verdict, r.reason) for r in rows] == [
+        ("a", "ok", ""),
+        ("b", "FAIL", "boom"),
+    ]
+
+
+def test_bindings_probe_that_cannot_run_says_why(settings):
+    for out, err, why in (
+        ("", "stderr text", "stderr text"),
+        ("out text", "", "out text"),
+        ("", "", "exit 3"),
+    ):
+        with pytest.raises(BurgerError) as e:
+            bindings(settings, out, err, code=3)
+        assert str(e.value) == why
+    with pytest.raises(BurgerError) as e:
+        bindings(settings, "", "x" * 400 + "tail", code=1)
+    assert str(e.value) == ("x" * 400 + "tail")[-300:]

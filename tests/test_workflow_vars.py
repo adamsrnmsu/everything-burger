@@ -1,9 +1,13 @@
 import subprocess
+from typing import ClassVar
+
+import pytest
 
 from burger.config import BurgerError
 from burger.probes import workflow_vars
 from tests.conftest import res as resolved
 from tests.fakes import FakeHost
+from tests.test_verify import enforce
 
 FILE_VARS = {"BV_A": "from-file", "BV_B": "file-b"}
 
@@ -120,3 +124,58 @@ def test_cleans_up_when_a_row_raises(settings):
     except RuntimeError:
         pass
     assert cleaned(host)
+
+
+class StrictPhenix(FakePhenix):
+    """FakePhenix with the real Host's check/capture contract; cleanup commands exit 1 (they
+    must not raise); `fail` replaces any command containing its key (`R:` keys: renders only)."""
+
+    fail: ClassVar[dict] = {}
+
+    def run(self, cmd, check=True, capture=False, **kw):
+        res = super().run(cmd, check, capture, **kw)
+        line = " ".join(cmd)
+        if "rm" in cmd or ("config" in cmd and "delete" in cmd):
+            res = subprocess.CompletedProcess(cmd, 1, "", "")
+        for text, (rc, out, err) in self.fail.items():
+            if text.removeprefix("R:") in line and (text[:2] != "R:" or "render" in cmd):
+                res = subprocess.CompletedProcess(cmd, rc, out, err)
+        return enforce(res, cmd, check, capture)
+
+
+def strict(settings, **fail):
+    host = type("Host", (StrictPhenix,), {"fail": fail})(settings)
+    return host, workflow_vars.run(
+        host, settings, resolved(settings, "main"), {"phenix": {"pr": 576}}
+    )
+
+
+def test_rows_under_the_real_host_contract(settings):
+    host, rows = strict(settings)
+    assert [r.verdict for r in rows] == ["ok"] * 9, [(r.check, r.reason) for r in rows]
+    assert cleaned(host)
+
+
+def test_setup_failure_message_under_the_real_host_contract(settings):
+    with pytest.raises(BurgerError, match="cannot write the test files: read-only fs"):
+        strict(settings, **{" sh ": (1, "", "read-only fs")})
+
+
+def test_missing_variable_must_fail_and_name_the_variable(settings):
+    by = {r.check: r for r in strict(settings, **{"R:/needs": (1, "", "boom")})[1]}
+    assert by["missing variable fails"].verdict == "FAIL"
+    by = {r.check: r for r in strict(settings, **{"R:/needs": (0, "BV_NEED is unset", "")})[1]}
+    assert by["missing variable fails"].verdict == "FAIL"
+
+
+def test_config_create_that_fails_is_a_failed_row_with_its_output(settings):
+    rows = strict(settings, **{"config create": (1, "", "no space left")})[1]
+    row = rows[-1]
+    assert row.verdict == "FAIL" and row.reason == "rc=1: no space left"
+
+
+def test_failed_row_shows_the_output_tail(settings):
+    rows = strict(settings, **{"R:/plain": (1, "", "x" * 300 + "tail")})[1]
+    assert rows[0].reason == "rc=1: " + ("x" * 300 + "tail")[-200:]
+    rows = strict(settings, **{"R:/plain": (1, "from stdout", "from stderr")})[1]
+    assert rows[0].reason == "rc=1: from stdout"

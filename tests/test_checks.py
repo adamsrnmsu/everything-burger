@@ -177,3 +177,10 @@ def test_collect_status_keeps_a_file_stamped_exactly_at_since(tmp_path):
     (loop / "s.json").write_text('{"component": "c", "stage": "start", "start": "2026-11-10"}')
     assert list(collect_status(tmp_path, since="2026-11-10")) == [("c", "start")]
     assert collect_status(tmp_path, since="2026-11-11") == {}
+
+
+def test_log_contains_fails_when_nothing_matches(settings, tmp_path):
+    ctx, loop = make_ctx(settings, tmp_path)
+    (loop / "a.log").write_text("INFO fine\n")
+    r = CHECKS["log"]({"glob": "a.log", "contains": "boom"}, ctx)
+    assert (r.verdict, r.reason) == ("FAIL", "no line matches 'boom'")

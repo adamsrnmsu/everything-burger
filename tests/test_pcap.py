@@ -248,3 +248,20 @@ def test_pcap_check_needs_a_packet_by_default(tmp_path, settings):
     assert pcap.pcap({"glob": "*.pcap"}, ctx).verdict == "FAIL"
     (loop / "a.pcap").write_bytes(classic([eth(ip_packet())]))
     assert pcap.pcap({"glob": "*.pcap"}, ctx).verdict == "ok"
+
+
+def test_pcap_sll2_matches_only_the_ip_ethertype(tmp_path):
+    p = tmp_path / "a.pcap"
+    ip4 = b"\x08\x00" + b"\0" * 18 + ip_packet()
+    p.write_bytes(classic([ip4, ip4, b"\x86\xdd" + b"\0" * 18 + ip_packet()], link=276))
+    assert pcap.count_packets(p) == 2
+
+
+def test_pcap_header_only_file_has_no_packets_and_a_bad_file_is_a_failed_check(tmp_path, settings):
+    p = tmp_path / "a.pcap"
+    p.write_bytes(classic([]))
+    assert pcap.count_packets(p) == 0
+    ctx, loop = make_ctx(settings, tmp_path)
+    (loop / "bad.pcap").write_bytes(b"not a capture")
+    r = pcap.pcap({"glob": "*.pcap"}, ctx)
+    assert r.verdict == "FAIL" and r.reason == "bad.pcap: not a pcap or pcapng file"

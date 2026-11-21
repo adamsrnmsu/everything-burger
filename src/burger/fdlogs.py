@@ -162,7 +162,7 @@ def scan_text(text: str, repeat: int) -> tuple[int, int, list[Line], str]:
             continue
         crash += kind == 2
         error += kind == 1
-        entry = seen.setdefault(key, Line(_STAMP.sub("", line, 1)[:200], 0, stamp))
+        entry = seen.setdefault(key, Line(_STAMP.sub("", line)[:200], 0, stamp))
         entry.count += 1
         entry.last = stamp
     top = sorted(seen.values(), key=lambda x: -x.count)

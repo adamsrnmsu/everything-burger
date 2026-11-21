@@ -2,11 +2,13 @@ import base64
 import dataclasses
 import struct
 import subprocess
+from typing import ClassVar
 
 from burger import probes
 from burger.probes import mm_capture
 from tests.conftest import res as resolved
 from tests.fakes import FakeHost
+from tests.test_verify import enforce
 
 DIR = "/phenix/images"
 
@@ -172,3 +174,106 @@ def test_skips_without_minimega_container(settings):
     s = dataclasses.replace(settings, mm_ctr="")
     (row,) = mm_capture.run(FakeHost(None, s), s, resolved(s, "main"), {})
     assert row.verdict == "skipped" and "BURGER_MINIMEGA_CONTAINER" in row.reason
+
+
+class StrictMM(FakeMM):
+    """FakeMM with the real Host's check/capture contract; `env` is what printenv answers
+    (exit 1 and nothing when unset); two RTUs on different bridges."""
+
+    env = DIR + "\n"
+    broken: ClassVar[dict] = {}  # command text -> (returncode, stdout, stderr)
+
+    def run(self, cmd, check=True, capture=False, **kw):
+        res = super().run(cmd, check, capture, **kw)
+        line = " ".join(map(str, cmd))
+        if cmd[2:4] == [self.s.mm_ctr, "printenv"]:
+            res = subprocess.CompletedProcess(cmd, 0 if self.env else 1, self.env, "")
+        elif cmd[3:4] == ["sh"]:
+            res = subprocess.CompletedProcess(cmd, 1, "", "")
+        elif cmd[-1].endswith("vm info"):
+            res = subprocess.CompletedProcess(
+                cmd, 0, 'name,bridge\nrtu-1,"[br-one, br-one]"\nrtu-2,"[br-two]"\n', ""
+            )
+        for text, (rc, out, err) in self.broken.items():
+            if text in line:
+                res = subprocess.CompletedProcess(cmd, rc, out, err)
+        return enforce(res, cmd, check, capture)
+
+
+def strict_run(settings, monkeypatch, **cls):
+    host = type("Host", (StrictMM,), cls)(settings, refuse=["snaplen=70000", "vms=", "format="])
+    rows = run(settings, host, monkeypatch)
+    return host, rows
+
+
+def test_steps_pick_the_first_and_last_rtu_and_their_bridge(settings, monkeypatch):
+    host, rows = strict_run(settings, monkeypatch)
+    assert set(verdicts(rows).values()) == {"ok"}, rows
+    cmds = [c[-1].removeprefix("namespace ebwes-main ") for c in host.calls]
+    starts = [c.split()[:6] for c in cmds if c.startswith("capture pcap ")]
+    assert ["capture", "pcap", "vm", "rtu-1", "0"] in [s[:5] for s in starts]
+    assert any(c.startswith("capture pcap bridge br-one burger-mmcap-bridge") for c in cmds)
+    assert "capture pcap delete vm rtu-1" in cmds and "capture pcap delete bridge br-one" in cmds
+    # delete id: one capture on the first RTU, one on the last
+    named = [c.split() for c in cmds if "burger-mmcap-a-" in c or "burger-mmcap-b-" in c]
+    assert [(w[3], w[4]) for w in named] == [("rtu-1", "0"), ("rtu-2", "0")]
+    for opt in ("vms=", "format="):  # refused: `capture pcap vm rtu-1 0 <file> opt`
+        assert any(
+            c.startswith("capture pcap vm rtu-1 0 burger-mmcap-bad") and c.endswith(opt)
+            for c in cmds
+        )
+    assert rows[-1].reason == "none left" and rows[3].reason.startswith("id ")
+    assert (
+        "still listed" in rows[3].reason and rows[3].reason.split()[1] != rows[3].reason.split()[5]
+    )
+
+
+def test_the_probe_runs_where_minimega_answers_even_with_no_file_path(settings, monkeypatch):
+    host, rows = strict_run(settings, monkeypatch, env="")
+    assert set(verdicts(rows).values()) == {"ok"}, rows
+    assert any("rm -f /tmp/minimega/files/burger-mmcap-*" in c[-1] for c in host.calls)
+
+
+def test_a_failed_command_says_why(settings, monkeypatch):
+    broken = {"pcap vm rtu-1 0 burger-mmcap-vm": (1, "", "Error (rig): no such vm")}
+    _, rows = strict_run(settings, monkeypatch, broken=broken)
+    assert "no such vm" in rows[0].reason
+    broken = {"bridge mirrors": (1, "", "Error (rig): no mirrors command")}
+    _, rows = strict_run(settings, monkeypatch, broken=broken)
+    assert "no mirrors command" in rows[-1].reason
+    broken = {"base64": (1, "", "no such file")}
+    _, rows = strict_run(settings, monkeypatch, broken=broken)
+    assert "cannot read" in rows[0].reason and "no such file" in rows[0].reason
+
+
+def test_a_vm_missing_from_vm_info_fails_the_bridge_step(settings, monkeypatch):
+    broken = {"name,bridge vm info": (0, "name,bridge\nrtu-9,[x]\n", "")}
+    _, rows = strict_run(settings, monkeypatch, broken=broken)
+    assert verdicts(rows)["bridge capture vlans="] == "FAIL"
+    assert "rtu-1 not in vm info" in rows[1].reason
+
+
+def test_a_tagged_16_byte_frame_has_its_vlan():
+    assert mm_capture.vlan_of(eth(101)[:16]) == 101
+    assert mm_capture.vlan_of(eth(101)[:15]) is None
+
+
+def test_parser_edges():
+    import pytest
+
+    plain = eth()
+    with pytest.raises(ValueError, match="starts empty"):
+        mm_capture.pcap_frames(b"")
+    assert mm_capture.pcap_frames(classic([plain, b""])) == [plain, b""]  # empty last frame
+    assert mm_capture.pcap_frames(pcapng([plain]) + block(3, b"")) == [plain, b""]
+    pad = plain + b"\0\0"  # a simple packet holds its frame padded to 4 bytes
+    assert mm_capture.pcap_frames(pcapng([], spb=[plain])) == [plain]
+    short = pcapng([]) + block(3, struct.pack("<I", 99) + plain)
+    assert mm_capture.pcap_frames(short) == [pad]  # origlen beyond the block is clipped to it
+    assert mm_capture.pcap_frames(
+        pcapng([plain]) + block(0x99, b"") + block(3, struct.pack("<I", 22) + plain)
+    ) == [plain, plain]
+    corrupt = pcapng([plain]) + struct.pack("<II", 6, 4) + b"\0" * 8
+    assert mm_capture.pcap_frames(corrupt) == [plain]
+    whole = pcapng([plain, plain, plain])
+    assert mm_capture.pcap_frames(whole[:-5]) == [plain, plain]  # a cut-off last block

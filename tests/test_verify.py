@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import shutil
 import subprocess
 
 import yaml
@@ -16,20 +17,32 @@ from tests.conftest import MAN, make_ctx
 from tests.fakes import FakeHost
 
 
+def enforce(res, cmd, check, capture):
+    """The real Host's contract on a canned result: a nonzero exit raises unless check=False,
+    and stdout/stderr exist only when capture=True."""
+    if check and res.returncode:
+        raise BurgerError(f"command failed ({res.returncode}): {' '.join(map(str, cmd))}")
+    if capture:
+        return res
+    return subprocess.CompletedProcess(res.args, res.returncode, None, None)
+
+
 class StrictHost(FakeHost):
-    """FakeHost with the real Host's contract: a nonzero exit raises unless check=False, and
-    output exists only when capture=True. Code that forgets either flag fails here."""
+    """FakeHost that keeps the real Host's contract. Code that forgets a flag fails here."""
 
     def run(self, cmd, check=True, capture=False, **kw):
-        res = super().run(cmd, check, capture, **kw)
-        if check and res.returncode:
-            raise BurgerError(f"command failed ({res.returncode}): {' '.join(map(str, cmd))}")
-        if capture:
-            return res
-        return subprocess.CompletedProcess(res.args, res.returncode, None, None)
+        return enforce(super().run(cmd, check, capture, **kw), cmd, check, capture)
 
 
-def setup(settings, monkeypatch, name="bennu", results=None, enable=(), linux_only=False):
+def setup(
+    settings,
+    monkeypatch,
+    name="bennu",
+    results=None,
+    enable=(),
+    linux_only=False,
+    host_cls=FakeHost,
+):
     board = load_switchboard(name, settings)
     for item in enable:
         board.items[item] = True
@@ -37,7 +50,7 @@ def setup(settings, monkeypatch, name="bennu", results=None, enable=(), linux_on
     rd = board_dir(settings, name)
     rd.mkdir(parents=True)
     (rd / "manifest.json").write_text(json.dumps({**MAN, "synced": "now"}))
-    host = FakeHost(
+    host = host_cls(
         {
             "docker exec phenix cat /tmp/burger/installed.json": subprocess.CompletedProcess(
                 [], 0, json.dumps({"apps": MAN["apps"]["head"]}), ""
@@ -332,3 +345,135 @@ def test_verify_runs_the_boards_probes_after_the_running_row(settings, monkeypat
     )
     checks = [r.check for r in v.verify(res, settings, host)]
     assert checks.index("x") == checks.index("experiment + VMs running") + 1
+
+
+def cp(code=0, out="", err=""):
+    return subprocess.CompletedProcess([], code, out, err)
+
+
+def strict_verify(settings, monkeypatch, name="integrate", **kw):
+    res, host = setup(settings, monkeypatch, name=name, host_cls=StrictHost, **kw)
+    return res, host
+
+
+def test_verify_under_the_real_host_contract(settings, monkeypatch):
+    res, host = strict_verify(settings, monkeypatch)
+    host.responses["docker exec phenix cat /tmp/burger/installed.json"] = cp(1, "", "gone")
+    rows = v.verify(res, settings, host)
+    row = next(r for r in rows if r.check == "phenix-apps install")
+    assert row.verdict == "FAIL" and row.reason.startswith("phēnix has nothing, want ")
+    v.verify(res, settings, host)  # a second run finds the output directory there
+
+
+def test_validator_missing_skips_unless_an_item_needs_an_apps_pr(settings, monkeypatch):
+    res, host = strict_verify(settings, monkeypatch, name="bennu")
+    host.responses["docker exec phenix sh -c command -v"] = cp(1)
+    rows = v.verify(res, settings, host)
+    row = next(r for r in rows if r.check == "phenix-scorch-validate")
+    assert (row.verdict, row.reason) == ("skipped", "not installed")
+    res.items[0].requires["apps_prs"] = [1]
+    row = next(r for r in v.verify(res, settings, host) if r.check == "phenix-scorch-validate")
+    assert (row.verdict, row.reason) == ("FAIL", "not installed but an item needs an apps PR")
+
+
+def test_validator_output_is_read_from_either_stream(settings, monkeypatch):
+    from tests.test_invalid import OUT
+
+    for out, err in ((OUT, ""), ("", OUT)):
+        res, host = strict_verify(settings, monkeypatch)
+        host.responses["docker exec phenix sh -c command -v"] = cp(0)
+        host.responses["docker exec phenix phenix-scorch-validate"] = cp(1, out, err)
+        rows = v.verify(res, settings, host)
+        assert next(r for r in rows if r.check == "phenix-scorch-validate").verdict == "ok"
+        assert next(r for r in rows if r.item == "qos-bad-rate").verdict == "ok"
+        shutil.rmtree(board_dir(settings, "integrate"))
+
+
+def test_a_crashing_validator_shows_what_it_printed(settings, monkeypatch):
+    for out, err in (("stdout boom", ""), ("", "stderr boom")):
+        res, host = strict_verify(settings, monkeypatch)
+        host.responses["docker exec phenix sh -c command -v"] = cp(0)
+        host.responses["docker exec phenix phenix-scorch-validate"] = cp(2, out, err)
+        rows = v.verify(res, settings, host)
+        row = next(r for r in rows if r.check == "phenix-scorch-validate")
+        assert row.verdict == "FAIL" and row.reason.endswith("boom"), row
+        shutil.rmtree(board_dir(settings, "integrate"))
+    res, host = strict_verify(settings, monkeypatch)
+    host.responses["docker exec phenix sh -c command -v"] = cp(0)
+    host.responses["docker exec phenix phenix-scorch-validate"] = cp(3)
+    row = next(r for r in v.verify(res, settings, host) if r.check == "phenix-scorch-validate")
+    assert row.reason == "exit 3"
+
+
+def test_models_yaml_keeps_each_components_keys_in_order(settings, monkeypatch, tmp_path):
+    res, _ = setup(settings, monkeypatch, name="integrate")
+    v.models_yaml(res, tmp_path / "m.yaml", "/stage")
+    doc = yaml.safe_load((tmp_path / "m.yaml").read_text())
+    assert list(doc["components"][0]) == ["name", "type", "metadata"]
+
+
+def test_advisory_marks_only_failures(settings, monkeypatch):
+    results = {("erspan", "configure"): [{"return": ""}], ("erspan", "cleanup"): [{"return": ""}]}
+    res, host = setup(settings, monkeypatch, name="iperf", enable=["erspan"], results=results)
+    runs = [{**res.board.runs[0], "configure": ["iperf", "erspan"], "cleanup": ["erspan"]}]
+    res.board = dataclasses.replace(res.board, runs=runs)
+    rows = {(r.item, r.check): r.verdict for r in v.verify(res, settings, host)}
+    assert rows[("erspan", "status configure")] == "ok"
+    assert rows[("iperf", "status configure")] == "FAIL"  # not advisory: no file, a real failure
+
+
+def test_report_defaults_and_apps_without_prs(settings, monkeypatch):
+    res, _ = setup(settings, monkeypatch)
+    man = MAN | {"synced": "t", "fdlogs": {"rtu-1": {"error": "gone"}}}
+    out = v.render_report(res, man, {"linux_only": False}, [])
+    assert "+ no PRs" in out and "| rtu-1 | - |" in out and "MB/min" in out
+    out = v.render_report(
+        res,
+        man,
+        {"linux_only": False},
+        [],
+        {"fail_on": "none", "flood_bytes_per_min": 3_000_000, "repeat": 7},
+    )
+    assert "over 3 MB/min or one line more than 7x" in out
+    prs = MAN["apps"] | {"prs": {"12": "abcdef1234567890"}}
+    out = v.render_report(res, man | {"apps": prs, "fdlogs": None}, {"linux_only": False}, [])
+    assert "+ #12 `abcdef12`" in out and "Field-device logs" not in out
+
+
+def test_health_failure_of_an_advisory_item_is_advisory(settings, monkeypatch):
+    results = {}
+    res, host = setup(settings, monkeypatch, name="main", results=results)
+    res.items = [
+        dataclasses.replace(i, advisory=True) if i.name == "otsim" else i for i in res.items
+    ]
+    item = next(i for i in res.items if i.name == "otsim")
+    bad = health_checks(res, MAN, item)[0]
+    err = f"Error occurred: command '{bad[2]['args']}' failed: boom"
+    results[("health-otsim", "start")] = [{"return": err}]
+    rows = [
+        r for r in v.verify(res, settings, host) if r.item == "otsim" and r.check.startswith("vm ")
+    ]
+    assert rows and rows[0].verdict == "advisory-FAIL" and "boom" in rows[0].reason
+
+
+def test_health_attribution_on_a_host_shared_with_other_items(settings, monkeypatch):
+    from collections import Counter
+
+    results = {}
+    res, host = setup(settings, monkeypatch, name="main", results=results)
+    checks = health_checks(res, MAN)
+    counts = Counter(c[2]["args"] for c in checks)
+    bad = next(
+        c
+        for c in checks
+        if c[0] != c[1] and counts[c[2]["args"]] == 1 and sum(o[1] == c[1] for o in checks) > 1
+    )
+    results[("health", "start")] = [
+        {"return": f"Error occurred: command '{bad[2]['args']}' failed: boom"}
+    ]
+    labels = {v._label(h, c["args"]) for _, h, c in checks}
+    rows = [r for r in v.verify(res, settings, host) if r.check in labels]
+    same = [r for c, r in zip(checks, rows, strict=True) if c[1] == bad[1]]
+    n = [c for c in checks if c[1] == bad[1]].index(bad)
+    assert n and all(r.verdict == "ok" for r in same[:n]) and same[n].verdict == "FAIL"
+    assert all(r.reason == "not reached" for r in same[n + 1 :])

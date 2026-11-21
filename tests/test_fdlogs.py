@@ -274,3 +274,15 @@ def test_render_section_rows():
     assert "| rtu-1 | 1 | err.log 1,234 | 0 | 0 | no | - |" in out
     assert "| rtu-2 | 1 | err.log 9 | 0 | 0 | err.log: 5 MB/min | 3x `a/b` |" in out
     assert "| rtu-3 | - | - | - | - | - | gone |" in out
+
+
+def test_top_lines_keep_the_most_frequent_three(tmp_path):
+    text = "".join(f"{w} failed\n" * n for w, n in (("a", 4), ("b", 3), ("c", 2), ("d", 1)))
+    s = fdlogs.scan_host(host_dir(tmp_path, {"/x/e.log": text}), CFG)
+    assert [t["count"] for t in s["files"][0]["top"]] == [4, 3, 2]
+
+
+def test_error_counts_toward_a_fail_on_error_alongside_a_crash():
+    one = clean()["rtu-1"] | {"crash": 1, "error": 1}
+    assert fdlogs.verdict({"rtu-1": one}, "error")[0] == "FAIL"
+    assert fdlogs.verdict({"rtu-1": one | {"crash": 0}}, "crash")[0] == "WARN"
