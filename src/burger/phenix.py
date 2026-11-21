@@ -88,16 +88,13 @@ def _swap() -> _swap_mod.Swap:
     )
 
 
-def ensure(host, s: Settings, want: str | None, image: str | None = None) -> None:
+ensure, restore = _swap_mod.entrypoints(
+    _swap,
     """Make the running phēnix the one the board wants: burger's build `image` of commit
     `want`, or stock for None (which also undoes a swap a killed run left behind). A recreated
-    phēnix has neither burger's apps nor its minimega.py: install swaps it first."""
-    _swap_mod.ensure(_swap(), host, s, want, image)
-
-
-def restore(host, s: Settings) -> None:
-    """Put stock phēnix back after a board that swapped it, unless VMs still need it."""
-    _swap_mod.restore(_swap(), host, s)
+    phēnix has neither burger's apps nor its minimega.py: install swaps it first.""",
+    """Put stock phēnix back after a board that swapped it, unless VMs still need it.""",
+)
 
 
 def rows(host, s: Settings, man: dict, board: str) -> list[Row]:

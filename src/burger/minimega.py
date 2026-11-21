@@ -143,17 +143,14 @@ def _swap() -> _swap_mod.Swap:
     )
 
 
-def ensure(host, s: Settings, want: str | None, image: str | None = None) -> None:
+ensure, restore = _swap_mod.entrypoints(
+    _swap,
     """Make the running minimega the one the board wants: burger's build `image` of commit
     `want` (default its plain build), or stock for None (which also undoes a swap a killed run
     left behind). The image, not only the commit, must match: a plain and a layered build of
-    one commit are different minimegas (burger-fr8)."""
-    _swap_mod.ensure(_swap(), host, s, want, image)
-
-
-def restore(host, s: Settings) -> None:
-    """Put stock minimega back after a board that swapped it, unless VMs still need it."""
-    _swap_mod.restore(_swap(), host, s)
+    one commit are different minimegas (burger-fr8).""",
+    """Put stock minimega back after a board that swapped it, unless VMs still need it.""",
+)
 
 
 def rows(host, s: Settings, man: dict, board: str) -> list[Row]:
