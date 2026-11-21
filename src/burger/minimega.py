@@ -45,6 +45,15 @@ def _built(host, tag: str) -> bool:
     return host.run(["docker", "image", "inspect", tag], check=False, capture=True).returncode == 0
 
 
+def _build_layer(host, src: Path, base: str, tag: str) -> None:
+    """Build the layer Dockerfile `src` from a copy of its directory, first FROM on `base`."""
+    ctx = host.s.work / "minimega" / "layer"
+    shutil.rmtree(ctx, ignore_errors=True)
+    shutil.copytree(src.parent, ctx, ignore=shutil.ignore_patterns("tmp", ".git"))
+    (ctx / "Dockerfile").write_text(retarget_first_from(src.read_text(), base))
+    build_dockerfile(host, ctx, tag)
+
+
 def build_image(host, wt: Path, sha: str, layer: str | None = None) -> str:
     """Build minimega's own docker/Dockerfile from the worktree; the image tag.
     The Dockerfile runs minimega's check, build and test scripts, so a broken change fails here.
@@ -66,11 +75,7 @@ def build_image(host, wt: Path, sha: str, layer: str | None = None) -> str:
     if not (src and _built(host, base)):
         build_dockerfile(host, wt, base, dockerfile="docker/Dockerfile")
     if src:
-        ctx = host.s.work / "minimega" / "layer"
-        shutil.rmtree(ctx, ignore_errors=True)
-        shutil.copytree(src.parent, ctx, ignore=shutil.ignore_patterns("tmp", ".git"))
-        (ctx / "Dockerfile").write_text(retarget_first_from(src.read_text(), base))
-        build_dockerfile(host, ctx, tag)
+        _build_layer(host, src, base, tag)
     return tag
 
 
@@ -153,39 +158,50 @@ ensure, restore = _swap_mod.entrypoints(
 )
 
 
+def _container_reason(host, s: Settings, mm: dict, board: str) -> str:
+    """Why the container is not the board's minimega, "" when it is."""
+    want, have = mm.get("sha"), running_sha(host, s)
+    if have != want:
+        return (
+            f"the container runs {(have or 'stock')[:12]}, want {(want or 'stock')[:12]}; "
+            f"burger install {board}"
+        )
+    if mm.get("image") and running_image(host, s) != mm["image"]:  # layered or not
+        return (
+            f"the container runs {_short(running_image(host, s))}, want {_short(mm['image'])}; "
+            f"burger install {board}"
+        )
+    return ""
+
+
+def _py_reason(host, s: Settings, board: str) -> str:
+    """Why phēnix does not import the container's minimega.py, "" when it does."""
+    ours = host.run(
+        ["docker", "exec", s.mm_ctr, "sha256sum", f"{LIB}/minimega.py"],
+        check=False,
+        capture=True,
+    ).stdout.split()[:1]
+    theirs = host.ctr("python3", "-c", PY_HASH, check=False, capture=True).stdout.split()[:1]
+    if ours and ours == theirs:  # an unreadable file is not a match
+        return ""
+    return (
+        f"phēnix imports {(theirs or ['no minimega.py'])[0][:12]}, the minimega "
+        f"container has {(ours or ['none'])[0][:12]}; burger install {board}"
+    )
+
+
+def _row(check: str, reason: str) -> Row:
+    return Row("-", check, "FAIL" if reason else "ok", reason, [])
+
+
 def rows(host, s: Settings, man: dict, board: str) -> list[Row]:
     """verify's proof of which minimega ran: the container's commit, and for a board with
     its own minimega, that phēnix imports that container's minimega.py."""
     mm = man.get("minimega") or {}
-    want = mm.get("sha")
-    checks = ["minimega container", *(["minimega.py in phēnix"] if want else [])]
+    checks = ["minimega container", *(["minimega.py in phēnix"] if mm.get("sha") else [])]
     if not s.mm_ctr:
         return [Row("-", c, "skipped", "BURGER_MINIMEGA_CONTAINER is empty", []) for c in checks]
-    have = running_sha(host, s)
-    reason = ""
-    if have != want:
-        reason = (
-            f"the container runs {(have or 'stock')[:12]}, want {(want or 'stock')[:12]}; "
-            f"burger install {board}"
-        )
-    elif mm.get("image") and running_image(host, s) != mm["image"]:  # layered or not
-        reason = (
-            f"the container runs {_short(running_image(host, s))}, want {_short(mm['image'])}; "
-            f"burger install {board}"
-        )
-    out = [Row("-", checks[0], "FAIL" if reason else "ok", reason, [])]
-    if want:
-        ours = host.run(
-            ["docker", "exec", s.mm_ctr, "sha256sum", f"{LIB}/minimega.py"],
-            check=False,
-            capture=True,
-        ).stdout.split()[:1]
-        theirs = host.ctr("python3", "-c", PY_HASH, check=False, capture=True).stdout.split()[:1]
-        reason = ""
-        if not ours or ours != theirs:  # an unreadable file is not a match
-            reason = (
-                f"phēnix imports {(theirs or ['no minimega.py'])[0][:12]}, the minimega "
-                f"container has {(ours or ['none'])[0][:12]}; burger install {board}"
-            )
-        out.append(Row("-", checks[1], "FAIL" if reason else "ok", reason, []))
+    out = [_row(checks[0], _container_reason(host, s, mm, board))]
+    if mm.get("sha"):
+        out.append(_row(checks[1], _py_reason(host, s, board)))
     return out
