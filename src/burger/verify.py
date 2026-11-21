@@ -42,13 +42,35 @@ def _install_row(res: Resolved, man: dict, host) -> Row:
     return Row("-", "phenix-apps install", "ok" if ok else "FAIL", reason, [])
 
 
+def _needs_apps_pr(res: Resolved) -> bool:
+    """Whether an item's models need a PR the installed apps may lack."""
+    return any(i.requires.get("apps_prs") for i in [*res.items, *res.validate_only])
+
+
+def _validator_row(got, unexpected: list[str], rejects: list[Row], models: Path) -> Row:
+    """ok unless the validator rejected something unexpected or crashed without rejecting."""
+    check = "phenix-scorch-validate"
+    if unexpected or (got.returncode and not any(r.verdict == "ok" for r in rejects)):
+        tail = (unexpected or [f"{got.stdout or ''}{got.stderr or ''}"])[0]
+        tail = " ".join(tail.split())[-200:]
+        return Row("-", check, "FAIL", tail or f"exit {got.returncode}", [str(models)])
+    return Row("-", check, "ok", "", [str(models)])
+
+
+def _judged_rows(res: Resolved, got, models: Path) -> list[Row]:
+    """The validator's own row, then one per item that must be rejected."""
+    # items with expect_invalid must be rejected: the pass is the validator saying so
+    expect = {i.name: i.expect_invalid for i in expected(res, "scorch")}
+    unexpected, rejects = judge(f"{got.stdout or ''}{got.stderr or ''}", expect)
+    rejects = [Row(r.item, r.check, r.verdict, r.reason, [str(models)]) for r in rejects]
+    return [_validator_row(got, unexpected, rejects, models), *rejects]
+
+
 def _validate_rows(res: Resolved, settings, host, models: Path) -> list[Row]:
     check = "phenix-scorch-validate"
     found = host.ctr("sh", "-c", NO_VALIDATOR, check=False, capture=True).returncode == 0
     if not found:
-        needs = any(
-            i.requires.get("apps_prs") for i in [*res.items, *res.validate_only]
-        )  # the models need a PR the installed apps may lack
+        needs = _needs_apps_pr(res)
         reason = "not installed" + (" but an item needs an apps PR" if needs else "")
         return [Row("-", check, "FAIL" if needs else "skipped", reason, [])]
     stage = f"{settings.phenix_dir}/burger/{res.board.name}"
@@ -56,19 +78,32 @@ def _validate_rows(res: Resolved, settings, host, models: Path) -> list[Row]:
     got = host.ctr(
         check, f"{stage}/scenario.json", f"{stage}/models.yaml", check=False, capture=True
     )
-    # items with expect_invalid must be rejected: the pass is the validator saying so
-    expect = {i.name: i.expect_invalid for i in expected(res, "scorch")}
-    unexpected, rejects = judge(f"{got.stdout or ''}{got.stderr or ''}", expect)
-    rejects = [Row(r.item, r.check, r.verdict, r.reason, [str(models)]) for r in rejects]
-    if unexpected or (got.returncode and not any(r.verdict == "ok" for r in rejects)):
-        tail = (unexpected or [f"{got.stdout or ''}{got.stderr or ''}"])[0]
-        tail = " ".join(tail.split())[-200:]
-        return [Row("-", check, "FAIL", tail or f"exit {got.returncode}", [str(models)]), *rejects]
-    return [Row("-", check, "ok", "", [str(models)]), *rejects]
+    return _judged_rows(res, got, models)
 
 
 def _label(host: str, args: str) -> str:
     return f"vm {host}: {' '.join(args.split())[:60]}"
+
+
+def _attributed_row(n: int, checks, hits: list[int], error: str, advisory: bool) -> Row:
+    item, host, c = checks[n]
+    label = _label(host, c["args"])
+    if not hits:
+        return Row(item, label, "skipped", f"health failed, no check named: {error[:100]}", [])
+    if n in hits:
+        return _hit_row(item, label, n, checks, hits, error, advisory)
+    if len(hits) == 1 and host == checks[hits[0]][1]:
+        ran = n < hits[0]
+        return Row(item, label, "ok" if ran else "skipped", "" if ran else "not reached", [])
+    return Row(item, label, "skipped", "not confirmed", [])
+
+
+def _hit_row(item, label, n, checks, hits, error: str, advisory: bool) -> Row:
+    """A check the failure names: its own FAIL when alone, else skipped as one of several."""
+    if len(hits) > 1:
+        hosts = ", ".join(dict.fromkeys(checks[h][1] for h in hits))
+        return Row(item, label, "skipped", f"health failed on one of {hosts}: {error[:200]}", [])
+    return Row(item, label, "advisory-FAIL" if advisory else "FAIL", error[:200], [])
 
 
 def _attribute(checks, error: str, verdict: str, advisory: bool) -> list[Row]:
@@ -81,27 +116,7 @@ def _attribute(checks, error: str, verdict: str, advisory: bool) -> list[Row]:
     if verdict == "ok":
         return [Row(i, _label(h, c["args"]), "ok", "", []) for i, h, c in checks]
     hits = [n for n, (_, _, c) in enumerate(checks) if f"command '{c['args']}' failed" in error]
-    hosts = ", ".join(dict.fromkeys(checks[n][1] for n in hits))
-    rows = []
-    for n, (item, host, c) in enumerate(checks):
-        label = _label(host, c["args"])
-        if not hits:
-            rows.append(
-                Row(item, label, "skipped", f"health failed, no check named: {error[:100]}", [])
-            )
-        elif n in hits and len(hits) > 1:
-            reason = f"health failed on one of {hosts}: {error[:200]}"
-            rows.append(Row(item, label, "skipped", reason, []))
-        elif n in hits:
-            rows.append(Row(item, label, "advisory-FAIL" if advisory else "FAIL", error[:200], []))
-        elif len(hits) == 1 and host == checks[hits[0]][1]:
-            ran = n < hits[0]
-            rows.append(
-                Row(item, label, "ok" if ran else "skipped", "" if ran else "not reached", [])
-            )
-        else:
-            rows.append(Row(item, label, "skipped", "not confirmed", []))
-    return rows
+    return [_attributed_row(n, checks, hits, error, advisory) for n in range(len(checks))]
 
 
 def _error(results: dict, comp: str) -> str:
@@ -111,11 +126,9 @@ def _error(results: dict, comp: str) -> str:
     )
 
 
-def verify(res: Resolved, settings, host) -> list[Row]:
+def _host_rows(res: Resolved, settings, host, man: dict, rd_out: Path) -> list[Row]:
+    """Rows from the host itself: installs, running experiment, probes, offline validation."""
     name = res.board.name
-    rd, man = board_dir(settings, name), load_manifest(settings, name)
-    rd_out = rd / "out"
-    rd_out.mkdir(parents=True, exist_ok=True)
     rows = [
         _install_row(res, man, host),
         *minimega.rows(host, settings, man, name),
@@ -130,31 +143,45 @@ def verify(res: Resolved, settings, host) -> list[Row]:
     topo_file = rd_out / "topology.json"
     if topo_file.is_file():
         rows += app_rows(res, settings, host, json.loads(topo_file.read_text()), rd_out / "apps")
+    return rows
 
-    components, runs = compose(res, man)
+
+def _status_row(rd: Path, n: int, stage_row: tuple, advisory: bool) -> Row:
+    _, comp, stage, verdict, detail = stage_row
+    where = rd / "results" / f"run-{n}" / comp
+    shown = "advisory-FAIL" if advisory and verdict == "FAIL" else verdict
+    return Row(comp, f"status {stage}", shown, detail, [str(where)] if where.exists() else [])
+
+
+def _status_rows(res: Resolved, settings, host, rd: Path, components, runs):
+    """(rows, status, errors): a row per stage of every run, each (component, stage)'s
+    verdict, and each component's start error."""
     background = {c["name"] for c in components if c.get("background")}
     advisory_items = {i.name for i in res.items if i.advisory}
     expect = {i.name: i.expect_error for i in res.items if i.expect_error}
-    status, errors = {}, {}
+    rows, status, errors = [], {}, {}
     for n, run in enumerate(runs):
         results = collect(res, settings, host, n)
         extras = str(run.get("name", "")).startswith("extras")
-        for _, comp, stage, verdict, detail in evaluate(run, results, background, expect):
-            status[(comp, stage)] = verdict
-            where = rd / "results" / f"run-{n}" / comp
-            advisory = extras or comp in advisory_items
-            shown = "advisory-FAIL" if advisory and verdict == "FAIL" else verdict
-            rows.append(
-                Row(comp, f"status {stage}", shown, detail, [str(where)] if where.exists() else [])
-            )
+        for stage_row in evaluate(run, results, background, expect):
+            status[stage_row[1:3]] = stage_row[3]
+            rows.append(_status_row(rd, n, stage_row, extras or stage_row[1] in advisory_items))
         errors.update({c["name"]: e for c in components if (e := _error(results, c["name"]))})
+    return rows, status, errors
 
+
+def _health_rows(res: Resolved, man: dict, status: dict, errors: dict) -> list[Row]:
+    rows = []
     for item in ["", *(i for i in res.items if i.advisory and any("vm" in v for v in i.verify))]:
         comp = f"health-{item.name}" if item else "health"
         checks = health_checks(res, man, item or None)
         if checks and (comp, "start") in status:
             rows += _attribute(checks, errors.get(comp, ""), status[(comp, "start")], bool(item))
+    return rows
 
+
+def _item_rows(res: Resolved, man: dict, rd: Path, runs) -> list[Row]:
+    rows = []
     where = item_locations(runs)
     for item in res.items:
         dirs = []
@@ -162,7 +189,20 @@ def verify(res: Resolved, settings, host) -> list[Row]:
             n, comp = where[item.name]
             dirs = sorted((rd / "results" / f"run-{n}" / comp).glob("loop-*"))
         rows += run_checks(item, CheckContext(item, dirs, res.route, man, rd, res.linux_only))
+    return rows
 
+
+def verify(res: Resolved, settings, host) -> list[Row]:
+    name = res.board.name
+    rd, man = board_dir(settings, name), load_manifest(settings, name)
+    rd_out = rd / "out"
+    rd_out.mkdir(parents=True, exist_ok=True)
+    rows = _host_rows(res, settings, host, man, rd_out)
+    components, runs = compose(res, man)
+    status_rows, status, errors = _status_rows(res, settings, host, rd, components, runs)
+    rows += status_rows
+    rows += _health_rows(res, man, status, errors)
+    rows += _item_rows(res, man, rd, runs)
     fd, cfg = fdlogs_rows(res, settings, host, rows)
     man = {**man, "fdlogs": fd}
     (rd / "manifest.json").write_text(json.dumps(man, indent=2) + "\n")
@@ -183,45 +223,48 @@ def fdlogs_rows(res: Resolved, settings, host, rows: list[Row]) -> tuple[dict, d
     return summary, cfg
 
 
+def _pinned_line(pin: dict | None) -> str:
+    return f"{pinned_label(pin)} `{pin['sha'][:10]}` ({pin['from']})" if pin else "stock"
+
+
+def _apps_line(a: dict) -> str:
+    if "branch" in a:
+        return f"`{a['head'][:10]}` = branch {a['remote']}/{a['branch']}"
+    prs = ", ".join(f"#{n} `{s[:8]}`" for n, s in a["prs"].items()) or "no PRs"
+    return f"`{a['head'][:10]}` = main `{a['base'][:10]}` + {prs}"
+
+
+def _bennu_line(b: dict | None) -> str:
+    if not b:
+        return "stock bennu.qc2"
+    return (
+        f"{bennu_label(b)} `{b['sha'][:10]}` deb `{b.get('deb_version')}` wheel `{b.get('wheel')}`"
+    )
+
+
+def _row_line(r: Row) -> str:
+    cells = [r.item, r.check, r.verdict, r.reason, ", ".join(f"`{p}`" for p in r.paths)]
+    return "| " + " | ".join(" ".join(str(c).split()).replace("|", "/") for c in cells) + " |"
+
+
 def render_report(
     res: Resolved, man: dict, state: dict, rows: list[Row], fd_cfg: dict | None = None
 ) -> str:
-    b = man.get("bennu")
-    a = man["apps"]
-    prs = ", ".join(f"#{n} `{s[:8]}`" for n, s in a["prs"].items()) or "no PRs"
-    apps = (
-        f"`{a['head'][:10]}` = branch {a['remote']}/{a['branch']}"
-        if "branch" in a
-        else f"`{a['head'][:10]}` = main `{a['base'][:10]}` + {prs}"
-    )
-    bennu = (
-        f"{bennu_label(b)} `{b['sha'][:10]}` deb `{b.get('deb_version')}` wheel `{b.get('wheel')}`"
-        if b
-        else "stock bennu.qc2"
-    )
-    m = man.get("minimega")
-    mm = f"{pinned_label(m)} `{m['sha'][:10]}` ({m['from']})" if m else "stock"
-    px = man.get("phenix")
-    phx = f"{pinned_label(px)} `{px['sha'][:10]}` ({px['from']})" if px else "stock"
     lines = [
         f"# everything-burger switchboard `{res.board.name}` ({res.board.exp})",
         "",
-        f"- apps: {apps}",
-        f"- bennu: {bennu}",
-        f"- minimega: {mm}",
-        f"- phenix: {phx}",
+        f"- apps: {_apps_line(man['apps'])}",
+        f"- bennu: {_bennu_line(man.get('bennu'))}",
+        f"- minimega: {_pinned_line(man.get('minimega'))}",
+        f"- phenix: {_pinned_line(man.get('phenix'))}",
         f"- topologies: `{(man.get('topologies') or 'site route')[:10]}`"
         + (" (linux-only)" if state["linux_only"] else ""),
         f"- synced {man.get('synced')}",
         "",
         "| item | check | verdict | reason | paths |",
         "|---|---|---|---|---|",
+        *map(_row_line, rows),
     ]
-    for r in rows:
-        cells = [r.item, r.check, r.verdict, r.reason, ", ".join(f"`{p}`" for p in r.paths)]
-        lines.append(
-            "| " + " | ".join(" ".join(str(c).split()).replace("|", "/") for c in cells) + " |"
-        )
     lines += fdlogs.render_section(man.get("fdlogs") or {}, fd_cfg or fdlogs.DEFAULTS)
     fails = sum(r.verdict == "FAIL" for r in rows)
     lines += [
