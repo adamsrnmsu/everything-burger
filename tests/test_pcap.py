@@ -1,6 +1,9 @@
 import struct
 
+import pytest
+
 from burger.checks import pcap
+from burger.config import BurgerError
 from tests.conftest import make_ctx
 
 
@@ -135,3 +138,113 @@ def test_pcap_src_dst_filter(tmp_path):
     assert pcap.count_packets(p, tcp_port=502, src="10.1.2.50", dst="10.1.1.101") == 3
     assert pcap.count_packets(p, tcp_port=502, src="10.1.1.101", dst="10.1.2.50") == 1
     assert pcap.count_packets(p, tcp_port=502, src="10.9.9.9") == 0
+
+
+def ng_be(frames, link=1):
+    def blk(btype, body):
+        pad = body + b"\0" * (-len(body) % 4)
+        return struct.pack(">II", btype, len(pad) + 12) + pad + struct.pack(">I", len(pad) + 12)
+
+    out = blk(0x0A0D0D0A, struct.pack(">IHHq", 0x1A2B3C4D, 1, 0, -1))
+    out += blk(1, struct.pack(">HHI", link, 0, 65535))
+    for f in frames:
+        out += blk(6, struct.pack(">IIIII", 0, 0, 0, len(f), len(f)) + f)
+    return out
+
+
+def test_pcap_odd_ethernet_frames(tmp_path):
+    p = tmp_path / "a.pcap"
+    p.write_bytes(classic([b"\0" * 13, b"\0" * 12 + b"\x08\x00", b"\0" * 12 + b"\x81\x00"]))
+    assert pcap.count_packets(p) == 0
+    exact = b"\0" * 12 + b"\x08\x00" + ip_packet()[:20]  # an IPv4 header and nothing after
+    p.write_bytes(classic([exact]))
+    assert pcap.count_packets(p) == 1
+
+
+def test_pcap_sll2_and_short_or_wrong_version_ip(tmp_path):
+    p = tmp_path / "a.pcap"
+    p.write_bytes(
+        classic(
+            [b"\x08\x00" + b"\0" * 18 + ip_packet(), b"\x86\xdd" + b"\0" * 18 + ip_packet()],
+            link=276,
+        )
+    )
+    assert pcap.count_packets(p, tcp_port=502) == 1
+    v6 = bytes([0x65]) + ip_packet()[1:]
+    p.write_bytes(classic([v6, ip_packet()[:19], ip_packet()[:20], b""], link=101))
+    assert pcap.count_packets(p) == 1
+
+
+def test_pcap_header_edge_cases(tmp_path):
+    p = tmp_path / "a.pcap"
+    p.write_bytes(b"\x0a\x0d\x0d\x0a")
+    assert pcap.count_packets(p) == 0
+    for bad in (b"", b"\xd4\xc3\xb2\xa1" + b"\0" * 16, b"\0" * 30):
+        p.write_bytes(bad)
+        with pytest.raises(BurgerError, match="not a pcap"):
+            pcap.count_packets(p)
+
+
+def test_pcap_truncated_counts_every_whole_record(tmp_path):
+    p = tmp_path / "a.pcap"
+    p.write_bytes(classic(modbus())[:-10])
+    assert pcap.count_packets(p) == 3
+    p.write_bytes(ng(modbus())[:-10])
+    assert pcap.count_packets(p) == 3
+    p.write_bytes(ng(modbus()))  # a block ending exactly at end of file is whole
+    assert pcap.count_packets(p) == 4
+
+
+def test_pcapng_big_endian_and_second_section(tmp_path):
+    p = tmp_path / "a.pcap"
+    p.write_bytes(ng_be(modbus()))
+    assert pcap.count_packets(p, tcp_port=502) == 3
+    p.write_bytes(ng_be(modbus()) + ng(modbus(), link=101)[:0] + ng([ip_packet()], link=101))
+    assert (
+        pcap.count_packets(p, tcp_port=502) == 4
+    )  # the second section resets endianness and links
+
+
+def test_pcapng_skips_unknown_and_orphan_blocks(tmp_path):
+    p = tmp_path / "a.pcap"
+    empty = block(0x99, b"")  # a 12-byte block
+    frame = eth(ip_packet())
+    epb = lambda iface: block(6, struct.pack("<IIIII", iface, 0, 0, len(frame), len(frame)) + frame)  # noqa: E731
+    shb, idb = ng([])[:28], block(1, struct.pack("<HHI", 1, 0, 65535))
+    p.write_bytes(shb + epb(0) + idb + empty + epb(0) + epb(1) + epb(0))  # first and third orphaned
+    assert pcap.count_packets(p) == 2
+
+
+def test_pcapng_corrupt_block_length_ends_the_read(tmp_path):
+    p = tmp_path / "a.pcap"
+    good = ng(modbus())
+    p.write_bytes(good + struct.pack("<II", 6, 0) + b"\0" * 8)
+    assert pcap.count_packets(p) == 4
+
+
+def test_pcapng_caplen_beyond_block_is_clipped(tmp_path):
+    p = tmp_path / "a.pcap"
+    hdr = ip_packet()[:20]
+    data = ng([])[:28] + block(1, struct.pack("<HHI", 101, 0, 65535))
+    epb = block(6, struct.pack("<IIIII", 0, 0, 0, 24, 24) + hdr)  # claims 4 bytes more than it has
+    blen = len(epb)
+    p.write_bytes(data + epb)
+    port = struct.unpack(">H", struct.pack("<I", blen)[:2])[0]  # what the block trailer would say
+    assert pcap.count_packets(p, tcp_port=port) == 0
+
+
+def test_pcap_ip_proto_excludes_others_and_short_tcp(tmp_path):
+    p = tmp_path / "a.pcap"
+    p.write_bytes(classic([eth(ip_packet())] * 3 + [eth(ip_packet(proto=47))]))
+    assert pcap.count_packets(p, ip_proto="47") == 1
+    short = ip_packet()
+    p.write_bytes(classic([short[:22], short[:24]], link=101))
+    assert pcap.count_packets(p, tcp_port=40000) == 1  # 24 bytes holds the ports, 22 does not
+
+
+def test_pcap_check_needs_a_packet_by_default(tmp_path, settings):
+    ctx, loop = make_ctx(settings, tmp_path)
+    (loop / "a.pcap").write_bytes(classic([]))
+    assert pcap.pcap({"glob": "*.pcap"}, ctx).verdict == "FAIL"
+    (loop / "a.pcap").write_bytes(classic([eth(ip_packet())]))
+    assert pcap.pcap({"glob": "*.pcap"}, ctx).verdict == "ok"
