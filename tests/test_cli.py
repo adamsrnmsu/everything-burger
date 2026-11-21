@@ -1230,3 +1230,14 @@ def test_version_prints_the_text_as_is_not_as_rich_markup(monkeypatch, capsys):
 def test_no_command_prints_usage_to_stderr(capsys):
     assert main([]) == 2
     assert "usage: burger [--quiet] [-v] <command> ...  (burger --help)" in capsys.readouterr().err
+
+
+def test_service_rows_probe_the_phenix_cli_quietly(settings):
+    host = StrictHost({}, settings)
+    host.api_responses = {"/experiments": {}}
+    loud = watch_loud(host)
+    cli._service_rows(host, settings, lambda *a, **k: None)
+    assert any(
+        c.endswith("phenix version") for c in host.calls and [" ".join(x) for x in host.calls]
+    )
+    assert not [c for c in loud if c.endswith("phenix version")]
