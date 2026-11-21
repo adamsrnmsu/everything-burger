@@ -145,6 +145,8 @@ def test_every_vm_process_and_port_host_is_in_the_topology(settings, topologies)
             hosts = nodes(route)
             if hosts is None:
                 continue
+            if item.requires.get("ignition_server"):
+                hosts = hosts | {"ignition"}  # injected by burger
             for entry in resolve_item(item, route, None).verify:
                 if vm := entry.get("vm"):
                     h = vm["host"] if isinstance(vm["host"], list) else [vm["host"]]
