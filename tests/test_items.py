@@ -237,3 +237,10 @@ def test_item_fields_are_loaded(settings, tmp_path):
     assert (i.expect_error, i.expect_invalid, i.config, i.hosts) == ("e", "", {"a": 1}, ["h"])
     assert (i.requires, i.assets, i.path) == ({"monitor": True}, ["f"], tmp_path / "apps/zz.yaml")
     assert i.overrides == {"soap": {"config": {"a": 2}}}
+
+
+def test_override_replaces_a_dict_with_a_scalar_and_back(settings):
+    item = load_item("pcap", settings)
+    route = load_route("waterway", settings)
+    out = resolve_item(item, route, {"config": [1], "hosts": {"a": 1}})
+    assert out.config == [1] and out.hosts == {"a": 1}

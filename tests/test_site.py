@@ -306,6 +306,7 @@ def test_site_image_reuse_and_rebuild(tmp_path):
     builds = [c for c in missing.calls if c[:2] == ["docker", "build"]]
     assert len(builds) == 1 and builds[0][builds[0].index("-t") + 1] == tag
     ctx = Path(builds[0][-1])
+    assert ctx.name == f"golang_1.24-{site.tag()}" and ctx.parent.name == "build"
     assert ctx.joinpath("Dockerfile").read_text().splitlines()[0] == "FROM reg.site/golang:1.24"
     assert ctx.joinpath("burger-site.crt").read_text().startswith("-----BEGIN CERTIFICATE-----")
     changed = load_site(
@@ -528,3 +529,38 @@ def test_bad_site_fields_are_burger_errors(tmp_path, monkeypatch, body, msg):
     with pytest.raises(BurgerError, match=msg) as e:
         load_site(env=write_site(tmp_path, body), home=tmp_path)
     assert "site.yaml" in str(e.value)
+
+
+@pytest.mark.parametrize(
+    "code, strict, answer",
+    [
+        (399, True, None),
+        (400, False, None),
+        (400, True, "HTTP 400"),
+        (499, False, None),
+        (500, False, "HTTP 500"),
+        (500, True, "HTTP 500"),
+    ],
+)
+def test_probe_status_boundaries(tmp_path, code, strict, answer):
+    import http.server
+    import threading
+
+    from burger.site import probe
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(code)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *_a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        site = load_site(env=write_site(tmp_path, "mirrors: {}\n"), home=tmp_path)
+        assert probe(f"http://127.0.0.1:{srv.server_port}/", site, None, strict=strict) == answer
+    finally:
+        srv.shutdown()
