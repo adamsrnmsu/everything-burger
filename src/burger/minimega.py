@@ -54,6 +54,13 @@ def _build_layer(host, src: Path, base: str, tag: str) -> None:
     build_dockerfile(host, ctx, tag)
 
 
+def _layer_file(layer: str | None) -> Path | None:
+    src = Path(layer) if layer else None
+    if src and not src.is_file():
+        raise BurgerError(f"the route's minimega_layer {src} is not a file")
+    return src
+
+
 def build_image(host, wt: Path, sha: str, layer: str | None = None) -> str:
     """Build minimega's own docker/Dockerfile from the worktree; the image tag.
     The Dockerfile runs minimega's check, build and test scripts, so a broken change fails here.
@@ -64,9 +71,7 @@ def build_image(host, wt: Path, sha: str, layer: str | None = None) -> str:
     `layer` is the route's minimega_layer: a Dockerfile the range puts on top of upstream
     minimega (the arm64 rig adds firmware and a kvm wrapper). It is built from a copy of
     its directory with its first FROM pointed at the PR build."""
-    src = Path(layer) if layer else None
-    if src and not src.is_file():
-        raise BurgerError(f"the route's minimega_layer {src} is not a file")
+    src = _layer_file(layer)
     tag = image_tag(sha, _layer_hash(src) if src else None)
     if _built(host, tag):
         logger.info("minimega image {} already built", tag)

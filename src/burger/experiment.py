@@ -436,6 +436,13 @@ def _log_gave_up(health: bool, i: int, attempt: int, failed: list, log) -> None:
     logger.warning("run {} attempt {} failed: {} (output: {})", i, attempt, failed[0][4], log)
 
 
+def _write_attempt_log(res, settings, i: int, attempt: int, output: str):
+    log = board_dir(settings, res.board.name) / "results" / f"run-{i}-attempt-{attempt}.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(output)
+    return log
+
+
 def _scorch_run(res, settings, host, runs, i, judge, settle, clock, first_cap) -> None:
     """Run i of the scorch: health retries until healthy or --settle runs out."""
     exp, run = res.board.exp, runs[i]
@@ -472,9 +479,7 @@ def _scorch_run(res, settings, host, runs, i, judge, settle, clock, first_cap) -
                 clock.sleep(30)
                 continue
             attempt += 1
-            log = board_dir(settings, res.board.name) / "results" / f"run-{i}-attempt-{attempt}.log"
-            log.parent.mkdir(parents=True, exist_ok=True)
-            log.write_text(output)
+            log = _write_attempt_log(res, settings, i, attempt, output)
             failed = _scorch_failed(res, settings, host, run, i, since, judge, timed_out, first_cap)
             if not failed:
                 logger.success("run {} ({}) passed on attempt {}", i, run.get("name"), attempt)
