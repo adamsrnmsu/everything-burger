@@ -73,26 +73,34 @@ def stays_swapped(names: str) -> str:
     return f"{names} {'stay' if ' and ' in names else 'stays'} swapped"
 
 
-def summary_panel(
-    name: str, rows: list[Row], report, timings=None, left_up=None, swapped: str = ""
-) -> Panel:
-    """The end of a run in one box: verdict counts, time per step, report, and
-    whether the experiment is still up (`swapped` names the containers on the board's own build)."""
+def _counts(rows: list[Row]) -> Text:
     counts = Text()
     for verdict, style in (("ok", "green"), ("FAIL", "red"), ("WARN", "yellow")):
         n = sum(r.verdict == verdict for r in rows)
         if n or verdict != "WARN":  # no yellow at all unless something warned
             counts.append(f"{n} {verdict}   ", style=f"bold {style}" if n else "dim")
-    lines = [counts]
-    if timings:
-        steps = " · ".join(f"{k} {mmss(v)}" for k, v in timings.items())
-        lines.append(Text(f"{steps}   total {mmss(sum(timings.values()))}", style="dim"))
+    return counts
+
+
+def _report_line(name: str, report, left_up, swapped: str) -> str:
     tail = f"report: {report}"
     if left_up is not None:
         tail += "   experiment left up" if left_up else "   experiment brought down"
         if left_up and swapped:
             tail += f"; {stays_swapped(swapped)} until ./burger down {name}"
-    lines.append(Text(tail))
+    return tail
+
+
+def summary_panel(
+    name: str, rows: list[Row], report, timings=None, left_up=None, swapped: str = ""
+) -> Panel:
+    """The end of a run in one box: verdict counts, time per step, report, and
+    whether the experiment is still up (`swapped` names the containers on the board's own build)."""
+    lines = [_counts(rows)]
+    if timings:
+        steps = " · ".join(f"{k} {mmss(v)}" for k, v in timings.items())
+        lines.append(Text(f"{steps}   total {mmss(sum(timings.values()))}", style="dim"))
+    lines.append(Text(_report_line(name, report, left_up, swapped)))
     bad = any(r.verdict == "FAIL" for r in rows)
     return Panel(Text("\n").join(lines), title=name, title_align="left",
                  border_style="red" if bad else "green", expand=False)  # fmt: skip
