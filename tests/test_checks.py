@@ -153,3 +153,27 @@ def test_status_error_lines_fail_the_metadata_log_check(settings, tmp_path):
     assert CHECKS["log"](spec, ctx).verdict == "ok"
     (loop / "stop-x.json").write_text(json.dumps({"logs": ["[t] ERROR : kill failed"]}))
     assert CHECKS["log"](spec, ctx).verdict == "FAIL"
+
+
+def test_missing_output_names_where_it_looked(settings, tmp_path):
+    ctx, loop = make_ctx(settings, tmp_path)
+    assert CHECKS["files"]({"glob": "*.x"}, ctx).reason == f"no output found at {loop}/*.x"
+    ctx = dataclasses.replace(ctx, dirs=[])
+    assert CHECKS["files"]({"glob": "*.x"}, ctx).reason == "no output found at (no loop dirs)/*.x"
+
+
+def test_empty_files_and_header_only_csv_pass_without_minimums(settings, tmp_path):
+    ctx, loop = make_ctx(settings, tmp_path)
+    (loop / "e.bin").write_bytes(b"")
+    (loop / "h.csv").write_text("t,v\n")
+    assert CHECKS["files"]({"glob": "e.bin"}, ctx).verdict == "ok"
+    assert CHECKS["csv"]({"glob": "h.csv"}, ctx).verdict == "ok"
+    assert CHECKS["csv"]({"glob": "h.csv", "columns": ["x"]}, ctx).verdict == "FAIL"
+
+
+def test_collect_status_keeps_a_file_stamped_exactly_at_since(tmp_path):
+    loop = tmp_path / "c" / "loop-0"
+    loop.mkdir(parents=True)
+    (loop / "s.json").write_text('{"component": "c", "stage": "start", "start": "2026-11-10"}')
+    assert list(collect_status(tmp_path, since="2026-11-10")) == [("c", "start")]
+    assert collect_status(tmp_path, since="2026-11-11") == {}
