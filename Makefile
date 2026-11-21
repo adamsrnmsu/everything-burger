@@ -52,5 +52,5 @@ crap: ## CRAP per function (complexity and coverage); fails above CRAP_MAX
 dry: ## duplicate-code candidates; fails on any scoring DRY_MIN or more
 	mkdir -p .metrics; dryer --threshold $(DRY_MIN) -s src | tee .metrics/dry.out; ! grep -q ^DUPLICATE .metrics/dry.out
 
-mutate: ## mutation testing (slow; rewrites src/ while it runs: do not edit or test meanwhile)
+mutate: ## mutation testing (slow: each mutant reruns the suite, in overlays under target/)
 	mutator -s src
