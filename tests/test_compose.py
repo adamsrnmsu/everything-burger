@@ -169,17 +169,13 @@ def test_explicit_runs_keep_advisory_extras(settings):
     assert [r["name"] for r in runs[:2]] == ["health", "provider"]
 
 
-def test_holds_items_start_last_but_other_stages_keep_order(settings):
-    r = res(settings, "main")
-    scorch = [i for i in r.items if i.kind == "scorch" and not i.advisory]
-    starts = [i for i in scorch if "start" in i.stages]
-    stops = [i for i in scorch if "stop" in i.stages]
-    first = starts[0]
-    r.items = [dataclasses.replace(i, holds=i.name in (first.name, stops[0].name)) for i in r.items]
+def test_holds_items_start_last(settings):
+    r = res(settings, "harden")
+    assert r.board.runs is None
     _, runs = compose(r, MAN)
-    main = next(x for x in runs if x["name"] == "main")
-    assert main["start"][-1] == first.name
-    assert main["stop"][0] == stops[0].name
+    main = next(x for x in runs if x["name"] == "harden")
+    assert main["start"] == ["pcap", "tcpdump", "mm", "pipe", "disruption"]
+    assert main["stop"] == ["pcap", "tcpdump", "mm"]
 
 
 def test_board_with_no_scorch_items_has_no_main_run(settings):
