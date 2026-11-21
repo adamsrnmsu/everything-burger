@@ -25,9 +25,9 @@
 # No two items share a component name, so nothing else had to be chosen.
 #
 # bennu is stock: no included item needs a bennu PR.
-about: "main + the open phenix-apps PRs it needs (#166, #205) together"
+about: "main + the open phenix-apps PRs it needs (#166, #205, #222) together"
 route: waterway
-apps: {prs: [166, 205]}
+apps: {prs: [166, 205, 222]}
 items:
   disruption: on
   disruption-dos: on
@@ -54,12 +54,18 @@ items:
   apps/mgmt-vlan-alias: on
   apps/mirror: on
   apps/mgmt_tap: on
+  # otsim before helics: helics counts the helics/federate annotations otsim adds
+  apps/otsim: on
+  bennu/otsim-fep-client: on
   apps/helics: on
+  bennu/helics-otsim: on
   apps/helics-no-broker: on
   bennu/field-device: on
   bennu/simulink-provider: on
   bennu/modbus-polled: on
 overrides:
+  # #222 fixes the fd-client behind a fep, so here the check is required, not advisory
+  bennu/otsim-fep-client: {advisory: false}
   pcap:
     config:
       vms:

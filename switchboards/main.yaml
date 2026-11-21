@@ -45,7 +45,11 @@ items:
   apps/mgmt-vlan-alias: on
   apps/mirror: on
   apps/mgmt_tap: on
+  # otsim before helics: helics counts the helics/federate annotations otsim adds
+  apps/otsim: on
+  bennu/otsim-fep-client: on
   apps/helics: on
+  bennu/helics-otsim: on
   apps/helics-no-broker: on
   bennu/field-device: on
   bennu/simulink-provider: on

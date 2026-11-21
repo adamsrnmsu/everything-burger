@@ -1,0 +1,17 @@
+name: otsim-fep-client
+kind: bennu
+type: otsim-fep-client
+about: >
+  Pins an ot-sim app bug on main: an fd-client behind a fep should poll what the fep
+  serves downstream (DNP3 on 10.1.1.102:20000 by default), but FieldDeviceClient picks
+  its protocol from the fep's upstream registers, so the provider gets a Modbus client
+  to 10.1.1.102:502, where nothing listens (fixed by apps #222). Advisory, so it
+  reports advisory-FAIL without failing the board or holding the health run; integrate
+  carries #222 and makes it required. Drop `advisory` when #222 merges. Reads the config apps/otsim injects, so switch both on together.
+routes: [waterway, waterway-arm64]
+advisory: true
+verify:
+  - vm:
+      host: "{route.provider}"
+      run: "grep -A1 'dnp3-outstation. mode=.client.' /etc/ot-sim/config.xml"
+      expect: "<endpoint>10.1.1.102:20000</endpoint>"

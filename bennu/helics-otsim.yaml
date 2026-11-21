@@ -1,0 +1,21 @@
+name: helics-otsim
+kind: bennu
+type: helics-otsim
+about: >
+  The helics app counting the federates other apps announce. apps/otsim's fd-server on
+  the first RTU carries a helics/federate annotation (fed-count 1, broker = the root),
+  and the helics app runs after it (the board lists apps/otsim before apps/helics: helics
+  reads annotations at pre-start, so it must run after every app that adds them). A
+  pass means the root broker's start script asks for one federate (-f1, not -f0) and the
+  federate got helics's wait-for-broker script for the root's IP. helics_broker itself
+  is not in bennu.qc2, so the scripts are checked, not a running federation. Needs
+  apps/otsim and apps/helics on, in that order.
+routes: [waterway, waterway-arm64]
+# Addresses are waterway's (and the arm64 range's): rtu-1 IF0 is 10.1.1.101.
+verify:
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "grep -q 'helics_broker .* -f1 ' /etc/phenix/startup/90-helics-broker.sh"
+  - vm:
+      host: "{route.rtus[0]}"
+      run: "grep -q 'ping .* 10.1.1.101 ' /etc/phenix/startup/5-wait-broker.sh"

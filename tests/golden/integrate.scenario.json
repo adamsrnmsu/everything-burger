@@ -164,6 +164,52 @@
         "name": "mgmt_tap"
       },
       {
+        "hosts": [
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "modbus": [
+                {
+                  "name": "bus-01",
+                  "type": "bus"
+                },
+                {
+                  "name": "brkr-01",
+                  "type": "breaker"
+                }
+              ],
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "connected_rtus": [
+                "rtu-1"
+              ],
+              "type": "fep"
+            }
+          },
+          {
+            "hostname": "simulink-provider",
+            "metadata": {
+              "connected_rtus": [
+                "rtu-2"
+              ],
+              "type": "fd-client"
+            }
+          }
+        ],
+        "metadata": {
+          "helics": {
+            "broker": {
+              "hostname": "rtu-1|IF0"
+            }
+          }
+        },
+        "name": "ot-sim"
+      },
+      {
         "metadata": {
           "broker": {
             "root": "rtu-1|IF0"
@@ -187,7 +233,32 @@
                         "wait": true
                       },
                       {
+                        "args": "grep -A1 '<io name=.helics-federate.>' /etc/ot-sim/config.xml | grep -Eq '<broker-endpoint>10.1.1.101</broker-endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -A1 'modbus-outstation. mode=.server.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.1.101:502</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q '<tag>bus-01.voltage</tag>' /etc/ot-sim/config.xml && grep -q '<tag>brkr-01.controls</tag>' /etc/ot-sim/config.xml",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
                         "args": "grep -q -e '--name rtu-1' /etc/phenix/startup/90-helics-broker.sh",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'helics_broker .* -f1 ' /etc/phenix/startup/90-helics-broker.sh",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q 'ping .* 10.1.1.101 ' /etc/phenix/startup/5-wait-broker.sh",
                         "type": "exec",
                         "wait": true
                       },
@@ -223,6 +294,16 @@
                         "wait": true
                       },
                       {
+                        "args": "grep -A1 'modbus-outstation. mode=.client.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.1.101:502</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -A1 'dnp3-outstation. mode=.server.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.1.102:20000</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
                         "args": "ss -Hltn '( sport = :502 )' | grep -q .",
                         "type": "exec",
                         "wait": true
@@ -251,6 +332,16 @@
                         "args": "dpkg-query -W bennu 2>/dev/null | cut -f2 | grep . || echo none",
                         "type": "exec",
                         "validator": "[ \"$(cat)\" != none ] || { echo \"$1: bennu not installed\" >&2; exit 1; }",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -q ot-sim-message-bus /etc/ot-sim/config.xml",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "grep -A1 'dnp3-outstation. mode=.client.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.1.102:20000</endpoint>'",
+                        "type": "exec",
                         "wait": true
                       },
                       {

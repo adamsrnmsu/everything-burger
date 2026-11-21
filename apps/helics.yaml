@@ -6,7 +6,7 @@ about: >
   #195's app lookups (extract_node_ip, require_node, extract_node_hostname_for_ip)
   turn that into the broker start script injected into the RTU. helics_broker
   itself is not in bennu.qc2, so only the script is checked, not a running broker.
-routes: [waterway]
+routes: [waterway, waterway-arm64]
 config: {broker: {root: "{route.rtus[0]}|IF0"}}
 verify:
   - vm:

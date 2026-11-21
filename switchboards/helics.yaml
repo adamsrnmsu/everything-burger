@@ -1,0 +1,13 @@
+# The ot-sim and helics apps on the arm64 rig: main's otsim/helics items plus the range's
+# field devices for health. otsim is listed first so helics runs after it and counts
+# its federate (see bennu/helics-otsim).
+about: "ot-sim and helics apps on upstream main, on the arm64 waterway range"
+route: waterway-arm64
+apps: {prs: []}
+items:
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  apps/otsim: on
+  bennu/otsim-fep-client: on
+  apps/helics: on
+  bennu/helics-otsim: on
