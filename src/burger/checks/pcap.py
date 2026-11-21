@@ -91,19 +91,24 @@ def count_fragments(path: Path) -> int:
     return sum(struct.unpack(">H", ip[6:8])[0] & 0x3FFF != 0 for ip in _ipv4_packets(path))
 
 
-def _matches(ip: bytes, tcp_port, udp_port, ip_proto) -> bool:
-    """Whether ip has the IP protocol ip_proto, or (in a first fragment) the right TCP/UDP
-    port; with no criteria, every packet matches."""
-    if tcp_port is None and udp_port is None and ip_proto is None:
-        return True
-    proto, hdr = ip[9], (ip[0] & 0x0F) * 4
-    if ip_proto is not None and proto == int(ip_proto):
-        return True
-    want = tcp_port if proto == 6 else udp_port if proto == 17 else None
+def _has_port(ip: bytes, want) -> bool:
+    """Whether a first fragment carries port `want` (source or destination)."""
+    hdr = (ip[0] & 0x0F) * 4
     first_fragment = struct.unpack(">H", ip[6:8])[0] & 0x1FFF == 0
     if want is None or not first_fragment or len(ip) < hdr + 4:
         return False
     return int(want) in struct.unpack(">HH", ip[hdr : hdr + 4])
+
+
+def _matches(ip: bytes, tcp_port, udp_port, ip_proto) -> bool:
+    """Whether ip has the IP protocol ip_proto, or the right TCP/UDP port; with no criteria,
+    every packet matches."""
+    if tcp_port is None and udp_port is None and ip_proto is None:
+        return True
+    proto = ip[9]
+    if ip_proto is not None and proto == int(ip_proto):
+        return True
+    return _has_port(ip, tcp_port if proto == 6 else udp_port if proto == 17 else None)
 
 
 def count_packets(
