@@ -192,7 +192,7 @@ class StrictMM(FakeMM):
             res = subprocess.CompletedProcess(cmd, 1, "", "")
         elif cmd[-1].endswith("vm info"):
             res = subprocess.CompletedProcess(
-                cmd, 0, 'name,bridge\nrtu-1,"[br-one, br-one]"\nrtu-2,"[br-two]"\n', ""
+                cmd, 0, 'name,bridge\nrtu-1,"[br-one, br-two]"\nrtu-2,"[br-two]"\n', ""
             )
         for text, (rc, out, err) in self.broken.items():
             if text in line:
@@ -277,3 +277,45 @@ def test_parser_edges():
     assert mm_capture.pcap_frames(corrupt) == [plain]
     whole = pcapng([plain, plain, plain])
     assert mm_capture.pcap_frames(whole[:-5]) == [plain, plain]  # a cut-off last block
+
+
+def test_delete_id_must_remove_only_that_capture(settings, monkeypatch):
+    class Keeps(StrictMM):  # `delete id` succeeds but removes nothing
+        def delete(self, w):
+            if w[0] != "id":
+                super().delete(w)
+
+    class Wipes(StrictMM):  # `delete id` removes every capture
+        def delete(self, w):
+            super().delete(["id", "all"] if w[0] == "id" else w)
+
+    for cls in (Keeps, Wipes):
+        host = cls(settings, refuse=["snaplen=70000", "vms=", "format="])
+        row = next(r for r in run(settings, host, monkeypatch) if r.check == "delete id")
+        assert row.verdict == "FAIL" and row.reason.startswith(
+            "BurgerError: after deleting id 1, listed: "
+        )
+
+
+def test_delete_id_captures_the_first_and_the_last_rtu(settings, monkeypatch):
+    host = StrictMM(settings, refuse=["snaplen=70000", "vms=", "format="])
+    monkeypatch.setenv("BURGER_MMCAP_SECONDS", "0")
+    res = resolved(settings, "main")
+    res.route.values["rtus"] = ["rtu-1", "rtu-2", "rtu-3"]
+    mm_capture.run(host, settings, res, {})
+    named = [
+        c[-1].split()
+        for c in host.calls
+        if "burger-mmcap-a-" in c[-1] or "burger-mmcap-b-" in c[-1]
+    ]
+    assert [w[5] for w in named] == ["rtu-1", "rtu-3"]
+
+
+def test_left_mirrors_are_named(settings, monkeypatch):
+    host = StrictMM(settings)
+    host.mirrors = [["mega_bridge", "ebwes-main"]]
+    row = next(r for r in run(settings, host, monkeypatch) if r.check == "mirrors cleaned")
+    assert (
+        row.reason
+        == "BurgerError: 1 mirrors left: {'bridge': 'mega_bridge', 'namespace': 'ebwes-main'}"
+    )

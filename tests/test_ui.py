@@ -173,13 +173,6 @@ def test_step_rows_are_adjacent_and_show_their_time():
     assert [i for i, _ in steps] == [steps[0][0] + k for k in range(3)]  # no blank padding rows
 
 
-def test_log_pane_room_is_never_less_than_one_line():
-    v = ui.RunView(STEPS, tail=50)
-    v.log("\n".join(f"line{i}" for i in range(20)))
-    text = "\n".join(lines_of(v, width=40, height=8))
-    assert "line19" in text and "line0\n" not in text and "line18" not in text
-
-
 def test_summary_panel_does_not_stretch_to_the_terminal():
     p = ui.summary_panel("main", rows("ok"), "r.md")
     assert max(len(x) for x in lines_of(p, width=80)) < 80

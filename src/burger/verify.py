@@ -196,7 +196,7 @@ def verify(res: Resolved, settings, host) -> list[Row]:
     name = res.board.name
     rd, man = board_dir(settings, name), load_manifest(settings, name)
     rd_out = rd / "out"
-    rd_out.mkdir(parents=True, exist_ok=True)
+    rd_out.mkdir(exist_ok=True)
     rows = _host_rows(res, settings, host, man, rd_out)
     components, runs = compose(res, man)
     status_rows, status, errors = _status_rows(res, settings, host, rd, components, runs)

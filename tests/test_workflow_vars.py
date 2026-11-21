@@ -179,3 +179,8 @@ def test_failed_row_shows_the_output_tail(settings):
     assert rows[0].reason == "rc=1: " + ("x" * 300 + "tail")[-200:]
     rows = strict(settings, **{"R:/plain": (1, "from stdout", "from stderr")})[1]
     assert rows[0].reason == "rc=1: from stdout"
+
+
+def test_config_get_that_fails_is_a_failed_row(settings):
+    rows = strict(settings, **{"config get": (1, "", "gone")})[1]
+    assert rows[-1].verdict == "FAIL" and rows[-1].reason == "rc=1: gone"
