@@ -391,3 +391,81 @@ def test_prs_lists_minimega_prs_the_boards_carry(settings, monkeypatch):
     host = FakeHost({"git ls-remote": subprocess.CompletedProcess([], 0, "new\trefs/x\n", "")})
     (row,) = [r for r in prs(settings, host, "me") if r["repo"] == "sandia-minimega/minimega"]
     assert (row["number"], row["boards"], row["stale"]) == (1782, ["mm"], ["mm"])
+
+
+def _gh_host(open_by_slug, rc=0):
+    def reply(cmd, **kw):
+        slug = cmd[cmd.index("-R") + 1]
+        return json.dumps(open_by_slug.get(slug, []))
+
+    class Gh(FakeHost):
+        def run(self, cmd, check=True, capture=False, **kw):
+            res = super().run(cmd, check, capture, **kw)
+            if cmd[:3] == ["gh", "pr", "list"]:
+                return subprocess.CompletedProcess(cmd, rc, reply([str(c) for c in cmd]), "")
+            return res
+
+    return Gh()
+
+
+def test_prs_lists_the_authors_open_prs_without_any_board(settings, monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/gh")
+    monkeypatch.setattr("burger.vcs.all_switchboards", lambda s: [])
+    long = "t" * 70
+    host = _gh_host(
+        {
+            "sandialabs/sceptre-phenix-apps": [
+                {"number": 9, "title": long, "headRefOid": "h9", "isDraft": True},
+                {"number": 3, "title": "short", "headRefOid": "h3", "isDraft": False},
+            ],
+            "sandialabs/sceptre-bennu": [
+                {"number": 5, "title": "b", "headRefOid": "h5", "isDraft": True}
+            ],
+        }
+    )
+    rows = prs(settings, host, "me")
+    assert [(r["repo"], r["number"]) for r in rows] == [
+        ("sandialabs/sceptre-phenix-apps", 3),
+        ("sandialabs/sceptre-phenix-apps", 9),
+        ("sandialabs/sceptre-bennu", 5),
+    ]  # per repo in SLUGS order, PRs ascending
+    by_n = {r["number"]: r for r in rows}
+    assert by_n[3] == {
+        "repo": "sandialabs/sceptre-phenix-apps",
+        "number": 3,
+        "head": "h3",
+        "boards": [],
+        "title": "short",
+        "stale": [],
+    }
+    assert by_n[9]["title"] == "t" * 60 + " [draft]" and by_n[9]["head"] == "h9"
+    assert by_n[5]["title"] == "b [draft]"
+    cmd = next(c for c in host.calls if c[:3] == ["gh", "pr", "list"])
+    assert cmd[cmd.index("--author") + 1] == "me" and "open" in cmd
+
+
+def test_prs_survives_gh_failing(settings, monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/gh")
+    monkeypatch.setattr("burger.vcs.all_switchboards", lambda s: [])
+    assert prs(settings, _gh_host({"sandialabs/sceptre-bennu": [{"number": 1}]}, rc=1), "me") == []
+
+
+def test_prs_a_carried_pr_that_is_open_takes_its_title_and_flags_a_moved_head(
+    settings, monkeypatch
+):
+    b = dataclasses.replace(load_switchboard("baseline", settings), apps_prs=[7])
+    monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/gh")
+    monkeypatch.setattr("burger.vcs.all_switchboards", lambda s: ["x", "y"])
+    monkeypatch.setattr("burger.vcs.load_switchboard", lambda n, s: b)
+    (settings.work / "x").mkdir()
+    (settings.work / "x" / "manifest.json").write_text(json.dumps({"apps": {"prs": {"7": "old"}}}))
+    host = _gh_host(
+        {
+            "sandialabs/sceptre-phenix-apps": [
+                {"number": 7, "title": "seven", "headRefOid": "new", "isDraft": False}
+            ]
+        }
+    )
+    (row,) = prs(settings, host, "me")
+    assert row["boards"] == ["x", "y"] and row["title"] == "seven"
+    assert row["stale"] == ["x"]  # y was never synced: nothing to be behind

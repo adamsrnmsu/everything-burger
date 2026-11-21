@@ -608,3 +608,118 @@ def test_warn_swapped_names_a_swapped_phenix(settings, labels, named):
     finally:
         logger.remove(sink)
     assert any(named in m for m in seen)
+
+
+def _spy_steps(monkeypatch):
+    """Every step function `_one` can call, recording (name, args)."""
+    calls = []
+
+    def spy(name, ret=None):
+        return lambda *a, **k: calls.append((name, a, k)) or ret
+
+    for name in ("build", "install", "up", "scorch", "down", "services"):
+        monkeypatch.setattr(cli.experiment, name, spy(name))
+    monkeypatch.setattr(cli.minimega, "restore", spy("mm_restore"))
+    monkeypatch.setattr(cli.phenix, "restore", spy("px_restore"))
+    monkeypatch.setattr(cli.vcs, "sync", spy("sync"))
+    monkeypatch.setattr(cli, "bennu_check", spy("bennu_check"))
+    monkeypatch.setattr(cli, "_verify", spy("verify", 7))
+    return calls
+
+
+def _step_main(monkeypatch, settings, *argv):
+    monkeypatch.setattr(cli, "Host", lambda *a: FakeHost(settings=settings))
+    monkeypatch.setattr(cli.Settings, "from_env", classmethod(lambda cls, root=None: settings))
+    return main(["--quiet", *argv])
+
+
+def test_each_step_command_calls_its_experiment_step(settings, monkeypatch):
+    calls = _spy_steps(monkeypatch)
+    for argv in (["build", "baseline"], ["install", "baseline"]):
+        assert _step_main(monkeypatch, settings, *argv) == 0
+    assert _step_main(monkeypatch, settings, "up", "baseline", "--timeout", "5") == 0
+    assert _step_main(
+        monkeypatch, settings, "scorch", "baseline", "--run", "2", "--settle", "3",
+        "--first-cap", "4",
+    ) == 0  # fmt: skip
+    assert [n for n, _, _ in calls] == ["build", "install", "up", "scorch"]
+    assert all(a[1] is settings and a[0].board.name == "baseline" for _, a, _ in calls)
+    assert calls[2][1][3:] == (5,)
+    assert calls[3][1][3:] == (2, 3) and calls[3][2] == {"first_cap": 4}
+
+
+def test_down_stops_services_then_restores_minimega_and_phenix(settings, monkeypatch):
+    calls = _spy_steps(monkeypatch)
+    assert _step_main(monkeypatch, settings, "down", "baseline") == 0
+    assert [n for n, _, _ in calls] == ["down", "services", "mm_restore", "px_restore"]
+    assert calls[1][1][3] == "stop"
+    assert [len(a) for _, a, _ in calls] == [2, 4, 2, 2]
+
+
+def test_verify_step_returns_the_verify_exit_code(settings, monkeypatch):
+    _spy_steps(monkeypatch)
+    assert _step_main(monkeypatch, settings, "verify", "baseline") == 7
+
+
+def test_steps_after_up_follow_the_state_linux_only_flag(settings, monkeypatch):
+    """scorch/verify/down/probe use the flag the experiment was brought up with; build does
+    what its own flag says."""
+    _spy_steps(monkeypatch)
+    seen = []
+    real = cli._board
+    monkeypatch.setattr(
+        cli, "_board", lambda s, n, lo=False, **k: seen.append(lo) or real(s, n, lo, **k)
+    )
+    (settings.work / "baseline").mkdir()
+    (settings.work / "baseline" / "state.json").write_text('{"linux_only": true}')
+    for cmd in ("scorch", "verify", "down"):
+        assert _step_main(monkeypatch, settings, cmd, "baseline") in (0, 7)
+    assert seen == [True, True, True]
+    seen.clear()
+    _step_main(monkeypatch, settings, "build", "baseline")
+    _step_main(monkeypatch, settings, "build", "baseline", "--linux-only")
+    assert seen == [False, True]
+
+
+def test_route_flag_reaches_the_board(settings, monkeypatch):
+    _spy_steps(monkeypatch)
+    seen = []
+    real = cli._board
+    monkeypatch.setattr(
+        cli, "_board", lambda s, n, lo=False, **k: seen.append(k["route"]) or real(s, n, lo, **k)
+    )
+    _step_main(monkeypatch, settings, "build", "baseline", "--route", "waterway")
+    assert seen == ["waterway"]
+
+
+def test_bennu_check_needs_a_bennu_build(settings, monkeypatch, capsys):
+    calls = _spy_steps(monkeypatch)
+    monkeypatch.setattr(cli.vcs, "load_manifest", lambda s, n: {"bennu": None})
+    assert _step_main(monkeypatch, settings, "bennu-check", "baseline") == 1
+    assert "switchboard 'baseline' has no bennu build" in capsys.readouterr().err
+    assert calls == []
+    monkeypatch.setattr(cli.vcs, "load_manifest", lambda s, n: {"bennu": {"sha": "x"}})
+    assert _step_main(monkeypatch, settings, "bennu-check", "baseline") == 0
+    assert calls[0][0] == "bennu_check"
+    assert calls[0][1][1] == settings.work / "baseline" / "bennu"
+
+
+@pytest.mark.parametrize("verdicts,code", [(["ok", "FAIL"], 1), (["ok", "WARN"], 0)])
+def test_probe_exit_code_follows_failures(settings, monkeypatch, capsys, verdicts, code):
+    from burger.checks import Row
+
+    got = []
+    rows = [Row("-", f"p{i}", v, "", []) for i, v in enumerate(verdicts)]
+    monkeypatch.setattr(cli.vcs, "load_manifest", lambda s, n: {"m": 1})
+    monkeypatch.setattr(cli.probes, "run", lambda *a: got.append(a[3:]) or rows)
+    assert _step_main(monkeypatch, settings, "probe", "baseline", "x", "y") == code
+    assert got == [({"m": 1}, ["x", "y"])]
+    assert "p0" in capsys.readouterr().out
+    _step_main(monkeypatch, settings, "probe", "baseline")
+    assert got[-1] == ({"m": 1}, None)
+
+
+def test_step_exit_code_is_the_worst_board(settings, monkeypatch):
+    codes = {"baseline": 0, "main": 1}
+    monkeypatch.setattr(cli, "_one", lambda a, s, h, n: codes[n])
+    assert _step_main(monkeypatch, settings, "sync", "baseline", "main") == 1
