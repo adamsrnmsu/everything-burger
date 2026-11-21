@@ -91,6 +91,83 @@ def bennu_injections(man: dict, stage_dir: str) -> list:
     return inj
 
 
+def _docker_run(host, plat: list[str], mounts: list[str], image: str, *cmd, env=(), **kw):
+    """`docker run --rm` of image with each mount as -v and env as -e."""
+    args = ["docker", "run", *plat, "--rm", *[a for e in env for a in ("-e", e)]]
+    args += [a for m in mounts for a in ("-v", m)]
+    return host.run([*args, image, *cmd], **kw)
+
+
+def _build_pybennu(host, wt: Path, out: Path, man: dict, pip: list[str], plat, image, pip_env):
+    # Copied first: the build backend may write next to the sources.
+    script = (
+        f"cp -r {shlex.quote(str(wt.resolve()))}/src/pybennu /tmp/pyb && "
+        # bennu's own `make dist`; jammy's pip cannot run the uv_build backend.
+        "pip3 install -q uv && uv build -q --wheel -o /tmp/w /tmp/pyb "
+        "&& cp /tmp/w/pybennu-*.whl /out/ && "
+        f"chown {os.getuid()}:{os.getgid()} /out/pybennu-*.whl"
+    )
+    mounts = [f"{wt.resolve()}:{wt.resolve()}:ro", f"{out}:/out"]
+    _docker_run(host, plat, mounts, image, "bash", "-ec", script)
+    man["bennu"]["wheel"] = next(out.glob("pybennu-*.whl")).name
+    logger.info(f"pybennu wheel {man['bennu']['wheel']}")
+    if pip:  # new deps of the PR that the image lacks; the VMs have no index
+        _build_extra_wheels(host, out, man, pip, plat, image, pip_env)
+
+
+def _build_extra_wheels(host, out: Path, man: dict, pip: list[str], plat, image, pip_env):
+    shutil.rmtree(out / "wheels", ignore_errors=True)
+    script = (
+        f"pip3 wheel -q --no-deps -w /out/wheels {shlex.join(pip)} && "
+        f"chown -R {os.getuid()}:{os.getgid()} /out/wheels"
+    )
+    env = [f"{k}={v}" for k, v in (pip_env or {}).items()]
+    _docker_run(host, plat, [f"{out}:/out"], image, "bash", "-ec", script, env=env)
+    man["bennu"]["wheels"] = sorted(p.name for p in (out / "wheels").glob("*.whl"))
+    logger.info(f"extra wheels {', '.join(man['bennu']['wheels'])}")
+
+
+# On arm64 the deb is repacked without its Depends line: that lists -dev packages the offline
+# RTU images do not carry (only the runtime libs), so dpkg would leave bennu unconfigured. Older
+# heads also have CpackConfig.cmake hard-code `Architecture: amd64` (bennu #78 fixes that) and
+# dpkg on the arm64 RTUs refuses such a deb, so that repack relabels it with the build's own
+# architecture; a deb that already says so (#78) keeps its Architecture. deb-name and deb-arch
+# record what cpack made, for the manifest (relabel_needed) and the arm64deb board.
+_RELABEL = (
+    " && ls bennu-*.deb > /out/deb-name"
+    " && dpkg-deb --field /out/bennu.deb Architecture > /out/deb-arch"
+    ' && arch=$(dpkg --print-architecture) && fix="/^Depends:/d" '
+    '&& if [ "$(cat /out/deb-arch)" != "$arch" ]; then '
+    'fix="s/^Architecture:.*/Architecture: $arch/;$fix"; fi '
+    "&& d=$(mktemp -d) && dpkg-deb -R /out/bennu.deb $d && "
+    'sed -i "$fix" $d/DEBIAN/control '
+    "&& dpkg-deb --root-owner-group -b $d /out/bennu.deb >/dev/null"
+)
+
+
+def _build_deb(host, wt: Path, out: Path, repo: Path, arm64: bool, plat, image) -> None:
+    # The worktree's .git file points into the main repo, and CMake stamps the
+    # deb version with `git rev-parse --short HEAD`: mount both at their host paths.
+    script = (
+        "git config --global --add safe.directory '*' && mkdir -p /tmp/b && cd /tmp/b && "
+        f"cmake -DBUILD_TESTS=OFF {shlex.quote(str(wt.resolve()))} >/dev/null && "
+        'make -j"$(nproc)" package >/dev/null && cp bennu-*.deb /out/bennu.deb'
+        f"{_RELABEL if arm64 else ''} && chown {os.getuid()}:{os.getgid()} /out/bennu.deb"
+    )
+    mounts = [f"{repo}:{repo}:ro", f"{wt.resolve()}:{wt.resolve()}:ro", f"{out}:/out"]
+    _docker_run(host, plat, mounts, image, "bash", "-ec", script)
+
+
+def _record_arm64_deb(out: Path, man: dict) -> None:
+    man["bennu"]["deb_file"] = (out / "deb-name").read_text().strip()
+    man["bennu"]["deb_arch"] = (out / "deb-arch").read_text().strip()
+    man["bennu"]["relabel_needed"] = man["bennu"]["deb_arch"] != "arm64"
+    logger.info(
+        f"{man['bennu']['deb_file']}: Architecture {man['bennu']['deb_arch']}, "
+        f"relabel {'needed' if man['bennu']['relabel_needed'] else 'not needed'}"
+    )
+
+
 def build_bennu(
     host,
     wt: Path,
@@ -109,120 +186,21 @@ def build_bennu(
     image = "burger-bennu-build:22.04" + ("-arm64" if arm64 else "")
     build_dockerfile(host, wt / "docker" / "test", image, platform)
     if "pybennu" in install:
-        # Copied first: the build backend may write next to the sources.
-        script = (
-            f"cp -r {shlex.quote(str(wt.resolve()))}/src/pybennu /tmp/pyb && "
-            # bennu's own `make dist`; jammy's pip cannot run the uv_build backend.
-            "pip3 install -q uv && uv build -q --wheel -o /tmp/w /tmp/pyb "
-            "&& cp /tmp/w/pybennu-*.whl /out/ && "
-            f"chown {os.getuid()}:{os.getgid()} /out/pybennu-*.whl"
-        )
-        host.run(
-            [
-                "docker",
-                "run",
-                *plat,
-                "--rm",
-                "-v",
-                f"{wt.resolve()}:{wt.resolve()}:ro",
-                "-v",
-                f"{out}:/out",
-                image,
-                "bash",
-                "-ec",
-                script,
-            ]
-        )
-        man["bennu"]["wheel"] = next(out.glob("pybennu-*.whl")).name
-        logger.info(f"pybennu wheel {man['bennu']['wheel']}")
-        if pip:  # new deps of the PR that the image lacks; the VMs have no index
-            shutil.rmtree(out / "wheels", ignore_errors=True)
-            host.run(
-                [
-                    "docker",
-                    "run",
-                    *plat,
-                    "--rm",
-                    *[a for k, v in (pip_env or {}).items() for a in ("-e", f"{k}={v}")],
-                    "-v",
-                    f"{out}:/out",
-                    image,
-                    "bash",
-                    "-ec",
-                    f"pip3 wheel -q --no-deps -w /out/wheels {shlex.join(pip)} && "
-                    f"chown -R {os.getuid()}:{os.getgid()} /out/wheels",
-                ]
-            )
-            man["bennu"]["wheels"] = sorted(p.name for p in (out / "wheels").glob("*.whl"))
-            logger.info(f"extra wheels {', '.join(man['bennu']['wheels'])}")
+        _build_pybennu(host, wt, out, man, pip, plat, image, pip_env)
     if "deb" not in install:
         return
-    # The worktree's .git file points into the main repo, and CMake stamps the
-    # deb version with `git rev-parse --short HEAD`: mount both at their host paths.
-    # On arm64 the deb is repacked without its Depends line: that lists -dev packages the offline
-    # RTU images do not carry (only the runtime libs), so dpkg would leave bennu unconfigured. Older
-    # heads also have CpackConfig.cmake hard-code `Architecture: amd64` (bennu #78 fixes that) and
-    # dpkg on the arm64 RTUs refuses such a deb, so that repack relabels it with the build's own
-    # architecture; a deb that already says so (#78) keeps its Architecture. deb-name and deb-arch
-    # record what cpack made, for the manifest (relabel_needed) and the arm64deb board.
-    relabel = (
-        " && ls bennu-*.deb > /out/deb-name"
-        " && dpkg-deb --field /out/bennu.deb Architecture > /out/deb-arch"
-        ' && arch=$(dpkg --print-architecture) && fix="/^Depends:/d" '
-        '&& if [ "$(cat /out/deb-arch)" != "$arch" ]; then '
-        'fix="s/^Architecture:.*/Architecture: $arch/;$fix"; fi '
-        "&& d=$(mktemp -d) && dpkg-deb -R /out/bennu.deb $d && "
-        'sed -i "$fix" $d/DEBIAN/control '
-        "&& dpkg-deb --root-owner-group -b $d /out/bennu.deb >/dev/null"
-        if arm64
-        else ""
-    )
-    script = (
-        "git config --global --add safe.directory '*' && mkdir -p /tmp/b && cd /tmp/b && "
-        f"cmake -DBUILD_TESTS=OFF {shlex.quote(str(wt.resolve()))} >/dev/null && "
-        'make -j"$(nproc)" package >/dev/null && cp bennu-*.deb /out/bennu.deb'
-        f"{relabel} && chown {os.getuid()}:{os.getgid()} /out/bennu.deb"
-    )
-    host.run(
-        [
-            "docker",
-            "run",
-            *plat,
-            "--rm",
-            "-v",
-            f"{repo}:{repo}:ro",
-            "-v",
-            f"{wt.resolve()}:{wt.resolve()}:ro",
-            "-v",
-            f"{out}:/out",
-            image,
-            "bash",
-            "-ec",
-            script,
-        ]
-    )
+    _build_deb(host, wt, out, repo, arm64, plat, image)
     if arm64:
-        man["bennu"]["deb_file"] = (out / "deb-name").read_text().strip()
-        man["bennu"]["deb_arch"] = (out / "deb-arch").read_text().strip()
-        man["bennu"]["relabel_needed"] = man["bennu"]["deb_arch"] != "arm64"
-        logger.info(
-            f"{man['bennu']['deb_file']}: Architecture {man['bennu']['deb_arch']}, "
-            f"relabel {'needed' if man['bennu']['relabel_needed'] else 'not needed'}"
-        )
-    version = host.run(
-        [
-            "docker",
-            "run",
-            *plat,
-            "--rm",
-            "-v",
-            f"{out}:/out",
-            image,
-            "dpkg-deb",
-            "-f",
-            "/out/bennu.deb",
-            "Version",
-        ],
+        _record_arm64_deb(out, man)
+    version = _docker_run(
+        host,
+        plat,
+        [f"{out}:/out"],
+        image,
+        "dpkg-deb",
+        "-f",
+        "/out/bennu.deb",
+        "Version",
         capture=True,
     ).stdout.strip()
     man["bennu"]["deb_version"] = version
