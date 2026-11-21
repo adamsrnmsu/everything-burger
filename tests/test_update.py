@@ -658,7 +658,8 @@ def test_unmanaged_container_names_its_image_and_is_not_touched(settings, lines)
 
 
 def test_unmanaged_container_without_an_image_says_placeholder(settings, lines):
-    ctx = update.Ctx(settings, strict_for(settings, {INSPECT: cp(rc=1)}), lines.append)
+    probes = {INSPECT: cp(rc=1), "docker inspect -f {{.": cp(rc=1)}
+    ctx = update.Ctx(settings, strict_for(settings, probes), lines.append)
     assert update.update_container(ctx, "web") is False
     assert "docker pull <image>" in ctx.rows[0][3]
     assert ctx.rows[0][1] == "?"
@@ -894,3 +895,37 @@ def test_bennu_passes_the_apt_mirror_to_image_create(settings, lines, images, mo
     site = SimpleNamespace(mirrors={})
     h, _ = run_bennu(settings, lines, images, monkeypatch, site=site)
     assert not any(a.startswith("--mirror") for c in h.calls for a in c)
+
+
+def test_wait_phenix_polls_again_at_the_deadline_itself():
+    class Clock:
+        now = 0
+
+        def time(self):
+            return self.now
+
+        def sleep(self, s):
+            self.now += s
+
+    class Late(StrictHost):
+        def run(self, cmd, check=True, capture=False, **kw):
+            res = cp(rc=1 if len(self.calls) < 5 else 0)  # polls at 0,5,10,15,20 fail
+            self.calls.append(cmd)
+            return enforce_(res, cmd, check, capture)
+
+    update.wait_phenix(Late(), 20, Clock())
+
+
+def test_dry_put_says_where_it_would_copy(settings):
+    said = []
+    update.dry_host(StrictHost({}, settings), said.append).put("a", "/b")
+    assert said == ["+ put a -> /b (in phenix)"]
+    import dataclasses
+
+    bare = dataclasses.replace(settings, ctr="")
+    update.dry_host(StrictHost({}, bare), said.append).put("a", "/b")
+    assert said[1] == "+ put a -> /b (in this host)"
+
+
+def test_main_board_is_not_linux_only(settings):
+    assert update.main_board(settings).board.linux_only is False
