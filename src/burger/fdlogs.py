@@ -241,12 +241,10 @@ def verdict(summary: dict, fail_on: str) -> tuple[str, str]:
     error = sum(s["error"] for s in hosts)
     flood = [h for h, s in summary.items() if s.get("flood")]
     bits = [f"{crash} crash-class line(s)", f"{error} error-class line(s)"]
-    if flood:
-        bits.append(f"flood on {', '.join(flood)}")
-    if missing:
-        bits.append(f"no logs from {', '.join(missing)}")
+    bits += [f"flood on {', '.join(flood)}"] * bool(flood)
+    bits += [f"no logs from {', '.join(missing)}"] * bool(missing)
     reason = "; ".join(bits)
-    if (fail_on == "crash" and crash) or (fail_on == "error" and (crash or error)):
+    if {"crash": crash, "error": crash + error}.get(fail_on):  # what fail_on counts as failing
         return "FAIL", reason
     return ("WARN" if crash or error or flood or missing else "ok"), reason
 
