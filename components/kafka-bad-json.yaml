@@ -1,0 +1,19 @@
+name: kafka-bad-json
+kind: scorch
+type: kafka
+advisory: true
+about: >
+  Pins a bug in the kafka listener: its value deserializer is json.loads, so one message that is not
+  JSON raises out of the consumer loop and the listener process exits (its output goes to
+  /dev/null), and every later message is lost with no log line. burger.raw gets "not json N" then a
+  good {"name":"ok"} message each second; passes once the good ones land. Advisory; the bead has
+  the repro.
+routes: [waterway-arm64]
+stages: [configure, cleanup]
+config:
+  kafka_endpoints: [{ip: "127.0.0.1", port: "19092"}]
+  csv: false
+  wait_duration_seconds: 60
+  topics: [{name: burger.raw}]
+verify:
+  - python: judge_bad_json

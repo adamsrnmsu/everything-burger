@@ -1,0 +1,17 @@
+name: kafka-csv-columns
+kind: scorch
+type: kafka
+advisory: true
+about: >
+  Pins a bug in the kafka listener: the CSV header is the first message's keys and is never
+  extended, so a later message's new keys are dropped (extrasaction=ignore). burger.cols carries
+  {x,y1} and {x,y2} messages; the CSV must have a column for each of x, y1 and y2. Advisory; the
+  bead has the repro.
+routes: [waterway-arm64]
+stages: [configure, cleanup]
+config:
+  kafka_endpoints: [{ip: "127.0.0.1", port: "19092"}]
+  wait_duration_seconds: 60
+  topics: [{name: burger.cols}]
+verify:
+  - csv: {glob: "kafka-csv-columns_output.csv", columns: [topic, x, y1, y2], min_rows: 3}

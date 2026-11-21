@@ -1,0 +1,16 @@
+name: kafka-int-port
+kind: scorch
+type: kafka
+advisory: true
+about: >
+  Pins a bug in the kafka component: `item["ip"] + ":" + item["port"]` needs the port as a string,
+  so the natural YAML `port: 19092` fails configure with a TypeError (the README quotes it, and
+  there is no metadata model, so phenix-scorch-validate says "skipped" and does not catch it).
+  Passes once an integer port is accepted and the listener starts. Advisory; the bead has the repro.
+routes: [waterway-arm64]
+stages: [configure, cleanup]
+config:
+  kafka_endpoints: [{ip: "127.0.0.1", port: 19092}]
+  wait_duration_seconds: 60
+verify:
+  - files: {glob: "kafka-int-port_output.csv", min: 1}

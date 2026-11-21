@@ -1,0 +1,16 @@
+name: kafka-csv
+kind: scorch
+type: kafka
+about: >
+  The kafka component with csv on and no topics, so the listener subscribes to the pattern
+  `<experiment>.*` (the board's experiment is ebwes-kafka, and scripts/kafka.sh feeds
+  ebwes-kafka.default). Checks: a CSV with a `topic` and an `x` column, rows, and every row's topic is
+  ebwes-kafka.default.
+routes: [waterway-arm64]
+stages: [configure, cleanup]
+config:
+  kafka_endpoints: [{ip: "127.0.0.1", port: "19092"}]
+  wait_duration_seconds: 60
+verify:
+  - csv: {glob: "kafka-csv_output.csv", columns: [topic, x], min_rows: 3}
+  - log: {glob: "kafka-csv_output.csv", contains: "^ebwes-kafka\\.default,"}
