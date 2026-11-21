@@ -1,0 +1,26 @@
+# The SCORCH kafka component against a real broker: apache/kafka (KRaft, one node) in a container
+# on the phenix docker host, started on `up` and removed on `down` (services: scripts/kafka.sh),
+# fed by console producers. The component's listener runs in the phenix container, which shares
+# the host network, so the broker is 127.0.0.1:19092. `kafka` and `kafka-csv` must pass; the
+# advisory items pin bugs in the listener and the endpoint parsing (see their about).
+# One explicit run so the advisory items share it: disruption holds the start stage, which
+# gives each listener (it starts at `latest`) time to attach and see messages. kafka-int-port
+# fails configure, which would stop the run before the others' start stage, so it is left out
+# of the run and burger gives it its own extras run.
+about: "the SCORCH kafka component against a real Kafka broker on the arm64 range"
+route: waterway-arm64
+apps: {prs: []}
+services: [kafka]
+items:
+  disruption: on
+  kafka: on
+  kafka-csv: on
+  kafka-topic-filter: on
+  kafka-csv-columns: on
+  kafka-bad-json: on
+  kafka-int-port: on
+runs:
+  - name: kafka
+    configure: [kafka, kafka-csv, kafka-topic-filter, kafka-csv-columns, kafka-bad-json, disruption]
+    start: [disruption]
+    cleanup: [kafka, kafka-csv, kafka-topic-filter, kafka-csv-columns, kafka-bad-json, disruption]

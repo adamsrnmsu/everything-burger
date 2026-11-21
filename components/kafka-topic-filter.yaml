@@ -1,0 +1,23 @@
+name: kafka-topic-filter
+kind: scorch
+type: kafka
+advisory: true
+about: >
+  Pins a bug in the kafka listener: a topic entry's filter is applied to every message, not just that
+  topic's. Two topics, burger.sensors.a with name=bus* and burger.sensors.b with state=on:
+  burger.sensors.a also carries dev1 messages with state on, which the first entry drops but the
+  second entry's filter accepts, so they are written. Passes once only bus1 rows land (the README
+  gives each topic its own filter). Advisory; the bead has the repro.
+routes: [waterway-arm64]
+stages: [configure, cleanup]
+config:
+  kafka_endpoints: [{ip: "127.0.0.1", port: "19092"}]
+  csv: false
+  wait_duration_seconds: 60
+  topics:
+    - name: burger.sensors.a
+      filter: [{key: name, value: "bus*"}]
+    - name: burger.sensors.b
+      filter: [{key: state, value: "on"}]
+verify:
+  - python: judge_topic_filter

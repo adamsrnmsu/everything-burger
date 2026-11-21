@@ -1,0 +1,24 @@
+name: kafka
+kind: scorch
+type: kafka
+about: >
+  The kafka component against a real broker: a single-node KRaft apache/kafka container on the
+  phenix docker host (scripts/kafka.sh, started by the board's services line; 127.0.0.1:19092, the
+  phenix container shares the host network), fed once a second by console producers. The component's
+  listener subscribes by wildcard (`burger.sensors*`, which finds burger.sensors.a and .b) with the
+  filter name=bus*, and writes NDJSON. Checks: the output has rows, every row is a bus* message
+  (the dev* messages on the same topics are dropped), both topics are present, each row carries
+  `topic` and the message's own keys. The listener starts at `latest`, so it only sees messages
+  sent after it attached: the run's disruption hold gives it time.
+routes: [waterway, waterway-arm64]
+stages: [configure, cleanup]
+config:
+  kafka_endpoints: [{ip: "127.0.0.1", port: "19092"}]
+  csv: false
+  wait_duration_seconds: 60
+  topics:
+    - name: "burger.sensors*"
+      filter: [{key: name, value: "bus*"}]
+verify:
+  - files: {glob: "kafka_output.ndjson", min: 1, min_bytes: 1}
+  - python: judge_kafka

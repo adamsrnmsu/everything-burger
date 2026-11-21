@@ -13,6 +13,7 @@
 about: "upstream main, no PRs: every app and component burger covers"
 route: waterway
 apps: {prs: []}
+services: [kafka]
 items:
   disruption: on
   disruption-dos: on
@@ -28,6 +29,7 @@ items:
   qos-bad-rate: on
   erspan: on
   iperf: on
+  kafka: on
   pcap-alias: on
   tcpdump-alias: on
   snort-conf: on
@@ -110,10 +112,10 @@ runs:
   # main's normal pipeline, unchanged from the implicit run burger built before
   # (erspan is advisory and still runs in its own extras run).
   - name: main
-    configure: [disruption, iperf, snort-conf, snort]
+    configure: [disruption, iperf, snort-conf, snort, kafka]
     start: [pcap, tcpdump, mm, pipe, hoststats, vmstats, qos, iperf, snort, cc-empty-output, cc-output-parsing, disruption]
     stop: [pcap, tcpdump, mm, hoststats, vmstats, qos, iperf, snort]
-    cleanup: [disruption, pipe, iperf, snort]
+    cleanup: [disruption, pipe, iperf, snort, kafka]
   # ettercap MITM, isolated after the main run so the poisoning never overlaps
   # the Modbus checks above; ettercap heals the ARP tables on stop.
   - name: mitm

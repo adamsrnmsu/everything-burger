@@ -643,6 +643,31 @@
             },
             {
               "metadata": {
+                "csv": false,
+                "kafka_endpoints": [
+                  {
+                    "ip": "127.0.0.1",
+                    "port": "19092"
+                  }
+                ],
+                "topics": [
+                  {
+                    "filter": [
+                      {
+                        "key": "name",
+                        "value": "bus*"
+                      }
+                    ],
+                    "name": "burger.sensors*"
+                  }
+                ],
+                "wait_duration_seconds": 60
+              },
+              "name": "kafka",
+              "type": "kafka"
+            },
+            {
+              "metadata": {
                 "vms": [
                   {
                     "configure": [
@@ -719,11 +744,13 @@
                 "disruption",
                 "pipe",
                 "iperf",
+                "kafka",
                 "snort"
               ],
               "configure": [
                 "disruption",
                 "iperf",
+                "kafka",
                 "snort-conf",
                 "snort"
               ],
