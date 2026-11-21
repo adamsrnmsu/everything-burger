@@ -723,3 +723,128 @@ def test_step_exit_code_is_the_worst_board(settings, monkeypatch):
     codes = {"baseline": 0, "main": 1}
     monkeypatch.setattr(cli, "_one", lambda a, s, h, n: codes[n])
     assert _step_main(monkeypatch, settings, "sync", "baseline", "main") == 1
+
+
+def _cp(rc=0, out=""):
+    return subprocess.CompletedProcess([], rc, out, "")
+
+
+def _preflight_rows(monkeypatch, responses, linux_only=True, api=None):
+    """The rows `burger preflight` prints on a FakeHost, as {label: (verdict, reason)}."""
+    seen = []
+    monkeypatch.setattr(cli, "results_table", lambda rows: seen.extend(rows) or "")
+    monkeypatch.setattr(cli.shutil, "which", lambda t: f"/bin/{t}")
+    host = FakeHost(responses)
+    host.api = api or (lambda _p: {})
+    code = cli._preflight(SimpleNamespace(route="waterway", linux_only=linux_only), host.s, host)
+    return code, {r.check: (r.verdict, r.reason) for r in seen}, host
+
+
+def _df(free_kb):
+    return f"Filesystem 1K-blocks Used Available\n/dev/x 9 9 {free_kb} 9\n"
+
+
+HEALTHY = {
+    "docker inspect -f {{.State.Running}} phenix": _cp(0, "true\n"),
+    "docker exec phenix df": _cp(0, _df(30 * 2**20)),
+}
+
+
+def test_preflight_healthy_host_passes_every_row(monkeypatch):
+    code, rows, _ = _preflight_rows(monkeypatch, HEALTHY)
+    assert code == 0 and {v for v, _ in rows.values()} == {"ok"}
+    assert "git on PATH" in rows and "docker on PATH" in rows
+    assert "container 'phenix' running" in rows and "phenix CLI" in rows
+    assert "minimega reachable" in rows and "pip in phēnix" in rows
+    assert "miniccc in container 'minimega'" in rows
+    assert "30 GiB free on /phenix" in rows
+    assert any(label.startswith("image ") for label in rows)
+
+
+@pytest.mark.parametrize(
+    "key,resp,label,hint",
+    [
+        (
+            "docker inspect -f {{.State.Running}} phenix",
+            _cp(0, "false\n"),
+            "container 'phenix' running",
+            "set BURGER_PHENIX_CONTAINER",
+        ),
+        ("docker exec phenix phenix version", _cp(1), "phenix CLI", ""),
+        ("docker exec phenix phenix mm version", _cp(1), "minimega reachable", ""),
+        (
+            "docker exec minimega test -f",
+            _cp(1),
+            "miniccc in container 'minimega'",
+            "set BURGER_MINIMEGA_CONTAINER",
+        ),
+        ("docker exec phenix python3 -m pip", _cp(1), "pip in phēnix", ""),
+    ],
+)
+def test_preflight_each_failing_probe_fails_its_own_row(monkeypatch, key, resp, label, hint):
+    code, rows, _ = _preflight_rows(monkeypatch, {**HEALTHY, key: resp})
+    assert code == 1
+    verdict, reason = rows[label]
+    assert verdict == "FAIL" and hint in reason
+    assert [k for k, (v, _) in rows.items() if v == "FAIL"] == [label]
+
+
+def test_preflight_tools_missing_from_path_fail(monkeypatch):
+    seen = []
+    monkeypatch.setattr(cli, "results_table", lambda rows: seen.extend(rows) or "")
+    monkeypatch.setattr(cli.shutil, "which", lambda t: None if t == "docker" else "/bin/git")
+    host = FakeHost(HEALTHY)
+    host.api = lambda _p: {}
+    assert cli._preflight(SimpleNamespace(route="waterway", linux_only=True), host.s, host) == 1
+    got = {r.check: r.verdict for r in seen}
+    assert (got["git on PATH"], got["docker on PATH"]) == ("ok", "FAIL")
+
+
+def test_preflight_api_failure_names_the_env_vars(monkeypatch):
+    def refuse(_p):
+        raise OSError("nope")
+
+    _, rows, _ = _preflight_rows(monkeypatch, HEALTHY, api=refuse)
+    verdict, reason = rows["REST API http://localhost:3000/api/v1"]
+    assert verdict == "FAIL" and "nope; set BURGER_API / BURGER_TOKEN" in reason
+
+
+@pytest.mark.parametrize("free_kb,ok", [(20 * 2**20, True), (20 * 2**20 - 1, False)])
+def test_preflight_needs_20_gib_free(monkeypatch, free_kb, ok):
+    df = _cp(0, _df(free_kb))
+    _, rows, _ = _preflight_rows(monkeypatch, {**HEALTHY, "docker exec phenix df": df})
+    (label,) = [k for k in rows if "GiB free" in k]
+    verdict, reason = rows[label]
+    assert (verdict == "ok") is ok
+    assert ("~20 GiB" in reason) is (not ok)
+    assert label == f"{free_kb // 2**20} GiB free on /phenix"
+
+
+def test_preflight_unreadable_df_counts_as_zero_free(monkeypatch):
+    _, rows, _ = _preflight_rows(monkeypatch, {**HEALTHY, "docker exec phenix df": _cp(0, "")})
+    assert rows["0 GiB free on /phenix"][0] == "FAIL"
+
+
+def test_preflight_image_hints(monkeypatch):
+    """rc 2: missing; other nonzero: unreadable; Windows images say how to get them."""
+    probe = "docker exec phenix timeout 60 bash -c"
+    routes = cli.load_route("waterway", Settings.from_env())
+    win = routes.windows_images[0]
+    stock = (routes.images or ["bennu.qc2", "minirouter.qc2"])[0]
+    resp = {
+        **HEALTHY,
+        f"{probe} {cli.READ_PROBE} probe /phenix/images/{stock}": _cp(4),
+        f"{probe} {cli.READ_PROBE} probe /phenix/images/{win}": _cp(2),
+    }
+    _, rows, _ = _preflight_rows(monkeypatch, resp, linux_only=False)
+    assert rows[f"image {stock}"][0] == "FAIL" and "unreadable" in rows[f"image {stock}"][1]
+    assert rows[f"image {win}"] == ("FAIL", "build it or use --linux-only")
+    _, rows, _ = _preflight_rows(monkeypatch, resp, linux_only=True)
+    assert f"image {win}" not in rows
+
+
+def test_preflight_missing_stock_image_has_no_hint(monkeypatch):
+    stock = (cli.load_route("waterway", Settings.from_env()).images or ["bennu.qc2"])[0]
+    key = f"docker exec phenix timeout 60 bash -c {cli.READ_PROBE} probe /phenix/images/{stock}"
+    _, rows, _ = _preflight_rows(monkeypatch, {**HEALTHY, key: _cp(2)})
+    assert rows[f"image {stock}"] == ("FAIL", "")
