@@ -20,7 +20,7 @@ import re
 from pathlib import Path
 
 from burger.checks import Row
-from burger.items import Item
+from burger.items import Item, scenario_app
 from burger.switchboard import Resolved
 from burger.vcs import board_dir, load_manifest
 
@@ -138,7 +138,7 @@ def _app_experiment(res: Resolved, item: Item, topo: dict, workdir: Path) -> dic
             "experimentName": res.board.exp,
             "baseDir": str(workdir / item.name),
             "topology": topo["spec"],
-            "scenario": {"apps": [{"name": item.type, "metadata": item.config}]},
+            "scenario": {"apps": [scenario_app(item)]},
         },
     }
 

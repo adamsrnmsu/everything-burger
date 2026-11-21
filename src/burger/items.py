@@ -1,3 +1,4 @@
+import copy
 import re
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
@@ -175,6 +176,16 @@ def _item(path: Path, doc: dict, unset: list[str]) -> Item:
         unset=unset,
         overrides={r: doc[r] for r in _ROUTE_BLOCKS if doc.get(r)},
     )
+
+
+def scenario_app(i: Item) -> dict:
+    """The scenario app an app item becomes: its config as metadata, its hosts beside it."""
+    app = {"name": i.type or i.name}
+    if i.config:
+        app["metadata"] = copy.deepcopy(i.config)
+    if i.hosts:
+        app["hosts"] = copy.deepcopy(i.hosts)
+    return app
 
 
 def load_item(ref: str, settings: Settings) -> Item:

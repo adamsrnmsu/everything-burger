@@ -381,3 +381,13 @@ def test_every_expect_nodes_item_is_validate_only(settings):
     assert {i.name for i in items} >= {"scale-builtin-expands", "scale-wind-expands"}
     for i in items:
         assert (i.kind, i.routes, i.verify, i.expect_invalid) == ("app", [], [], ""), i.name
+
+
+def test_an_app_item_reaches_its_app_with_its_hosts(settings, tmp_path):
+    # protonuke reads its hosts from the scenario app, as render writes them: without
+    # them protonuke-newline has nothing to refuse and every stage accepts it
+    item = load_item("apps/protonuke-newline", settings)
+    exp = invalid._app_experiment(res(settings, "main"), item, {"spec": {}}, tmp_path)
+    (app,) = exp["spec"]["scenario"]["apps"]
+    assert app["hosts"] == [{"hostname": "rtu-1", "metadata": {"args": "-serve\n-http"}}]
+    assert app["name"] == "protonuke"

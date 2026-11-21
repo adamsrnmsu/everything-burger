@@ -7,6 +7,7 @@ import yaml
 from burger.bennu import bennu_injections
 from burger.compose import compose
 from burger.config import BurgerError, Settings
+from burger.items import scenario_app
 from burger.switchboard import Resolved
 
 MONITOR_NODE = {
@@ -432,12 +433,7 @@ def _scenario_apps(res: Resolved, man: dict, scen: dict) -> None:
     for i in res.items:
         # mgmt-vlan-alias only renames the VLAN; it is not a scenario app.
         if i.kind == "app" and not i.requires.get("mgmt_vlan"):
-            app = {"name": i.type or i.name}
-            if i.config:
-                app["metadata"] = copy.deepcopy(i.config)
-            if i.hosts:
-                app["hosts"] = copy.deepcopy(i.hosts)
-            extra.append(app)
+            extra.append(scenario_app(i))
     scen["spec"]["apps"] = [a for a in scen["spec"]["apps"] if a["name"] != "scorch"]
     scen["spec"]["apps"] += extra
     scen["spec"]["apps"].append(
