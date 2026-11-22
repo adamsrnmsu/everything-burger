@@ -442,8 +442,9 @@ def test_py_reason_survives_unreadable_hashes_and_names_what_each_side_has(setti
     theirs = "docker exec phenix python3 -c"
     gone = StrictHost({sha: cp(rc=1), theirs: cp(rc=1)}, settings)
     reason = minimega._py_reason(gone, settings, "b")
-    assert "container has none" in reason and "imports no minimega" in reason
-    assert "burger install b" in reason
+    assert reason == (
+        "phēnix imports no minimega.py, the minimega container has none; burger install b"
+    )
     differ = StrictHost({sha: cp("a" * 64 + "  f\n"), theirs: cp("b" * 64 + "\n")}, settings)
     reason = minimega._py_reason(differ, settings, "b")
     assert f"imports {'b' * 12}," in reason and f"container has {'a' * 12};" in reason

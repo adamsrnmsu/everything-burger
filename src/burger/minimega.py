@@ -192,8 +192,8 @@ def _py_reason(host, s: Settings, board: str) -> str:
     if ours and ours == theirs:  # an unreadable file is not a match
         return ""
     return (
-        f"phēnix imports {(theirs or ['no minimega.py'])[0][:12]}, the minimega "
-        f"container has {(ours or ['none'])[0][:12]}; burger install {board}"
+        f"phēnix imports {theirs[0][:12] if theirs else 'no minimega.py'}, the minimega "
+        f"container has {ours[0][:12] if ours else 'none'}; burger install {board}"
     )
 
 
