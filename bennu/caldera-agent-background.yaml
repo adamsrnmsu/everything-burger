@@ -1,0 +1,30 @@
+name: caldera-agent-background
+kind: bennu
+type: caldera-agent-background
+about: >
+  Pins a caldera app bug on main (fix: sceptre-phenix-apps fix/caldera-agent-background):
+  linux_agent.mako waits for the Caldera server in the foreground of
+  /etc/phenix/startup/90-sandcat-agent.sh, and phenix-start.sh runs the startup scripts
+  one after another, each to completion, in name order. sceptre-start.sh (the field device
+  and its Modbus :502) sorts after it, so an RTU starts its services only once the
+  Caldera server answers: on the arm64 rig that held `calapp` health for 11 attempts
+  (~25 min; rtu-2: script 20:22:37, server answered 20:24:10, sceptre-start.sh the same
+  second). Advisory, so it reports advisory-FAIL without failing the board. Drop
+  `advisory` when the fix merges. Reads the script apps/caldera-agents injects, so switch both on together.
+routes: [waterway, waterway-arm64]
+advisory: true
+verify:
+  # the fix backgrounds the whole script body: `( ... ) &` (the last non-blank line; the
+  # rendered file ends with a blank line)
+  - vm:
+      host: "{route.rtus}"
+      run: "grep -v '^[[:space:]]*$' /etc/phenix/startup/90-sandcat-agent.sh | tail -n 1"
+      expect: ") &"
+  # live: sceptre-start.sh began before the agent script's "Sandcat agent started" line (the marker
+  # must be in the journal, else this fails: absence proves nothing)
+  - vm:
+      host: "{route.rtus}"
+      run: >-
+        journalctl -u phenix -o short-unix --no-pager | awk '/startup\/sceptre-start.sh/{a=$1}
+        /Sandcat agent started/{b=$1} END{print (a && b && a<=b) ? "sceptre-start did not wait" : (b ? "sceptre-start waited for the agent" : "no agent marker in the journal")}'
+      expect: "sceptre-start did not wait"

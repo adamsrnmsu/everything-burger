@@ -1,0 +1,15 @@
+# The calapp board with sceptre-phenix-apps' fix/caldera-agent-background (the user's fork),
+# which backgrounds the Linux Sandcat agent script so it no longer holds sceptre-start.sh
+# (the field device, :502) until the Caldera server answers. Here `caldera-agent-background`
+# is required, not advisory. When the fix merges, drop this board and turn the item off
+# advisory on `calapp`.
+about: "the calapp board with the caldera agent-background fix: its advisory item required"
+route: waterway-arm64
+apps: {branch: fix/caldera-agent-background, remote: fork}
+items:
+  apps/caldera-agents: on
+  bennu/caldera-agent-background: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+overrides:
+  bennu/caldera-agent-background: {advisory: false}

@@ -6,5 +6,6 @@ route: waterway-arm64
 apps: {prs: []}
 items:
   apps/caldera-agents: on
+  bennu/caldera-agent-background: on
   bennu/field-device: on
   bennu/simulink-provider: on

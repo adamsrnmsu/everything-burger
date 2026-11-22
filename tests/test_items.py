@@ -1,4 +1,5 @@
 import dataclasses
+import subprocess
 
 import pytest
 
@@ -283,3 +284,24 @@ def test_expect_nodes_needs_a_validate_only_app_without_expect_invalid(settings,
     )
     with pytest.raises(BurgerError, match="expect_nodes needs kind app"):
         load_item("apps/zz", dataclasses.replace(settings, root=tmp_path))
+
+
+@pytest.mark.parametrize(
+    "journal,out",
+    [
+        ("1.0 startup/sceptre-start.sh\n2.0 Sandcat agent started\n", "sceptre-start did not wait"),
+        (
+            "2.0 Sandcat agent started\n3.0 startup/sceptre-start.sh\n",
+            "sceptre-start waited for the agent",
+        ),
+        ("1.0 startup/sceptre-start.sh\n", "no agent marker in the journal"),
+    ],
+)
+def test_caldera_agent_journal_check_needs_the_marker(settings, journal, out):
+    # absence of the marker must not pass: a missing line proves nothing
+    run = load_item("bennu/caldera-agent-background", settings).verify[1]["vm"]["run"]
+    awk = run.split("--no-pager | ", 1)[1]
+    got = subprocess.run(
+        ["sh", "-c", f"awk {awk[4:]}"], input=journal, capture_output=True, text=True
+    )
+    assert got.stdout.strip() == out
