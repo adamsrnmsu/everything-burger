@@ -202,6 +202,44 @@
               },
               "name": "health",
               "type": "cc"
+            },
+            {
+              "metadata": {
+                "vms": [
+                  {
+                    "hostname": "rtu-1",
+                    "start": [
+                      {
+                        "args": "grep -v '^[[:space:]]*$' /etc/phenix/startup/90-sandcat-agent.sh | tail -n 1 | grep -Eq ') &'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "journalctl -u phenix -o short-unix --no-pager | awk '/startup\\/sceptre-start.sh/{a=$1} /Sandcat agent started/{b=$1} END{print (a && b && a<=b) ? \"sceptre-start did not wait\" : (b ? \"sceptre-start waited for the agent\" : \"no agent marker in the journal\")}' | grep -Eq 'sceptre-start did not wait'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  },
+                  {
+                    "hostname": "rtu-2",
+                    "start": [
+                      {
+                        "args": "grep -v '^[[:space:]]*$' /etc/phenix/startup/90-sandcat-agent.sh | tail -n 1 | grep -Eq ') &'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "journalctl -u phenix -o short-unix --no-pager | awk '/startup\\/sceptre-start.sh/{a=$1} /Sandcat agent started/{b=$1} END{print (a && b && a<=b) ? \"sceptre-start did not wait\" : (b ? \"sceptre-start waited for the agent\" : \"no agent marker in the journal\")}' | grep -Eq 'sceptre-start did not wait'",
+                        "type": "exec",
+                        "wait": true
+                      }
+                    ]
+                  }
+                ]
+              },
+              "name": "health-caldera-agent-background",
+              "type": "cc"
             }
           ],
           "runs": [
@@ -209,6 +247,12 @@
               "name": "health",
               "start": [
                 "health"
+              ]
+            },
+            {
+              "name": "extras-caldera-agent-background",
+              "start": [
+                "health-caldera-agent-background"
               ]
             }
           ]
