@@ -31,7 +31,11 @@ kills the SCORCH run (`pkill -f 'experiment scorch'` and any leftover
 `phenix-scorch-component-*` processes in the phēnix container), counts it as a
 failed attempt and the retry loop takes over. Before the health run, burger
 waits for every VM's cc client to register, so a command is not lost to a
-client that is still booting. Each attempt's SCORCH output goes to
+client that is still booting. That wait is bounded by guest boot time, and
+other experiments' VMs on the same rig slow every boot (on the arm64 Lima rig,
+a 9-VM board took 49-57 s to reach miniccc alone and 111-145 s beside one idle
+9-VM experiment), so `up` warns with each running experiment's VM and vCPU
+counts; `burger down` the ones that are not needed. Each attempt's SCORCH output goes to
 `work/<switchboard>/results/run-<i>-attempt-<n>.log`; when the run finally
 fails, the console names the failing check and that log in one line. On a
 terminal the attempts and retries show as one live status line.

@@ -379,7 +379,7 @@ def test_built_key_without_minimega_is_unchanged():
     assert experiment._built_key(MAN) == {"apps": MAN["apps"]["head"], "bennu": MAN["bennu"]["sha"]}
 
 
-def test_up_clears_the_stage_dir_before_putting_files(settings, monkeypatch, tmp_path):
+def test_up_clears_the_stage_dir_before_putting_files(settings, monkeypatch, tmp_path, messages):
     r = res(settings)
     out = tmp_path / "out"
     out.mkdir()
@@ -393,7 +393,9 @@ def test_up_clears_the_stage_dir_before_putting_files(settings, monkeypatch, tmp
     monkeypatch.setattr(experiment, "wait_running", lambda *a: None)
     monkeypatch.setattr(experiment, "fix_routers", lambda *a: None)
     host = FakeHost(settings=settings)
+    host.api_responses["/experiments"] = {"experiments": [{"name": "other", "running": True}]}
     experiment.up(r, settings, host, 1)
+    assert any("other (0 VMs, 0 vCPUs)" in m for lvl, m in messages if lvl == "WARNING")
     stage = f"{settings.phenix_dir}/burger/{r.board.name}"
     lines = [" ".join(c) for c in host.calls]
     rm = next(i for i, c in enumerate(lines) if c.endswith(f"rm -rf {stage}"))
@@ -755,3 +757,31 @@ def test_build_mounts_the_go_source_and_out(settings, monkeypatch):
     (call,) = [c for c in host.calls if c[:2] == ["docker", "run"] and "go" in c]
     mounts = [call[i + 1] for i, a in enumerate(call) if a == "-v"]
     assert mounts == [f"{rd / 'apps' / 'src' / 'go'}:/src", f"{rd / 'out'}:/out"]
+
+
+def _vm(cpus, dnb=False):
+    return {"name": "v", "cpus": cpus, "dnb": dnb}
+
+
+def test_warn_other_experiments_names_them_with_vm_and_vcpu_counts(settings, messages):
+    # another experiment's VMs slow every guest boot on a shared rig (burger-ic4)
+    host = FakeHost(settings=settings)
+    host.api_responses["/experiments"] = {
+        "experiments": [
+            {"name": "ebwes-x", "running": True, "vms": [_vm(2)]},  # this board's own
+            {"name": "other", "running": True, "vms": [_vm(2), _vm(4), _vm(8, dnb=True)]},
+            {"name": "stopped", "running": False, "vms": [_vm(2)]},
+        ]
+    }
+    experiment.warn_other_experiments(host, "ebwes-x")
+    warned = [m for lvl, m in messages if lvl == "WARNING"]
+    assert len(warned) == 1
+    assert "other (2 VMs, 6 vCPUs)" in warned[0]
+    assert "ebwes-x" not in warned[0] and "stopped" not in warned[0]
+
+
+def test_warn_other_experiments_is_quiet_when_none_runs(settings, messages):
+    host = FakeHost(settings=settings)
+    host.api_responses["/experiments"] = {"experiments": [{"name": "ebwes-x", "running": True}]}
+    experiment.warn_other_experiments(host, "ebwes-x")
+    assert not [m for lvl, m in messages if lvl == "WARNING"]
