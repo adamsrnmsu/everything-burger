@@ -1,9 +1,9 @@
 # The pcap, tcpdump and mm output globs from a live run, on the arm64 range: every verify glob
 # is checked against the files the apps really wrote (work/<board>/results). Same items and
-# overrides as `main` (per-VM filters, a tcpdump on the mirror's monitor VM), minus the JSON
-# conversion: the phenix container's tshark is denied /phenix/images by the Lima VM's host
-# AppArmor `tshark` profile (kernel audit DENIED), so convert_to_json/convert only leave empty
-# .jsonl files and an ERROR; the *.jsonl globs cannot be confirmed on this rig (see burger-c8m).
+# overrides as `main` (per-VM filters, a tcpdump on the mirror's monitor VM), JSON conversion
+# included. It needs the Lima VM's host AppArmor `tshark` profile disabled: it denies the phenix
+# container's tshark /phenix/images and the conversion then leaves empty .jsonl files and an
+# ERROR (burger-dx0).
 # Packet counts use the arm64 range's DNP3 :20000 (its OPC poller speaks DNP3).
 about: "pcap, tcpdump and mm output globs confirmed on the arm64 waterway range"
 route: waterway-arm64
@@ -25,31 +25,36 @@ overrides:
       vms:
         - {hostname: rtu-1, interface: 0, filter: "not tcp port 502"}
         - {hostname: rtu-2, interface: 0}
+      convert_to_json: true
     verify:
       - log: {glob: "*.json", lacks: "\\] ERROR :"}
       - files: {glob: "rtu-*.pcap", min: 2}
+      - files: {glob: "*.jsonl", min: 1}
       - python: {function: rtu1_has_no_modbus}
       - pcap: {glob: "rtu-2-*.pcap", tcp_port: 20000, min_packets: 10}
   tcpdump:
     config:
       vms: [{hostname: monitor, iface: any, filter: "ip proto 47 and less 600 or tcp port 20000"}]
+      convert_to_json: true
     verify:
       - log: {glob: "*.json", lacks: "\\] ERROR :"}
       - files: {glob: "*.pcap", min: 1}
+      - files: {glob: "*.jsonl", min: 1}
       - pcap: {glob: "*.pcap", tcp_port: 20000, ip_proto: 47, min_packets: 10}
   mm:
     config:
       start:
         - type: start_capture
           capture: {bridge: phenix, filename: burger-bridge.pcap, filter: "tcp port 20000"}
-      stop: [{type: stop_capture, capture: {bridge: phenix}}]
+      stop: [{type: stop_capture, capture: {bridge: phenix, convert: true}}]
       vms:
         - hostname: waterway-provider
           start:
             - type: start_capture
               capture: {interface: 0, filename: burger-provider.pcap, filter: "not tcp port 20000"}
-          stop: [{type: stop_capture, capture: {interface: 0}}]
+          stop: [{type: stop_capture, capture: {interface: 0, convert: true}}]
     verify:
       - log: {glob: "*.json", lacks: "\\] ERROR :"}
       - files: {glob: "burger-*.pcap", min: 2}
+      - files: {glob: "*.jsonl", min: 2}
       - pcap: {glob: "burger-bridge.pcap", tcp_port: 20000, min_packets: 10}

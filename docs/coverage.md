@@ -20,9 +20,9 @@ that still needs an open PR runs on `integrate` (and its PR's board) and joins
 | tap (phēnix core) | used by the soap boards | (`base-soap`, `provider`, `elastic`) | |
 | cc | health on every board; `cc-empty-output`, `cc-output-parsing` | `main` (`cc-empty`) | |
 | disruption | `disruption` (baseline hold); offline `disruption-dos` | `main` | |
-| pcap | `pcap` per-VM filters (rtu-1, rtu-2) and JSON; offline `pcap-alias` | `main` (`harden`), `capture` (arm64) | JSON conversion on arm64: the Lima host's AppArmor `tshark` profile blocks the phenix container's tshark (burger-c8m) |
-| tcpdump | `tcpdump` on the `monitor` VM, Modbus + GRE, JSON conversion with a `.jsonl` check (#168); offline `tcpdump-alias` (the old `convertToJSON` key) | `main` (`harden`), `capture` (arm64) | JSON conversion on arm64: the Lima host's AppArmor `tshark` profile blocks the phenix container's tshark (burger-c8m) |
-| mm | bridge + per-VM captures, conversion | `main` (`harden`), `capture` (arm64) | JSON conversion on arm64: the Lima host's AppArmor `tshark` profile blocks the phenix container's tshark (burger-c8m) |
+| pcap | `pcap` per-VM filters (rtu-1, rtu-2) and JSON; offline `pcap-alias` | `main` (`harden`), `capture` (arm64) | JSON conversion on arm64 needs the Lima host's AppArmor `tshark` profile disabled (burger-dx0) |
+| tcpdump | `tcpdump` on the `monitor` VM, Modbus + GRE, JSON conversion with a `.jsonl` check (#168); offline `tcpdump-alias` (the old `convertToJSON` key) | `main` (`harden`), `capture` (arm64) | JSON conversion on arm64 needs the Lima host's AppArmor `tshark` profile disabled (burger-dx0) |
+| mm | bridge + per-VM captures, conversion | `main` (`harden`), `capture` (arm64) | JSON conversion on arm64 needs the Lima host's AppArmor `tshark` profile disabled (burger-dx0) |
 | pipe | `pipe`; offline `pipe-bad-name` must be rejected | `main` (`harden`) | |
 | hoststats | `hoststats` | `main` | |
 | vmstats | `vmstats` (explicit list); default list on `base`; offline `vmstats-bad-name` | `main` (`base`) | |
