@@ -4,7 +4,7 @@ type: mirror
 about: >
   Mirror app feeding a monitor VM; the monitor must see Modbus, delivered
   GRE-encapsulated even on a single host.
-routes: [waterway]
+routes: [waterway, waterway-arm64]
 hosts:
   - hostname: monitor
     metadata: {interface: mirror, vlans: [SCADA, ICS]}
