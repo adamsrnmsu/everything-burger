@@ -178,6 +178,7 @@
             },
             {
               "metadata": {
+                "convert_to_json": true,
                 "vms": [
                   {
                     "filter": "not tcp port 502",
@@ -195,6 +196,7 @@
             },
             {
               "metadata": {
+                "convert_to_json": true,
                 "vms": [
                   {
                     "filter": "ip proto 47 and less 600 or tcp port 20000",
@@ -221,7 +223,8 @@
                 "stop": [
                   {
                     "capture": {
-                      "bridge": "phenix"
+                      "bridge": "phenix",
+                      "convert": true
                     },
                     "type": "stop_capture"
                   }
@@ -242,6 +245,7 @@
                     "stop": [
                       {
                         "capture": {
+                          "convert": true,
                           "interface": 0
                         },
                         "type": "stop_capture"
