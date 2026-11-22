@@ -226,6 +226,7 @@ def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
 
     _stage_assets(res, settings, out)
     down(res, host)  # clears a previous experiment of this name; the services start fresh below
+    warn_other_experiments(host, exp)
     services(res, settings, host, "start")
     if topo_dir:  # the site route's assets are already where its scenario says
         topo_name = res.route.topology_dir
@@ -238,6 +239,26 @@ def up(res: Resolved, settings: Settings, host, timeout: int) -> None:
     wait_running(host, exp, timeout)
     fix_routers(host, settings, exp, topo)
     logger.info("experiment {} is up; next: burger scorch {}", exp, name)
+
+
+def warn_other_experiments(host, exp: str) -> None:
+    """Other experiments' VMs slow every guest boot on a shared rig: on the arm64 Lima rig a
+    9-VM board took 111-145 s to reach miniccc beside one idle 9-VM experiment and 49-57 s
+    alone (burger-ic4), past wait_for_cc's 300 s once failed runs piled up."""
+    data = host.api("/experiments") or {}
+    exps = data.get("experiments") if isinstance(data, dict) else data
+    others = []
+    for e in exps or []:
+        if e.get("running") and e.get("name") != exp:
+            vms = [v for v in e.get("vms") or [] if not v.get("dnb")]
+            cpus = sum(v.get("cpus") or 0 for v in vms)
+            others.append(f"{e.get('name')} ({len(vms)} VMs, {cpus} vCPUs)")
+    if others:
+        logger.warning(
+            "other experiments running: {}; their VMs slow this board's boot and cc "
+            "registration (burger down them if they are not needed)",
+            ", ".join(others),
+        )
 
 
 def wait_running(host, exp: str, timeout: int) -> None:
