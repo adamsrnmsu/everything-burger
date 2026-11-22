@@ -119,6 +119,19 @@ def test_arm64_routes_render_arm64_images_only(settings):
 
 
 @pytest.mark.usefixtures("site_env")
+def test_ignition_server_names_its_image(settings):
+    """`ignition_server: <image>` boots the gateway from that image; `true` keeps the route's."""
+
+    def image(**req):
+        topo, _ = _render(settings, "ettercap", "waterway-arm64", **req)
+        (node,) = [n for n in topo["spec"]["nodes"] if n["general"]["hostname"] == "ignition"]
+        return node["hardware"]["drives"][0]["image"]
+
+    assert image(ignition_server=True) == "ignition-arm64.qc2"
+    assert image(ignition_server="ignition83-arm64.qc2") == "ignition83-arm64.qc2"
+
+
+@pytest.mark.usefixtures("site_env")
 def test_arm64_route_goart_and_bennu_pr(settings, tmp_path):
     from burger.switchboard import load_switchboard, resolve
 

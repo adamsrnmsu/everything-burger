@@ -70,6 +70,10 @@ def test_requires_aggregate(settings):
     assert r.requires.iperf_static == "3.15"
     assert r.requires.iperf_nodes == ["rtu-1", "rtu-2"]
     assert resolve(load_switchboard("harden", settings), settings).requires.monitor
+    # ignition_server carries the gateway image when an item names one
+    assert resolve(load_switchboard("ignition", settings), settings).requires.ignition_server == (
+        "ignition83-commissioned-arm64.qc2"
+    )
 
 
 def test_experiment_name_too_long(settings):

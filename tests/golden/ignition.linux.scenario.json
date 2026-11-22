@@ -166,6 +166,9 @@
               "perspective": {
                 "open_client": false
               },
+              "polling": {
+                "integrity": 30000
+              },
               "type": "gateway"
             }
           }
@@ -308,6 +311,26 @@
                       },
                       {
                         "args": "grep -q 'systemctl start ignition' /etc/phenix/startup/98-ignition.sh",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "curl -s -m 5 http://localhost:8088/StatusPing | grep -Eq '\"state\": ?\"RUNNING\"'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "curl -sf -m 10 'http://localhost:8088/system/webdev/api/tags?device=rtu-2' | grep -Eq 'bus-01.{0,2}/voltage'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ss -Htn state established '( dport = :20000 )' | grep -q 10.1.1.102",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "curl -sf -m 10 'http://localhost:8088/system/webdev/api/tags?device=rtu-2&details=true' | grep -Eq 'voltage\": ?\\{[^}]*\"Good'",
                         "type": "exec",
                         "wait": true
                       }
