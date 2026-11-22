@@ -189,6 +189,32 @@ The containers and bennu layers refuse while any phēnix experiment is running;
 `--force` skips that check. Existing experiments hold their disks on the old
 `bennu.qc2`, so stop them first.
 
+## Lima rig: tshark AppArmor must be disabled
+
+The `capture` board converts pcaps to JSON (`*.jsonl` checks) with tshark inside
+the phēnix container. On the Lima VM the Ubuntu `tshark` AppArmor profile denies
+that read of `/phenix/images` ("tshark: You don't have permission to read the
+file"; `journalctl -k` shows `apparmor=DENIED profile=tshark`), so those checks
+fail. A fresh or recreated VM re-enables the profile. Keep it off by adding this
+step to `provision:` in `~/.lima/<instance>/lima.yaml` (Lima runs system
+provision scripts on every boot, and this one is idempotent):
+
+```yaml
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eu
+    [ -e /etc/apparmor.d/tshark ] || exit 0
+    mkdir -p /etc/apparmor.d/disable
+    ln -sf /etc/apparmor.d/tshark /etc/apparmor.d/disable/tshark
+    apparmor_parser -R /etc/apparmor.d/tshark 2>/dev/null || true
+```
+
+On a running VM, run the body once through `limactl shell <instance> sudo bash`
+instead of restarting. Rollback:
+`sudo rm /etc/apparmor.d/disable/tshark && sudo apparmor_parser -r /etc/apparmor.d/tshark`
+(and drop the provision step).
+
 ## The site route (your own rig)
 
 The `rtds` switchboard runs on your RTDS setup instead of waterway: the
