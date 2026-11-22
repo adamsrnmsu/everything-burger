@@ -11,7 +11,7 @@ about: >
   does not validate them and the solver skips parameters it cannot find.
   The sender is bennu-probe, which ships in the bennu deb: its --tag takes
   the whole comma-separated batch, so one probe call is one WRITE.
-routes: [waterway]
+routes: [waterway, waterway-arm64]
 stages: [start]
 # BURGER_FIFO_TAGS is read when burger loads this file; keep it between 257 and
 # 4096. No other ${...} in here: SCORCH templating eats it in cc commands.

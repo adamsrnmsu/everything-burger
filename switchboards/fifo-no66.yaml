@@ -1,0 +1,15 @@
+# Negative control for fifo-arm: bennu at the #66 merge commit (e59691f) with #66 reverted, built from the
+# fork branch burger/no-66. The 64 KiB updates FIFO fills at the 257th record, so
+# bennu-probe prints its ERR text, exits 1, and the fifo check FAILS by design.
+about: "bennu main minus #66 on arm64 waterway: the batched WRITE overflows the FIFO (fails by design)"
+route: waterway-arm64
+apps: {prs: []}
+bennu:
+  branch: burger/no-66
+  remote: fork
+  install: [deb]
+items:
+  fifo: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on

@@ -1,0 +1,14 @@
+# Live proof of bennu #66 on the arm64 rig: burger builds bennu main (carries #66, the
+# 1 MiB updates FIFO) natively for arm64; one 1000-tag batched WRITE from rtu-1 must ACK and
+# provider.log must show no FIFO error. See fifo-no66 for the same run without #66.
+about: "bennu #66 on arm64 waterway: one batched WRITE fits the simulink provider's FIFO"
+route: waterway-arm64
+apps: {prs: []}
+bennu:
+  branch: main
+  install: [deb]
+items:
+  fifo: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
