@@ -5,8 +5,10 @@ from dataclasses import dataclass
 
 from loguru import logger
 
-from burger import update  # update imports experiment, which imports minimega/phenix: call time
 from burger.config import BurgerError, Settings
+
+# update is imported in the two functions below: update imports experiment, which imports
+# minimega/phenix, which import this module, so a top-level import here is a cycle.
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,8 @@ def _short(image: str | None) -> str:
 
 
 def _refuse_while_running(w: Swap, host, have: str | None, image: str | None) -> None:
+    from burger import update
+
     running = update.running_experiments(host)
     if running:
         raise BurgerError(
@@ -62,6 +66,8 @@ def ensure(w: Swap, host, s: Settings, want: str | None, image: str | None) -> N
 def restore(w: Swap, host, s: Settings) -> None:
     if w.running_sha(host, s) is None:
         return
+    from burger import update
+
     running = update.running_experiments(host)
     if running:
         logger.warning(
