@@ -703,3 +703,55 @@ def test_wait_running_deadline_is_inclusive(settings, clock, monkeypatch):
     monkeypatch.setattr(experiment, "not_running", lambda h, e: next(bad))
     experiment.wait_running(FakeHost(settings=settings), "e", 0)  # still not past the deadline
     assert clock.now == 10
+
+
+def _api_host(settings, info, vms):
+    host = FakeHost(settings=settings)
+    host.api_responses = {"/experiments/e": info, "/experiments/e/vms": vms}
+    return host
+
+
+@pytest.mark.parametrize(
+    "info, vms, expect",
+    [
+        (None, None, "experiment not found"),
+        ({"running": False}, None, "experiment not running"),
+        ({"running": True}, None, "no VMs listed"),
+        ({"running": True}, {"vms": []}, "no VMs listed"),
+        (
+            {"running": True},
+            {
+                "vms": [
+                    {"name": "a", "state": "RUNNING"},
+                    {"name": "b", "state": "BUILDING"},
+                    {"name": "c", "state": "stopped", "dnb": True},
+                    {"name": "d"},
+                ]
+            },
+            "b=BUILDING, d=None",
+        ),
+        ({"running": True}, {"vms": [{"name": "a", "state": "running"}]}, ""),
+    ],
+)
+def test_not_running_names_what_is_not_up(settings, info, vms, expect):
+    assert experiment.not_running(_api_host(settings, info, vms), "e") == expect
+
+
+def test_download_debs_mounts_its_own_debs_dir(settings, tmp_path):
+    host = FakeHost(settings=settings)
+    experiment._download_debs(host, tmp_path, "1:2", ["curl"])
+    (call,) = [c for c in host.calls if c[:2] == ["docker", "run"]]
+    assert call[call.index("-v") + 1] == f"{tmp_path / 'debs'}:/out"
+    assert call[call.index("-w") + 1] == "/out"
+
+
+def test_build_mounts_the_go_source_and_out(settings, monkeypatch):
+    rd = settings.work / "baseline"
+    rd.mkdir(parents=True)
+    (rd / "manifest.json").write_text(json.dumps({**MAN, "bennu": None}))
+    monkeypatch.setattr(experiment, "build_iperf", lambda *a: None)
+    host = FakeHost(settings=settings)
+    experiment.build(res(settings), settings, host)
+    (call,) = [c for c in host.calls if c[:2] == ["docker", "run"] and "go" in c]
+    mounts = [call[i + 1] for i, a in enumerate(call) if a == "-v"]
+    assert mounts == [f"{rd / 'apps' / 'src' / 'go'}:/src", f"{rd / 'out'}:/out"]
