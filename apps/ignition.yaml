@@ -2,25 +2,28 @@ name: ignition
 kind: app
 type: ignition
 about: >
-  The ignition app on an injected Ignition gateway (requires.ignition_server adds an
-  `ignition` VM on the ICS segment, since waterway has no SCADA master that polls DNP3).
-  It connects to rtu-2, the ot-sim fep serving DNP3 on 10.1.1.102:20000 (rtu-1 serves
-  Modbus only, so it is not an Ignition device), and names every point after the
-  ot-sim device and variable behind it, read from apps/otsim: so switch both on
-  together. A pass means the gateway's data tree got the DNP3 device, a tag tree whose
-  names and DNP3 indices match what ot-sim's rtu-2 config serves, the WebDev tag API
-  and the Perspective project. The arm64 ignition image is an Ignition 8.1 tree under
-  /usr/local/bin/ignition, but the app writes the 8.3 layout under /opt/ignition/data
-  and restarts an `ignition` unit, so the gateway never loads any of it: nothing here
-  runs, only the injected files are checked (docs/limitations.md).
+  The ignition app on an injected Ignition 8.3 gateway (requires.ignition_server adds an
+  `ignition` VM on the ICS segment, booted from ignition83-commissioned-arm64.qc2, built by
+  images/ignition83; waterway has no SCADA master that polls DNP3). It connects to
+  rtu-2, the ot-sim fep serving DNP3 on 10.1.1.102:20000 (rtu-1 serves Modbus only, so
+  it is not an Ignition device), and names every point after the ot-sim device and
+  variable behind it, read from apps/otsim: so switch both on together. The file
+  checks read the DNP3 device, a tag tree whose names and DNP3 indices match what
+  ot-sim's rtu-2 config serves, the WebDev tag API and the Perspective project. The
+  live checks prove the gateway runs them: StatusPing RUNNING (trial mode, EULA
+  accepted at image build), the app's own WebDev API answering for rtu-2 with the
+  ot-sim-named tags (device, tag tree and project loaded), and the gateway polling
+  rtu-2 over DNP3 (an established session to 10.1.1.102:20000 and a tag read with
+  Good quality).
 routes: [waterway-arm64]
 requires:
-  ignition_server: true
+  ignition_server: ignition83-commissioned-arm64.qc2
 hosts:
   - hostname: ignition
     metadata:
       type: gateway
       connected_rtus: ["{route.rtus[1]}"]
+      polling: {integrity: 30000}  # values well inside the health settle window
       perspective: {open_client: false}
       api: true
 verify:
@@ -42,3 +45,22 @@ verify:
   - vm:
       host: ignition
       run: "grep -q 'systemctl start ignition' /etc/phenix/startup/98-ignition.sh"
+  # live: the gateway is up (and commissioned: COMMISSIONING is not RUNNING)
+  - vm:
+      host: ignition
+      run: "curl -s -m 5 http://localhost:8088/StatusPing"
+      expect: '"state": ?"RUNNING"'
+  # live: the app's WebDev API answers for rtu-2 with ot-sim-named tags (404 for an
+  # unknown device), so the gateway loaded the device, the tag tree and the api project
+  - vm:
+      host: ignition
+      run: "curl -sf -m 10 'http://localhost:8088/system/webdev/api/tags?device={route.rtus[1]}'"
+      expect: "bus-01.{0,2}/voltage"
+  # live: the gateway polls rtu-2 over DNP3, a session to the fep and a Good read
+  - vm:
+      host: ignition
+      run: "ss -Htn state established '( dport = :20000 )' | grep -q 10.1.1.102"
+  - vm:
+      host: ignition
+      run: "curl -sf -m 10 'http://localhost:8088/system/webdev/api/tags?device={route.rtus[1]}&details=true'"
+      expect: 'voltage": ?\{[^}]*"Good'

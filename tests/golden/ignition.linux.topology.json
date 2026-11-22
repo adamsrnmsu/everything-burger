@@ -557,7 +557,7 @@
           "cpu": "host",
           "drives": [
             {
-              "image": "ignition-arm64.qc2",
+              "image": "ignition83-commissioned-arm64.qc2",
               "inject_partition": 2,
               "interface": "virtio"
             }

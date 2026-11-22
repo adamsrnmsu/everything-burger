@@ -178,8 +178,9 @@ CALDERA_NODE = _ics_server(
     "caldera", "burger Caldera C2 server", "caldera.qc2", memory=4096, vcpus=2, host=210
 )
 # An Ignition gateway on the ICS segment, injected when an item requires it (the
-# ignition app item): waterway has no SCADA master that polls DNP3. Needs the
-# ignition.qc2 image; the app writes its files into the gateway's data tree.
+# ignition app item): waterway has no SCADA master that polls DNP3. Boots
+# ignition.qc2 unless the item names an image (`ignition_server: <image>`); the app
+# writes its files into the gateway's data tree.
 IGNITION_NODE = _ics_server(
     "ignition", "burger Ignition gateway", "ignition.qc2", memory=4096, vcpus=2, host=211
 )
@@ -354,8 +355,15 @@ def _required_nodes(req) -> list[dict]:
         *([KALI_NODE] if req.attacker else []),
         *(TRAFFIC_NODES if req.traffic_gen else []),
         *([CALDERA_NODE] if req.caldera_server else []),
-        *([IGNITION_NODE] if req.ignition_server else []),
+        *([_ignition_node(req.ignition_server)] if req.ignition_server else []),
     ]
+
+
+def _ignition_node(image: bool | str) -> dict:
+    node = copy.deepcopy(IGNITION_NODE)
+    if isinstance(image, str):
+        node["hardware"]["drives"][0]["image"] = image
+    return node
 
 
 def _add_nodes(route, req, nodes: list[dict]) -> None:
