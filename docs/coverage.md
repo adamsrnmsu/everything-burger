@@ -14,15 +14,15 @@ that still needs an open PR runs on `integrate` (and its PR's board) and joins
 | App or component | Items | Boards | Not covered |
 |---|---|---|---|
 | sceptre app | every board: bennu field devices, simulink provider, Modbus polling; `apps/mgmt-vlan-alias` (lowercase MGMT VLAN, #158) | `main`, all | |
-| mirror app | `apps/mirror` into a `monitor` VM | `main` (`harden`, `base`) | |
+| mirror app | `apps/mirror` into a `monitor` VM | `main` (`harden`, `base`), `capture` (arm64) | |
 | mgmt_tap app | `apps/mgmt_tap` against the topology's lowercase `mgmt` VLAN (#199) | `main` | |
 | helics app | `apps/helics` (root broker lookup); `helics-otsim`: from ot-sim's `helics/federate` annotation (rtu-1's federate on a broker at rtu-2, so `10.1.1.102:24000`) helics writes a sub-broker on rtu-2 under the root, the root's script counts it (`--subbrokers 1 -f1`), and the federate gets the wait-for-broker script (otsim runs first); offline `helics-no-broker` must be rejected | `main` (`base`, `helics` on the arm64 rig) | annotation brokers without a port or as `hostname\|iface` (#223 unit tests; ot-sim always writes `ip:24000` and items cannot annotate nodes); a federate on the root directly; a running `helics_broker` (not in `bennu.qc2`) |
 | tap (phēnix core) | used by the soap boards | (`base-soap`, `provider`, `elastic`) | |
 | cc | health on every board; `cc-empty-output`, `cc-output-parsing` | `main` (`cc-empty`) | |
 | disruption | `disruption` (baseline hold); offline `disruption-dos` | `main` | |
-| pcap | `pcap` per-VM filters (rtu-1, rtu-2) and JSON; offline `pcap-alias` | `main` (`harden`) | |
-| tcpdump | `tcpdump` on the `monitor` VM, Modbus + GRE, JSON conversion with a `.jsonl` check (#168); offline `tcpdump-alias` (the old `convertToJSON` key) | `main` (`harden`) | |
-| mm | bridge + per-VM captures, conversion | `main` (`harden`) | |
+| pcap | `pcap` per-VM filters (rtu-1, rtu-2) and JSON; offline `pcap-alias` | `main` (`harden`), `capture` (arm64) | JSON conversion on arm64: the Lima host's AppArmor `tshark` profile blocks the phenix container's tshark (burger-c8m) |
+| tcpdump | `tcpdump` on the `monitor` VM, Modbus + GRE, JSON conversion with a `.jsonl` check (#168); offline `tcpdump-alias` (the old `convertToJSON` key) | `main` (`harden`), `capture` (arm64) | JSON conversion on arm64: the Lima host's AppArmor `tshark` profile blocks the phenix container's tshark (burger-c8m) |
+| mm | bridge + per-VM captures, conversion | `main` (`harden`), `capture` (arm64) | JSON conversion on arm64: the Lima host's AppArmor `tshark` profile blocks the phenix container's tshark (burger-c8m) |
 | pipe | `pipe`; offline `pipe-bad-name` must be rejected | `main` (`harden`) | |
 | hoststats | `hoststats` | `main` | |
 | vmstats | `vmstats` (explicit list); default list on `base`; offline `vmstats-bad-name` | `main` (`base`) | |
