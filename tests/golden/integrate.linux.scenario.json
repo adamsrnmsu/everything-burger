@@ -594,7 +594,7 @@
                 "kafka_endpoints": [
                   {
                     "ip": "127.0.0.1",
-                    "port": "19092"
+                    "port": 19092
                   }
                 ],
                 "topics": [

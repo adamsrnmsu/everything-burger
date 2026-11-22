@@ -1,0 +1,263 @@
+{
+  "apiVersion": "phenix.sandia.gov/v2",
+  "kind": "Scenario",
+  "metadata": {
+    "annotations": {
+      "topology": "ebwes-kafka-fix"
+    },
+    "name": "ebwes-kafka-fix"
+  },
+  "spec": {
+    "apps": [
+      {
+        "assetDir": "/phenix/topologies/waterway-arm64",
+        "hosts": [
+          {
+            "hostname": "waterway-provider",
+            "metadata": {
+              "publish_endpoint": "udp://*;239.0.0.1:40000",
+              "publish_points": "/phenix/topologies/waterway-arm64/injects/publishPoints.txt",
+              "simulator": "Simulink",
+              "solver": "/phenix/topologies/waterway-arm64/injects/simulinksolver",
+              "type": "provider"
+            }
+          },
+          {
+            "hostname": "rtu-1",
+            "metadata": {
+              "infrastructure": "waterway",
+              "logic": "lowergate.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= lowerwater.height - 0.1) && (lock.height <= lowerwater.height + 0.1)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1)); lowervalve.open = 1*((lowersensor.direction == 1) && (lowersensor.active == 1) && (lock.height > lowerwater.height)) + 0*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= lowerwater.height)) + 1*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height > lowerwater.height)) + 0*((lowersensor.direction == -1) && (lowersensor.active == 1))",
+              "modbus": [
+                {
+                  "name": "lowerwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "lowergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "lowervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "lowersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "waterway-provider",
+              "type": "fd-server"
+            }
+          },
+          {
+            "hostname": "rtu-2",
+            "metadata": {
+              "infrastructure": "waterway",
+              "logic": "uppergate.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1)); uppervalve.open = 1*((locksensor.direction == 1) && (locksensor.active == 1) && (lock.height < upperwater.height)) + 0*((uppersensor.direction == 1) && (uppersensor.active == 1)) + 1*((uppersensor.direction == -1) && (uppersensor.active == 1) && (lock.height < upperwater.height)) + 0*((locksensor.direction == -1) && (locksensor.active == 1) && (lock.height >= upperwater.height - 0.1) && (lock.height <= upperwater.height + 0.1))",
+              "modbus": [
+                {
+                  "name": "upperwater",
+                  "type": "water"
+                },
+                {
+                  "name": "lock",
+                  "type": "water"
+                },
+                {
+                  "name": "uppergate",
+                  "type": "gate"
+                },
+                {
+                  "name": "uppervalve",
+                  "type": "valve"
+                },
+                {
+                  "name": "uppersensor",
+                  "type": "boat-sensor"
+                },
+                {
+                  "name": "locksensor",
+                  "type": "boat-sensor"
+                }
+              ],
+              "provider": "waterway-provider",
+              "type": "fd-server"
+            }
+          }
+        ],
+        "name": "sceptre"
+      },
+      {
+        "metadata": {
+          "components": [
+            {
+              "metadata": {
+                "current_disruption": "baseline",
+                "run_duration": 30
+              },
+              "name": "disruption",
+              "type": "disruption"
+            },
+            {
+              "metadata": {
+                "csv": false,
+                "kafka_endpoints": [
+                  {
+                    "ip": "127.0.0.1",
+                    "port": 19092
+                  }
+                ],
+                "topics": [
+                  {
+                    "filter": [
+                      {
+                        "key": "name",
+                        "value": "bus*"
+                      }
+                    ],
+                    "name": "burger.sensors*"
+                  }
+                ],
+                "wait_duration_seconds": 60
+              },
+              "name": "kafka",
+              "type": "kafka"
+            },
+            {
+              "metadata": {
+                "kafka_endpoints": [
+                  {
+                    "ip": "127.0.0.1",
+                    "port": 19092
+                  }
+                ],
+                "wait_duration_seconds": 60
+              },
+              "name": "kafka-csv",
+              "type": "kafka"
+            },
+            {
+              "metadata": {
+                "csv": false,
+                "kafka_endpoints": [
+                  {
+                    "ip": "127.0.0.1",
+                    "port": 19092
+                  }
+                ],
+                "topics": [
+                  {
+                    "filter": [
+                      {
+                        "key": "name",
+                        "value": "bus*"
+                      }
+                    ],
+                    "name": "burger.sensors.a"
+                  },
+                  {
+                    "filter": [
+                      {
+                        "key": "state",
+                        "value": "on"
+                      }
+                    ],
+                    "name": "burger.sensors.b"
+                  }
+                ],
+                "wait_duration_seconds": 60
+              },
+              "name": "kafka-topic-filter",
+              "type": "kafka"
+            },
+            {
+              "metadata": {
+                "kafka_endpoints": [
+                  {
+                    "ip": "127.0.0.1",
+                    "port": 19092
+                  }
+                ],
+                "topics": [
+                  {
+                    "name": "burger.cols"
+                  }
+                ],
+                "wait_duration_seconds": 60
+              },
+              "name": "kafka-csv-columns",
+              "type": "kafka"
+            },
+            {
+              "metadata": {
+                "csv": false,
+                "kafka_endpoints": [
+                  {
+                    "ip": "127.0.0.1",
+                    "port": 19092
+                  }
+                ],
+                "topics": [
+                  {
+                    "name": "burger.raw"
+                  }
+                ],
+                "wait_duration_seconds": 60
+              },
+              "name": "kafka-bad-json",
+              "type": "kafka"
+            },
+            {
+              "metadata": {
+                "kafka_endpoints": [
+                  {
+                    "ip": "127.0.0.1",
+                    "port": 19092
+                  }
+                ],
+                "wait_duration_seconds": 60
+              },
+              "name": "kafka-int-port",
+              "type": "kafka"
+            }
+          ],
+          "runs": [
+            {
+              "cleanup": [
+                "kafka",
+                "kafka-csv",
+                "kafka-topic-filter",
+                "kafka-csv-columns",
+                "kafka-bad-json",
+                "kafka-int-port",
+                "disruption"
+              ],
+              "configure": [
+                "kafka",
+                "kafka-csv",
+                "kafka-topic-filter",
+                "kafka-csv-columns",
+                "kafka-bad-json",
+                "kafka-int-port",
+                "disruption"
+              ],
+              "name": "kafka",
+              "start": [
+                "disruption"
+              ]
+            }
+          ]
+        },
+        "name": "scorch"
+      }
+    ]
+  }
+}

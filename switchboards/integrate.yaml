@@ -27,7 +27,7 @@
 # bennu is stock: no included item needs a bennu PR.
 about: "main + the open phenix-apps PRs it needs (#166, #205, #222, #223) together"
 route: waterway
-apps: {prs: [166, 205, 222, 223]}
+apps: {prs: [166, 205, 222, 223, 225]}
 services: [kafka]
 items:
   disruption: on
@@ -76,6 +76,8 @@ items:
 overrides:
   # #222 fixes the fd-client behind a fep, so here the check is required, not advisory
   bennu/otsim-fep-client: {advisory: false}
+  # #225 takes the port as an int; main's listener needs the quoted string the item carries
+  kafka: {config: {kafka_endpoints: [{ip: "127.0.0.1", port: 19092}]}}
   pcap:
     config:
       vms:

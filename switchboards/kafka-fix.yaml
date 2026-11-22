@@ -1,0 +1,31 @@
+# The kafka board with sceptre-phenix-apps #225, which fixes the four bugs its advisory items
+# pin: a topic's filter applying to every topic, the CSV header never growing, one non-JSON
+# message killing the listener, and an int port failing configure. Here those items are
+# required, not advisory. kafka-int-port's configure no longer fails, so it joins the one run
+# that disruption holds open. When #225 merges, drop this board and turn the items off
+# advisory on `kafka`.
+about: "the kafka board with #225 (kafka listener fixes): its advisory items required"
+route: waterway-arm64
+apps: {prs: [225]}
+services: [kafka]
+items:
+  disruption: on
+  kafka: on
+  kafka-csv: on
+  kafka-topic-filter: on
+  kafka-csv-columns: on
+  kafka-bad-json: on
+  kafka-int-port: on
+runs:
+  - name: kafka
+    configure: [kafka, kafka-csv, kafka-topic-filter, kafka-csv-columns, kafka-bad-json, kafka-int-port, disruption]
+    start: [disruption]
+    cleanup: [kafka, kafka-csv, kafka-topic-filter, kafka-csv-columns, kafka-bad-json, kafka-int-port, disruption]
+overrides:
+  # #225 takes the port as an int; main's listener needs the quoted string the items carry
+  kafka: {config: {kafka_endpoints: [{ip: "127.0.0.1", port: 19092}]}}
+  kafka-csv: {config: {kafka_endpoints: [{ip: "127.0.0.1", port: 19092}]}}
+  kafka-topic-filter: {advisory: false, config: {kafka_endpoints: [{ip: "127.0.0.1", port: 19092}]}}
+  kafka-csv-columns: {advisory: false, config: {kafka_endpoints: [{ip: "127.0.0.1", port: 19092}]}}
+  kafka-bad-json: {advisory: false, config: {kafka_endpoints: [{ip: "127.0.0.1", port: 19092}]}}
+  kafka-int-port: {advisory: false}
