@@ -8,10 +8,11 @@ from loguru import logger
 from burger.checks import Row
 from burger.config import BurgerError
 from burger.experiment import not_running
-from burger.probes import mm_bindings, mm_capture, workflow_vars
+from burger.probes import mirror_subnet, mm_bindings, mm_capture, workflow_vars
 
 # host, settings, resolved board, manifest -> rows (each row's item is the probe name)
 PROBES: dict[str, Callable] = {
+    "mirror-subnet": mirror_subnet.run,
     "mm-bindings": mm_bindings.run,
     "mm-capture": mm_capture.run,
     "workflow-vars": workflow_vars.run,

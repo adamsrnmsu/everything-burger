@@ -1,0 +1,27 @@
+name: cc-recv-stream
+kind: scorch
+type: cc
+about: >
+  Writes 8 MiB of random bytes and their sha256 on the first RTU, then pulls the
+  data with a cc recv `method: stream` (#226) and the checksum with the default
+  `mount`. The python check wants both files and a matching sha256, so a short,
+  partial or corrupted stream fails, and so does a broken default recv.
+routes: [waterway, waterway-arm64]
+stages: [start]
+config:
+  vms:
+    - hostname: "{route.rtus[0]}"
+      start:
+        # No ${...} here: SCORCH templating eats it in cc commands.
+        - type: exec
+          wait: true
+          args: >-
+            head -c 8388608 /dev/urandom > /tmp/burger-stream.bin &&
+            sha256sum /tmp/burger-stream.bin | cut -d' ' -f1 > /tmp/burger-stream.sha256
+        - type: recv
+          args: /tmp/burger-stream.bin
+          method: stream
+        - type: recv
+          args: /tmp/burger-stream.sha256
+verify:
+  - python: judge_stream

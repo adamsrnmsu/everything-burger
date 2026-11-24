@@ -1,0 +1,32 @@
+name: cc-recv-stream-reset
+kind: scorch
+type: cc
+about: >
+  A cc recv `method: stream` (#226), a cc `reset`, then the same stream recv
+  again. reset clears minimega's commands, so command IDs can start over while
+  the first recv's miniccc_responses/<id>/<uuid> directory is still there; #226
+  then refuses the second recv with "has stale responses". Advisory: it pins a
+  review finding on #226, not a burger requirement.
+routes: [waterway, waterway-arm64]
+stages: [start]
+advisory: true
+config:
+  vms:
+    - hostname: "{route.rtus[0]}"
+      start:
+        - type: exec
+          wait: true
+          args: "echo burger > /tmp/burger-reset.txt"
+        - type: recv
+          args: /tmp/burger-reset.txt
+          method: stream
+        - type: reset
+        - type: exec
+          wait: true
+          args: "echo burger-again > /tmp/burger-reset.txt"
+        - type: recv
+          args: /tmp/burger-reset.txt
+          method: stream
+verify:
+  # the second recv, not the first, must be the file left
+  - log: {glob: "burger-reset.txt", contains: "^burger-again$"}

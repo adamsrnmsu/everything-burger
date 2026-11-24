@@ -1,0 +1,27 @@
+# sceptre-phenix-apps #227 (fixes #224): each experiment gets its own mirror subnet. The
+# mirror-decoy service stores an experiment with a mirror app (never started) before up, so its
+# configure takes the default 10.248.171.0/24. Main's mirror app only counts running experiments
+# and hands ebwes-mirror the same subnet; #227 counts stored ones and must move it to .172. The
+# mirror-subnet probe checks the app's status, the GRE port in OVS, the monitor's address and
+# that no other stored experiment shares the subnet; apps/mirror checks GRE reaches the monitor.
+# mirstock is the same board on main and fails by design. When #227 merges, drop this board
+# and add the decoy service to `main`.
+about: "#227 mirror subnet per experiment: a stored decoy holds .171, ebwes-mirror must not"
+route: waterway-arm64
+apps: {prs: [227]}
+services: [mirror-decoy]
+probes: [mirror-subnet]
+items:
+  apps/mirror: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+  # holds the start stage open 30 s so the monitor's tcpdump sees mirrored polls
+  disruption: on
+overrides:
+  # the arm64 range polls DNP3 (:20000) from a Linux OPC gateway, so no Windows nodes are needed
+  apps/mirror:
+    verify:
+      - vm:
+          host: monitor
+          run: "timeout 30 tcpdump -nn -i any -c 3 'ip proto 47 or tcp port 20000'"

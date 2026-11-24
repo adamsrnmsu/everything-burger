@@ -1,0 +1,16 @@
+name: cc-recv-stream-missing
+kind: scorch
+type: cc
+about: >
+  A cc recv `method: stream` (#226) of a file that does not exist must fail the
+  stage, not pass with nothing received.
+routes: [waterway, waterway-arm64]
+stages: [start]
+expect_error: "error receiving '/tmp/burger-no-such-file'"
+config:
+  vms:
+    - hostname: "{route.rtus[0]}"
+      start:
+        - type: recv
+          args: /tmp/burger-no-such-file
+          method: stream
