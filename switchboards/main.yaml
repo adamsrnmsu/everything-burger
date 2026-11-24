@@ -14,6 +14,9 @@ about: "upstream main, no PRs: every app and component burger covers"
 route: waterway
 apps: {prs: []}
 services: [kafka]
+# the mirror app's post-start used to fail and exit 0 (#224): its status, GRE port, monitor
+# address and an unshared subnet are checked from the host
+probes: [mirror-subnet]
 items:
   disruption: on
   disruption-dos: on

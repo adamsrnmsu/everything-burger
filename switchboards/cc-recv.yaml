@@ -1,0 +1,17 @@
+# sceptre-phenix-apps #226: cc recv `method: stream` (one file through minimega `cc recv`
+# instead of the miniccc mount). cc-recv-stream pulls 8 MiB with stream and its checksum with
+# the default mount; cc-recv-stream-reset (advisory) streams across a cc reset, which clears
+# command IDs; cc-recv-stream-missing wants a missing source to fail the stage. fifo is
+# the existing mount recv. The bennu items give the waterway health run. When #226 merges, move
+# the two items to `main` and drop this board. The expected failure is listed last so it cannot
+# stop the other.
+about: "cc recv method: stream (#226): 8 MiB byte-for-byte, missing source fails"
+route: waterway-arm64
+apps: {prs: [226]}
+items:
+  cc-recv-stream: on
+  cc-recv-stream-reset: on
+  cc-recv-stream-missing: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on

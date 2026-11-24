@@ -175,7 +175,7 @@ def test_script_says_when_the_bindings_predate_1686(tmp_path):
 
 
 def test_no_probes_named_is_an_error(settings):
-    res = resolved(settings, "main")
+    res = resolved(settings, "arm64")  # a board with no probes
     with pytest.raises(BurgerError, match="no probes"):
         probes.run(host_for(settings, True), settings, res, {})
 
@@ -215,3 +215,77 @@ def test_bindings_probe_that_cannot_run_says_why(settings):
     with pytest.raises(BurgerError) as e:
         bindings(settings, "", "x" * 400 + "tail", code=1)
     assert str(e.value) == ("x" * 400 + "tail")[-300:]
+
+
+def _mirror_exp(addr, subnet=None, port="grePort", ip=None):
+    exp = {
+        "spec": {
+            "scenario": {
+                "apps": [
+                    {
+                        "name": "mirror",
+                        "hosts": [{"hostname": "monitor", "metadata": {"interface": "mirror"}}],
+                    }
+                ]
+            },
+            "topology": {
+                "nodes": [
+                    {
+                        "general": {"hostname": "monitor"},
+                        "network": {
+                            "interfaces": [{"name": "mirror", "address": addr, "mask": 24}]
+                        },
+                    }
+                ]
+            },
+        },
+        "status": {"apps": {}},
+    }
+    if subnet:
+        exp["status"]["apps"]["mirror"] = {
+            "subnet": subnet,
+            "mirrors": {"monitor": {"mirrorName": port, "ip": ip or addr}},
+        }
+    return exp
+
+
+class _MirrorHost:
+    def __init__(self, exps, ovs):
+        self.exps, self.ovs = exps, ovs
+
+    def phenix(self, *a, **kw):
+        name = a[2].split("/", 1)[1]
+        return subprocess.CompletedProcess(a, 0, json.dumps(self.exps[name]), "")
+
+    def run(self, cmd, **kw):
+        return subprocess.CompletedProcess(cmd, 0, self.ovs.get(tuple(cmd[-2:]), "[]"), "")
+
+    def api(self, path):
+        return {"experiments": [{"name": n} for n in self.exps]}
+
+
+def test_mirror_subnet_probe(settings):
+    from burger.probes import mirror_subnet
+
+    res = resolved(settings, "main")
+    exp = res.board.exp
+    ovs = {("grePort", "type"): "gre", ("grePort", "options:remote_ip"): '"10.248.172.254"'}
+    ok = _mirror_exp("10.248.172.254", "10.248.172.0/24")
+    decoy = _mirror_exp("10.248.171.254")  # stored, never started: topology only
+    rows = mirror_subnet.run(_MirrorHost({exp: ok, "decoy": decoy}, ovs), settings, res, {})
+    assert [r.verdict for r in rows] == ["ok"] * 4, rows
+
+    # #224: the decoy's subnet handed out again, and a GRE port OVS did not take
+    shared = _mirror_exp("10.248.171.254", "10.248.171.0/24")
+    ovs[("grePort", "error")] = '"could not add network device grePort to ofproto (File exists)"'
+    rows = mirror_subnet.run(_MirrorHost({exp: shared, "decoy": decoy}, ovs), settings, res, {})
+    assert {r.check: r.verdict for r in rows} == {
+        "post-start status": "ok",
+        "gre port monitor": "FAIL",
+        "target address monitor": "ok",
+        "subnet unique": "FAIL",
+    }
+
+    # post-start failed and exited 0: no status at all
+    rows = mirror_subnet.run(_MirrorHost({exp: decoy}, {}), settings, res, {})
+    assert [(r.check, r.verdict) for r in rows] == [("post-start status", "FAIL")]

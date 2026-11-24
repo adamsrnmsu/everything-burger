@@ -1,0 +1,21 @@
+# Negative control for `mirror`: upstream main with the stored decoy. Main hands ebwes-mirstock
+# the decoy's subnet, so mirror-subnet's "subnet unique" FAILS by design. Otherwise as `mirror`.
+about: "upstream main with the stored mirror decoy: ebwes shares .171 (fails by design)"
+route: waterway-arm64
+apps: {prs: []}
+services: [mirror-decoy]
+probes: [mirror-subnet]
+items:
+  apps/mirror: on
+  bennu/field-device: on
+  bennu/simulink-provider: on
+  bennu/modbus-polled: on
+  # holds the start stage open 30 s so the monitor's tcpdump sees mirrored polls
+  disruption: on
+overrides:
+  # the arm64 range polls DNP3 (:20000) from a Linux OPC gateway, so no Windows nodes are needed
+  apps/mirror:
+    verify:
+      - vm:
+          host: monitor
+          run: "timeout 30 tcpdump -nn -i any -c 3 'ip proto 47 or tcp port 20000'"
