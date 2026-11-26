@@ -1,4 +1,4 @@
-# cc on a Windows VM (opc), sceptre-phenix-apps #210: Windows commands are
+# cc on a Windows VM (opc), sceptre-phenix-apps #210 (merged): Windows commands are
 # judged by exit code through `powershell -File`, with a warn-not-fail
 # transition from the old "any STDERR fails" rule. cc-windows-exit-code passes
 # only with #210 (on main its STDERR exec fails the stage) and checks both
@@ -9,7 +9,6 @@
 # waits out Windows boot.
 about: "#210 cc on Windows: exit codes through powershell -File, warn-not-fail transition"
 route: waterway
-apps: {prs: [210]}
 items:
   cc-windows-exit-code: on
   cc-windows-failure: on

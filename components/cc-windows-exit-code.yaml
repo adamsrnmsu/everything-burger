@@ -27,4 +27,3 @@ verify:
   - log: {glob: "start-*.json", contains: "exited 3 without writing to STDERR"}
 requires:
   windows: true
-  apps_prs: [210]

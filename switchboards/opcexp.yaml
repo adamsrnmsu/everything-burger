@@ -6,10 +6,9 @@
 #
 # SCAFFOLD: renders and resolves offline, but a live pass depends on opc.qc2
 # serving OPC-UA at :4840 and the sceptre app emitting opc.xml for `opc` -
-# both only checkable on the rig. Uses opcexport component #205.
+# both only checkable on the rig. Uses the opcexport metadata model from #205 (merged).
 about: "opcexport: OPC server -> es-stub Elasticsearch (waterway)"
 route: waterway
-apps: {prs: [205]}
 items:
   es-stub: on
   opcexport-live: on
