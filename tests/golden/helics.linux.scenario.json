@@ -262,20 +262,7 @@
                         "args": "grep -q ot-sim-message-bus /etc/ot-sim/config.xml",
                         "type": "exec",
                         "wait": true
-                      }
-                    ]
-                  }
-                ]
-              },
-              "name": "health",
-              "type": "cc"
-            },
-            {
-              "metadata": {
-                "vms": [
-                  {
-                    "hostname": "waterway-provider",
-                    "start": [
+                      },
                       {
                         "args": "grep -A1 'dnp3-outstation. mode=.client.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.1.102:20000</endpoint>'",
                         "type": "exec",
@@ -285,7 +272,7 @@
                   }
                 ]
               },
-              "name": "health-otsim-fep-client",
+              "name": "health",
               "type": "cc"
             }
           ],
@@ -294,12 +281,6 @@
               "name": "health",
               "start": [
                 "health"
-              ]
-            },
-            {
-              "name": "extras-otsim-fep-client",
-              "start": [
-                "health-otsim-fep-client"
               ]
             }
           ]

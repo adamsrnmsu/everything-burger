@@ -38,9 +38,10 @@ def test_resolve_reports_all_unset_env(settings, monkeypatch):
     assert "BURGER_SITE_SCENARIO" in str(e.value)
 
 
+@pytest.mark.usefixtures("site_env")
 def test_resolve_missing_pr(settings):
-    with pytest.raises(BurgerError, match="#205"):
-        resolve(board(settings, "opcexp", apps_prs=[166]), settings)
+    with pytest.raises(BurgerError, match="#166"):
+        resolve(board(settings, "rtds", apps_prs=[225]), settings)
 
 
 def test_switchboard_unknown_route(settings, tmp_path):
@@ -193,11 +194,12 @@ def test_bad_sources_are_burger_errors(settings, tmp_path, body, msg):
         load_switchboard("t", write_board(settings, tmp_path, body))
 
 
+@pytest.mark.usefixtures("site_env")
 def test_requires_apps_prs_resolve_against_contains(settings):
-    ok = board(settings, "opcexp", apps_prs=[205], apps_branch={"branch": "b", "remote": "fork"})
+    ok = board(settings, "rtds", apps_prs=[166], apps_branch={"branch": "b", "remote": "fork"})
     assert resolve(ok, settings).board.apps_branch
-    with pytest.raises(BurgerError, match="#205"):
-        resolve(board(settings, "opcexp", apps_prs=[], apps_branch=ok.apps_branch), settings)
+    with pytest.raises(BurgerError, match="#166"):
+        resolve(board(settings, "rtds", apps_prs=[], apps_branch=ok.apps_branch), settings)
 
 
 def test_branch_names_with_slashes_and_dots_are_fine(settings, tmp_path):
@@ -205,10 +207,11 @@ def test_branch_names_with_slashes_and_dots_are_fine(settings, tmp_path):
     assert load_switchboard("t", s).apps_branch["branch"] == "feat/x-1.2_a"
 
 
+@pytest.mark.usefixtures("site_env")
 def test_requires_message_names_prs_or_contains(settings):
     with pytest.raises(BurgerError, match=r"apps prs$"):
-        resolve(board(settings, "opcexp", apps_prs=[]), settings)
-    b = board(settings, "opcexp", apps_prs=[], apps_branch={"branch": "b", "remote": "fork"})
+        resolve(board(settings, "rtds", apps_prs=[]), settings)
+    b = board(settings, "rtds", apps_prs=[], apps_branch={"branch": "b", "remote": "fork"})
     with pytest.raises(BurgerError, match="apps contains"):
         resolve(b, settings)
 

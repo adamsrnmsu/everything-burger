@@ -446,6 +446,11 @@
                         "wait": true
                       },
                       {
+                        "args": "grep -A1 'dnp3-outstation. mode=.client.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.1.102:20000</endpoint>'",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
                         "args": "pgrep -f '(^|/)(bennu-simulink-provider|bennu-simulink-provider-helics)( |$)'",
                         "type": "exec",
                         "wait": true
@@ -779,24 +784,6 @@
               },
               "name": "trafficgen",
               "type": "trafficgen"
-            },
-            {
-              "metadata": {
-                "vms": [
-                  {
-                    "hostname": "simulink-provider",
-                    "start": [
-                      {
-                        "args": "grep -A1 'dnp3-outstation. mode=.client.' /etc/ot-sim/config.xml | grep -Eq '<endpoint>10.1.1.102:20000</endpoint>'",
-                        "type": "exec",
-                        "wait": true
-                      }
-                    ]
-                  }
-                ]
-              },
-              "name": "health-otsim-fep-client",
-              "type": "cc"
             }
           ],
           "runs": [
@@ -881,12 +868,6 @@
                 "erspan"
               ],
               "name": "extras-erspan"
-            },
-            {
-              "name": "extras-otsim-fep-client",
-              "start": [
-                "health-otsim-fep-client"
-              ]
             }
           ]
         },

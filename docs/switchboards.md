@@ -69,7 +69,7 @@ this.
 | `cc-recv` | #226 | stock `bennu-arm64` image | `waterway-arm64`: `cc-recv-stream`, `cc-recv-stream-reset` (advisory) and `cc-recv-stream-missing` (expected failure, listed last) |
 | `mirror` | #227 | stock `bennu-arm64` image | `waterway-arm64` with the `mirror-decoy` service and the `mirror-subnet` probe: `apps/mirror` must get a subnet the decoy does not hold |
 | `mirstock` | upstream `main` | stock `bennu-arm64` image | `mirror` without #227: `mirror-subnet`'s `subnet unique` fails by design |
-| `integrate` | #166, #205, #223, #225 (#168, #202, #207, #208, #222 merged): the open apps PRs it needs, merged by burger | stock `bennu.qc2` | `main`'s items plus the ones that still need an open PR, in one run on waterway. If it passes, the open PRs can merge in any order; drop each from `prs` as it merges |
+| `integrate` | #166, #225 (#168, #202, #205, #207, #208, #222, #223 merged): the open apps PRs it needs, merged by burger | stock `bennu.qc2` | `main`'s items plus the ones that still need an open PR, in one run on waterway. If it passes, the open PRs can merge in any order; drop each from `prs` as it merges |
 | `main` | upstream `main`, no PRs | stock `bennu.qc2` | the persistent check: every item burger covers that runs on main (disruption, pcap, tcpdump, mm, pipe, hoststats, vmstats, qos, erspan, iperf, snort, cc, tcpdump-alias, mgmt_tap, mirror, otsim, wireguard, helics and its federate count, protonuke, and the offline rejections) in one run on waterway. Run it after merges to see the state of main; items join it when their PR merges |
 
 Models no route can run are validated offline by `phenix-scorch-validate`
