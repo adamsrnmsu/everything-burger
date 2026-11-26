@@ -199,9 +199,10 @@ def test_run_site_route_reaches_report_and_down(tmp_path, monkeypatch, capsys):
     assert man["topologies"] is None
     report = (tmp_path / "rtds" / "report.md").read_text()
     assert "topologies: `site route`" in report and "**PASS**" in report
-    # down ran last: after its config delete only the restores' label checks
+    # down ran last: after its config delete only the minimega teardown check and the
+    # restores' label checks
     last = max(i for i, c in enumerate(host.calls) if c[3:6] == ["phenix", "config", "delete"])
-    assert all(c[:2] == ["docker", "inspect"] for c in host.calls[last + 1 :])
+    assert all(c[:2] == ["docker", "inspect"] or "minimega" in c for c in host.calls[last + 1 :])
 
 
 def test_run_renders_before_build(tmp_path, monkeypatch, capsys):

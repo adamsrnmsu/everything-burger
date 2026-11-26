@@ -356,14 +356,61 @@ def fix_routers(host, settings: Settings, exp: str, topo: dict) -> None:
         logger.info("router '{}': interface config queued over cc (vrouter workaround)", name)
 
 
+MM_CSV = ".csv true .headers false .annotate false .columns"
+
+
+def _vm_states(host, exp) -> list[str]:
+    """States of the VMs in minimega's namespace `exp`; [] when it isn't there. The list
+    comes first because naming a namespace in a command creates it."""
+    if exp not in host.mmg(MM_CSV, "namespace", "namespace").stdout.split():
+        return []
+    return host.mm(exp, MM_CSV, "state", "vm", "info").stdout.split()
+
+
+def _clear(host, exp, tries: int) -> bool:
+    for i in range(tries):
+        if i:
+            time.sleep(2)
+        if not host.mmg("clear", "namespace", exp).returncode and not _vm_states(host, exp):
+            return True
+    return False
+
+
+def verify_torn_down(host, exp: str, tries: int = 30) -> None:
+    """Make sure minimega holds no VMs of `exp`; phēnix cannot be trusted to say so.
+
+    `phenix exp stop` marks the experiment stopped (and `exp delete` then removes it) even
+    when minimega's `clear namespace` failed, e.g. "scheduler still running for namespace"
+    while a launch is in flight, leaving the VMs running. Retry the clear (the scheduler
+    finishes), then kill and flush by hand; raise if VMs are still there."""
+    vms = _vm_states(host, exp)
+    if not vms:
+        host.mmg("clear", "namespace", exp)  # an empty leftover namespace, or none (harmless error)
+    elif not _clear(host, exp, tries):
+        logger.warning(
+            "{} VM(s) of '{}' survived phenix stop/delete in minimega ({}); killing them",
+            len(vms),
+            exp,
+            ", ".join(sorted(set(vms))),
+        )
+        host.mm(exp, "vm", "kill", "all")
+        host.mm(exp, "vm", "flush")
+        if not _clear(host, exp, 1):
+            raise BurgerError(f"minimega still holds VMs of '{exp}'; clear namespace {exp} failed")
+
+
 def down(res: Resolved, host) -> None:
     exp = res.board.exp
     info = host.api(f"/experiments/{exp}")
     if info:
         if info.get("running"):
-            host.phenix("experiment", "stop", exp)
+            try:
+                host.phenix("experiment", "stop", exp)
+            except BurgerError as e:  # phenix marked it stopped anyway; minimega is checked below
+                logger.warning("phenix stop of '{}' failed: {}", exp, e)
         host.phenix("experiment", "delete", exp)
     host.phenix("config", "delete", f"scenario/{exp}", f"topology/{exp}", check=False, capture=True)
+    verify_torn_down(host, exp)  # also when phenix forgot exp: an earlier down may have failed
 
 
 def collect(res: Resolved, settings: Settings, host, i: int, since: str = "") -> dict:
