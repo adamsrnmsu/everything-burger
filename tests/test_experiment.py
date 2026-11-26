@@ -575,6 +575,16 @@ def test_stage_startup_copies_miniccc_or_says_why_not(settings, tmp_path):
         experiment._stage_startup(r, settings, host, {}, tmp_path)
 
 
+def test_stage_startup_stages_protonuke_or_says_why_not(settings, tmp_path):
+    r = res(settings)
+    r = dataclasses.replace(r, requires=dataclasses.replace(r.requires, protonuke_nodes=["rtu-1"]))
+    experiment._stage_startup(r, settings, FakeHost(settings=settings), {}, tmp_path)
+    assert (tmp_path / "03-burger-protonuke.sh").read_text() == experiment.PROTONUKE_STARTUP
+    host = FakeHost({f"docker cp {settings.mm_ctr}:/opt/minimega/bin/protonuke": _cp(1)}, settings)
+    with pytest.raises(BurgerError, match=r"requires\.protonuke needs protonuke"):
+        experiment._stage_startup(r, settings, host, {}, tmp_path)
+
+
 def test_stage_assets_into_an_existing_assets_dir(settings, tmp_path):
     root = tmp_path / "root"
     root.mkdir()

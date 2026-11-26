@@ -140,6 +140,16 @@
                         "args": "cat /etc/default/protonuke | grep -Eq 'PROTONUKE_ARGS = -serve -http'",
                         "type": "exec",
                         "wait": true
+                      },
+                      {
+                        "args": "ss -Hltn '( sport = :80 )' | grep -q .",
+                        "type": "exec",
+                        "wait": true
+                      },
+                      {
+                        "args": "ss -Htan 'sport = :80' | grep -Eq '10\\.1\\.1\\.102\\]?:'",
+                        "type": "exec",
+                        "wait": true
                       }
                     ]
                   },

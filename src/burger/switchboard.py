@@ -67,6 +67,7 @@ class Requires:
     # inject an Ignition gateway VM; True boots ignition.qc2 (route-mapped), a str is the image
     ignition_server: bool | str = False
     goart_nodes: list[str] = field(default_factory=list)  # inject the goart binary here
+    protonuke_nodes: list[str] = field(default_factory=list)  # stage protonuke, run it at boot
 
 
 @dataclass
@@ -374,6 +375,7 @@ def _requires(items: list[Item]) -> Requires:
         caldera_server=any(r.get("caldera_server") for r in req),
         ignition_server=next((v for r in req if (v := r.get("ignition_server"))), False),
         goart_nodes=_unique(n for r in req for n in r.get("goart", {}).get("nodes", [])),
+        protonuke_nodes=_unique(n for r in req for n in r.get("protonuke", {}).get("nodes", [])),
     )
 
 

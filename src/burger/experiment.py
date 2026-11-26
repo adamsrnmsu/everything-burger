@@ -15,7 +15,7 @@ from burger.checks.status import collect_status, evaluate
 from burger.compose import compose
 from burger.config import BurgerError, Settings
 from burger.iperf import build_iperf
-from burger.render import DEBS_STARTUP, MINICCC_STARTUP, render
+from burger.render import DEBS_STARTUP, MINICCC_STARTUP, PROTONUKE_STARTUP, render
 from burger.site import site_image
 from burger.switchboard import Resolved
 from burger.ui import spinner
@@ -190,6 +190,17 @@ def _stage_startup(res: Resolved, settings: Settings, host, man: dict, out: Path
                 " miniccc injection)"
             )
         (out / "01-burger-miniccc.sh").write_text(MINICCC_STARTUP)
+    if res.requires.protonuke_nodes:
+        src = f"{settings.mm_ctr}:/opt/minimega/bin/protonuke"
+        if (
+            not settings.mm_ctr
+            or host.run(["docker", "cp", src, out / "burger-protonuke"], check=False).returncode
+        ):
+            raise BurgerError(
+                "requires.protonuke needs protonuke from the minimega container "
+                "(BURGER_MINIMEGA_CONTAINER)"
+            )
+        (out / "03-burger-protonuke.sh").write_text(PROTONUKE_STARTUP)
 
 
 def _stage_assets(res: Resolved, settings: Settings, out: Path) -> None:
