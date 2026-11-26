@@ -42,7 +42,7 @@ burger joins `ca_certs` into one bundle and points `SSL_CERT_FILE`,
 `REQUESTS_CA_BUNDLE`, `PIP_CERT`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO` and the
 rest at it. That bundle **replaces** the system store everywhere those
 variables are read; it does not add to it. A proxy that re-signs only some
-traffic and passes the rest through with its real chain (seen on en18:
+traffic and passes the rest through with its real chain (seen on an earlier lab host:
 `pypi.org` arrived un-resigned and failed with "unable to get local issuer
 certificate") needs the system bundle listed next to the site CAs:
 
