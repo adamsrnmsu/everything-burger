@@ -97,7 +97,7 @@ the fixes below (all NEW, all in the merge commit) are mechanical Optional/typin
   test_command_helpers, scorch/app.py `import re`, test_iperf.py.
 - CHANGELOG.md differs only in union-merge line order/duplicated "Changed" headings (rebased PR changelog contexts); same lines.
 
-## v4 update (en18 findings, 10-22): four PR fixes merged on top of v3
+## v4 update (lab-host findings, 10-22): four PR fixes merged on top of v3
 - Head 045cb78 = d985de4 + merges of the new heads of #165 (a24d7ae), #167 (ba4818a), #168 (65aaacb), #172 (551447c).
   upstream/main is still 14d7b31 and no other PR moved, so the 16 merges were not replayed. Suite 1750 passed; ruff, mypy clean.
 - #167 pcap.py vs #155: kept #155's `utils._validate_mm_filter` quoting; the reset is now `'len >= 0'` instead of `""`.
