@@ -1,5 +1,5 @@
 # The protonuke app on the arm64 rig: main's protonuke item plus the range's field
-# devices for health. Config only: the images carry no protonuke.
+# devices for health. burger injects protonuke from the minimega container and the app's checks include live traffic.
 about: "protonuke app on upstream main, on the arm64 waterway range"
 route: waterway-arm64
 apps: {prs: []}

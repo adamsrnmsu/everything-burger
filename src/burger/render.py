@@ -289,6 +289,41 @@ def goart_injections(stage_dir):
     ]
 
 
+# The app writes `PROTONUKE_ARGS = ...` to /etc/default/protonuke, which the images'
+# systemd has no service for, so burger runs the binary itself from a unit that reads
+# that file as its EnvironmentFile (systemd accepts the spaces around the =).
+PROTONUKE_STARTUP = """#!/bin/bash
+# everything-burger: run protonuke with the args the protonuke app wrote
+exec >>/var/log/burger-protonuke.log 2>&1
+install -D -m 0755 /root/burger-protonuke /usr/local/bin/protonuke
+cat >/etc/systemd/system/protonuke.service <<'EOF'
+[Unit]
+Description=protonuke traffic (everything-burger)
+After=network-online.target
+[Service]
+EnvironmentFile=/etc/default/protonuke
+ExecStart=/bin/sh -c 'exec /usr/local/bin/protonuke $PROTONUKE_ARGS'
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable --now protonuke
+"""
+
+PROTONUKE_STAGE = (
+    "burger-protonuke",
+    "/root/burger-protonuke",
+    "protonuke from the minimega container",
+    "03-burger-protonuke.sh",
+    "install and start protonuke",
+)
+
+
+def protonuke_injections(stage_dir):
+    return _staged_with_startup(stage_dir, *PROTONUKE_STAGE)
+
+
 def arm64_node(node: dict, image_map: dict) -> None:
     """Make an injected node boot on an arm64 range: the mapped image and the
     hardware block the range's own topologies use (UEFI firmware, virt machine,
@@ -395,6 +430,7 @@ def _check_hosts(res: Resolved, nodes: list[dict], bennu_nodes: list[str]) -> No
         ("debs nodes", req.debs_nodes),
         ("iperf_static nodes", req.iperf_nodes),
         ("goart nodes", req.goart_nodes),
+        ("protonuke nodes", req.protonuke_nodes),
     ):
         missing = [h for h in want if h not in hosts]
         if missing:
@@ -423,6 +459,7 @@ def _injections(res, man, stage_dir, settings, nodes) -> list[tuple[set, list[di
             iperf_injections(stage_dir, req.iperf_static),
         ),
         (set(req.goart_nodes), goart_injections(stage_dir)),
+        (set(req.protonuke_nodes), protonuke_injections(stage_dir)),
     ]
 
 

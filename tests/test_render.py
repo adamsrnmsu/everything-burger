@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from burger import render as render_mod
 from burger.bennu import bennu_startup
 from burger.render import render
 from burger.switchboard import all_switchboards, load_switchboard, resolve
@@ -238,3 +239,11 @@ def test_bennu_startup_keeps_the_images_swig_endpoint_on_aarch64():
         i for i, ln in enumerate(lines) if ln.startswith("[ -f /root/_Endpoint.so.burger")
     )
     assert save < pip < restore
+
+
+def test_protonuke_startup_runs_the_binary_with_the_apps_env_file():
+    assert "EnvironmentFile=/etc/default/protonuke" in render_mod.PROTONUKE_STARTUP
+    assert [i["dst"] for i in render_mod.protonuke_injections("/s")] == [
+        "/root/burger-protonuke",
+        "/etc/phenix/startup/03-burger-protonuke.sh",
+    ]

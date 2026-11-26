@@ -93,6 +93,17 @@
             "dst": "/usr/local/bin/iperf3-3.15",
             "permissions": "0755",
             "src": "/phenix/burger/x/iperf3-3.15"
+          },
+          {
+            "description": "burger: protonuke from the minimega container",
+            "dst": "/root/burger-protonuke",
+            "src": "/phenix/burger/x/burger-protonuke"
+          },
+          {
+            "description": "burger: install and start protonuke",
+            "dst": "/etc/phenix/startup/03-burger-protonuke.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/03-burger-protonuke.sh"
           }
         ],
         "network": {
@@ -149,6 +160,17 @@
             "dst": "/usr/local/bin/iperf3-3.15",
             "permissions": "0755",
             "src": "/phenix/burger/x/iperf3-3.15"
+          },
+          {
+            "description": "burger: protonuke from the minimega container",
+            "dst": "/root/burger-protonuke",
+            "src": "/phenix/burger/x/burger-protonuke"
+          },
+          {
+            "description": "burger: install and start protonuke",
+            "dst": "/etc/phenix/startup/03-burger-protonuke.sh",
+            "permissions": "0755",
+            "src": "/phenix/burger/x/03-burger-protonuke.sh"
           }
         ],
         "network": {
