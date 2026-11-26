@@ -57,12 +57,12 @@ class Host:
     def phenix(self, *a, **kw):
         return self.ctr("phenix", *a, **kw)
 
-    def mm(self, exp, *a):
-        """One minimega command in the experiment's namespace, via the container.
+    def mmg(self, *a):
+        """One minimega command outside any namespace, via the container.
         `minimega -e` exits 0 when the command fails, printing `Error (<host>): ...` on
         stderr, so such a line makes the returncode 1."""
         res = self.run(
-            ["docker", "exec", self.s.mm_ctr, "minimega", "-e", " ".join(["namespace", exp, *a])],
+            ["docker", "exec", self.s.mm_ctr, "minimega", "-e", " ".join(a)],
             check=False,
             capture=True,
         )
@@ -70,6 +70,10 @@ class Host:
         if not res.returncode and any(x.startswith("Error") for x in lines):
             res.returncode = 1
         return res
+
+    def mm(self, exp, *a):
+        """One minimega command in the experiment's namespace."""
+        return self.mmg("namespace", exp, *a)
 
     def put(self, src, dst):
         """Copy a host file or directory's contents to dst where phēnix runs."""

@@ -129,8 +129,69 @@ def test_down_stops_then_deletes(settings):
     host = FakeHost(settings=settings)
     host.api_responses["/experiments/ebwes-baseline"] = {"running": True}
     down(res(settings), host)
-    verbs = [" ".join(c).split("phenix phenix ")[1].split()[:2] for c in host.calls]
+    verbs = [
+        " ".join(c).split("phenix phenix ")[1].split()[:2] for c in host.calls if "phenix" in c
+    ]
     assert verbs == [["experiment", "stop"], ["experiment", "delete"], ["config", "delete"]]
+
+
+class StuckMinimega(FakeHost):
+    """minimega whose `clear namespace` fails `fails` times (scheduler still running)
+    and whose VMs survive until then; `kill_works` False makes a manual kill useless."""
+
+    def __init__(self, settings, fails, kill_works=True):
+        super().__init__(settings=settings)
+        self.vms, self.fails, self.kill_works = ["RUNNING", "BUILDING"], fails, kill_works
+
+    def run(self, cmd, **kw):
+        super().run(cmd, **kw)
+        line = " ".join(cmd)
+        out, rc = "", 0
+        if line.endswith("columns namespace namespace"):
+            out = "minimega\nebwes-baseline\n"
+        elif line.endswith("columns state vm info"):
+            out = "\n".join(self.vms)
+        elif line.endswith("clear namespace ebwes-baseline"):
+            self.fails -= 1
+            rc = int(self.fails >= 0)
+            self.vms = self.vms if rc else []
+        elif line.endswith("vm kill all") and self.kill_works:
+            self.fails = 0
+        return subprocess.CompletedProcess(cmd, rc, out, "")
+
+
+def test_down_clears_vms_phenix_left_in_minimega(settings, monkeypatch):
+    monkeypatch.setattr(experiment.time, "sleep", lambda s: None)
+    host = StuckMinimega(settings, fails=2)
+    host.api_responses["/experiments/ebwes-baseline"] = {"running": True}
+    down(res(settings), host)
+    assert host.vms == []
+    assert not any("kill all" in " ".join(c) for c in host.calls)  # the retries were enough
+
+
+def test_down_kills_by_hand_when_clear_namespace_keeps_failing(settings, monkeypatch):
+    monkeypatch.setattr(experiment.time, "sleep", lambda s: None)
+    host = StuckMinimega(settings, fails=99)
+    down(res(settings), host)  # phenix no longer knows the experiment: still checked
+    assert host.vms == []
+    assert any("vm flush" in " ".join(c) for c in host.calls)
+
+
+def test_down_fails_loudly_when_vms_cannot_be_removed(settings, monkeypatch):
+    monkeypatch.setattr(experiment.time, "sleep", lambda s: None)
+    host = StuckMinimega(settings, fails=99, kill_works=False)
+    with pytest.raises(BurgerError, match="still holds VMs"):
+        down(res(settings), host)
+
+
+def test_down_goes_on_to_delete_when_phenix_stop_fails(settings):
+    host = FakeHost(
+        {"docker exec phenix phenix experiment stop": subprocess.CompletedProcess([], 1, "", "")},
+        settings=settings,
+    )
+    host.api_responses["/experiments/ebwes-baseline"] = {"running": True}
+    down(res(settings), host)
+    assert any(c[-3:-1] == ["experiment", "delete"] for c in host.calls)
 
 
 def test_down_leaves_services_to_the_down_command(settings):
@@ -477,7 +538,7 @@ def test_down_config_delete_is_quiet_and_may_fail(settings):
             return super().run(cmd, check, capture, **kw)
 
     down(res(settings), H(settings=settings))
-    assert seen[-1] == (
+    assert [x for x in seen if "config" in x[0]][-1] == (
         ["config", "delete", "scenario/ebwes-baseline", "topology/ebwes-baseline"][-4:],
         False,
         True,
